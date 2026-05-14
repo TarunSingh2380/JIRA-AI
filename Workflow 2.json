@@ -1,0 +1,318 @@
+{
+  "name": "Slack API LLM Chatbot",
+  "nodes": [
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.body.challenge }}",
+        "options": {}
+      },
+      "id": "c70f83f2-f3dd-4bb1-a01b-874372642a24",
+      "name": "Respond to URL Verification",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "check-challenge",
+              "leftValue": "={{ $json.body.challenge }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9550374f-a04d-4eed-8e16-709dec4ff0dd",
+      "name": "Is URL Verification?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "check-bot",
+              "leftValue": "={{ $json.body.event.bot_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists"
+              }
+            },
+            {
+              "id": "check-type",
+              "leftValue": "={{ $json.body.event.type }}",
+              "rightValue": "message",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7195dbe1-0848-4e34-b910-3ab0419ae87c",
+      "name": "Is Human Message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "id": "eed77211-a05e-419a-b039-819d34804272",
+      "name": "Ack Bot Message",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        528,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {}
+      },
+      "id": "37623ebd-0a28-4ab4-8dd7-9e028f9c5b19",
+      "name": "Ack Slack Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        528,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channelId }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.replyText }}",
+        "otherOptions": {
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $json.threadId }}"
+            }
+          }
+        }
+      },
+      "id": "8b144a4f-ff28-4757-a472-651983befe95",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1136,
+        256
+      ],
+      "webhookId": "f8849348-9e15-40b9-a8e1-031fdbd640fe",
+      "credentials": {
+        "slackApi": {
+          "id": "XSsxaPMPMdF8i7TF",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $input.item.json.body.event;\n\nreturn [\n  {\n    json: {\n      userid: event.user,\n      channelId: event.channel,\n      threadid: event.thread_ts || null,\n      \"user message\": event.text\n    }\n  }\n];"
+      },
+      "id": "e4b245a8-1120-4d6c-9303-b861fae46d34",
+      "name": "Prepare API Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"userid\": {{ $json.userid.toJsonString() }},\n  \"channelId\": {{ $json.channelId.toJsonString() }},\n  \"threadid\": {{ $json.threadid ? $json.threadid.toJsonString() : \"null\" }},\n  \"user message\": {{ $json[\"user message\"].toJsonString() }}\n}",
+        "options": {}
+      },
+      "id": "b83da33c-d8e2-4ee5-a9c8-bb15b8ff5744",
+      "name": "Send Message to Python API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const apiResponse = $input.item.json;\nconst originalRequest = $('Prepare API Payload').item.json;\nreturn [\n  {\n    json: {\n      channelId: originalRequest.channelId,\n      userId: apiResponse.userid || originalRequest.userid,\n      threadId: originalRequest.threadid,        // ← add this line\n      replyText: apiResponse[\"LLM reply\"] || \"Sorry, I could not generate a reply.\"\n    }\n  }\n];"
+      },
+      "id": "f150d64b-8c1b-4ecc-a9e5-b4ff2e4fa842",
+      "name": "Format API Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-events",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "39ee8d6f-cc27-4303-a0b6-6a4ac7b581df",
+      "name": "Slack_bot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        112
+      ],
+      "webhookId": "slack-chatbot-events"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Is URL Verification?": {
+      "main": [
+        [
+          {
+            "node": "Respond to URL Verification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Human Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Human Message?": {
+      "main": [
+        [
+          {
+            "node": "Ack Slack Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare API Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ack Bot Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare API Payload": {
+      "main": [
+        [
+          {
+            "node": "Send Message to Python API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Message to Python API": {
+      "main": [
+        [
+          {
+            "node": "Format API Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format API Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack_bot": {
+      "main": [
+        [
+          {
+            "node": "Is URL Verification?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "db314d30-4171-481f-a9be-383f48ad5d1d",
+  "meta": {
+    "instanceId": "94b39d06b539d7009c0e85a35e51983c662bc678661493f3a29bad2928b7a789"
+  },
+  "id": "QeL5RFUDTCmqVuIC",
+  "tags": []
+}

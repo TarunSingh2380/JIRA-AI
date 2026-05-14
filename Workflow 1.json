@@ -1,0 +1,216 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jira-ticket",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9ac413c4-5c41-48ab-baaf-a1af460b670c",
+      "name": "Webhook",
+      "webhookId": "b808b383-f848-4872-a3a1-a1e89e214d32"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "56360089-c438-4e1f-8c7d-ab1874cdb368",
+              "name": "issueKey",
+              "value": "={{ $json.body.issue.key }}",
+              "type": "string"
+            },
+            {
+              "id": "90d7ef65-6433-4b68-8a5b-4cefefe27b60",
+              "name": "summary",
+              "value": "={{ $json.body.issue.fields.summary}}",
+              "type": "string"
+            },
+            {
+              "id": "b6a59f36-438f-4d53-b0f5-4fa815af276e",
+              "name": "description",
+              "value": "={{ $json.body.issue.fields.description ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "8d6b627a-3271-4285-aef2-622c2bfcb4c4",
+              "name": "assignee",
+              "value": "={{ $json.body.issue.fields.assignee?.displayName ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "2e8aa367-ac20-469f-9df7-1806fe92d223",
+              "name": "dueDate",
+              "value": "={{ $json.body.issue.fields.duedate ?? '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "f2c88af2-05de-47f7-8301-0c4eb62bff4d",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4c08094f-2163-4ef3-8c58-a18d1c5e5eed",
+              "leftValue": "={{ $json.description }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "da7618dc-6ed6-4705-8bdb-8c434bc822a6",
+              "leftValue": "={{ $json.assignee }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "91a2a9a2-6836-4b40-b31f-def697967ddb",
+              "leftValue": "={{ $json.dueDate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "9bd415de-e711-4be0-b709-155d0657b5e6",
+      "name": "If"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        624,
+        96
+      ],
+      "id": "6c160d6b-3722-42de-9210-ef6c6daf9092",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "U0B2JHBV7KJ",
+          "mode": "list",
+          "cachedResultName": "tarun.singh"
+        },
+        "text": "=⚠️ Jira Ticket Incomplete!  Ticket: {{ $('Edit Fields').item.json.issueKey }} Summary: {{ $('Edit Fields').item.json.summary }}  Missing Fields: {{ !$('Edit Fields').item.json.description ? '❌ Description' : '' }} {{ !$('Edit Fields').item.json.assignee ? '❌ Assignee' : '' }} {{ !$('Edit Fields').item.json.dueDate ? '❌ Due Date' : '' }}  Link: https://ramfincorp.atlassian.net/browse/{{ $('Edit Fields').item.json.issueKey }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        624,
+        -96
+      ],
+      "id": "4739adf7-7cb8-46ee-a2c0-18bcddc01850",
+      "name": "Send a message",
+      "webhookId": "999f49ad-0c75-4851-892b-99d3be0b9e0c",
+      "credentials": {
+        "slackApi": {
+          "id": "XSsxaPMPMdF8i7TF",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b0d63f19-4def-4baf-9966-042a0c6108b2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "94b39d06b539d7009c0e85a35e51983c662bc678661493f3a29bad2928b7a789"
+  },
+  "id": "i18BpHNu0Gd2dXkf",
+  "tags": []
+}
