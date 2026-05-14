@@ -78,7 +78,7 @@ class SlackReplyResponse(BaseModel):
 
 
 class GraphAdminTriggerRequest(BaseModel):
-    action: Literal["update", "regenerate", "create_new"]
+    action: Literal["update", "regenerate", "create_new", "jira_tickets_only"]
     pull_latest_code: bool = True
     fetch_latest_jira_tickets: bool = True
     include_jira_tickets: bool = True
@@ -86,7 +86,19 @@ class GraphAdminTriggerRequest(BaseModel):
 
 
 class GraphAdminTriggerResponse(BaseModel):
+    job_id: str
     action: str
+    status: str
     repository_count: int
     excluded_repositories: List[str]
-    n8n: Dict[str, Any]
+
+
+class GraphJobResponse(BaseModel):
+    job_id: str
+    action: str
+    status: str
+    totals: Dict[str, int]
+    progress: Dict[str, int]
+    error: str | None = None
+    started_at: str
+    completed_at: str | None = None

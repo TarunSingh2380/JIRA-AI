@@ -38,5 +38,22 @@ class Settings:
     repository_host_root: str = os.getenv("REPOSITORY_HOST_ROOT", os.getenv("REPOSITORY_SEARCH_ROOT", "/home/ubuntu"))
     excluded_repository_names: str = os.getenv("EXCLUDED_REPOSITORY_NAMES", "JIRA-AI")
 
+    # Neo4j (for Jira ticket graph)
+    neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user: str = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "")
+    neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
+
+    # Qdrant (vector store for embeddings)
+    qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
+    qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
+
+    # Ollama (local embedding model)
+    ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    ollama_embed_model: str = os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
+
+    # Jira ticket cache TTL in hours (0 = always re-fetch)
+    jira_cache_ttl_hours: int = int(os.getenv("JIRA_CACHE_TTL_HOURS", "1"))
+
 
 settings = Settings()
