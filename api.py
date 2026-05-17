@@ -1,28 +1,31 @@
-"""FastAPI entry point for serving Jira ticket analysis over HTTP.
+"""FastAPI entry point for Jira ticket analysis and graph DB administration.
 
-This file exposes health, prompt-listing, and ticket-analysis endpoints.
-It wires together the prompt store, LLM client, request/response schemas,
-and the ticket analyzer service for external consumers.
+Graph admin flow (replaces n8n):
+  POST /graph-admin/trigger  → starts background job, returns job_id
+  GET  /graph-admin/jobs     → list recent jobs
+  GET  /graph-admin/jobs/{job_id} → poll job status + progress
 """
 
 import asyncio
 import json
+import logging
 
-from datetime import datetime, timezone
-from typing import Any
-
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+
 from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.conversation_store import ConversationStoreError, PostgresConversationStore
+from app.db_init import run_migrations
 from app.exceptions import LLMConfigurationError, PromptNotFoundError
 from app.graph_context import GraphContextClient
-from app.graph_job_runner import GraphJobRunner
+from app.graph_job import job_store
+from app.graph_job_runner import run_graph_job
 from app.jira_client import JiraClient
 from app.json_utils import parse_model_json, review_status, review_text
 from app.llm_client import build_llm_client
-from app.n8n_client import N8NGraphClient
 from app.prompt_store import PromptStore
 from app.repository_discovery import discover_graph_repositories
 from app.schemas import (
@@ -30,6 +33,7 @@ from app.schemas import (
     AnalyzeTicketResponse,
     GraphAdminTriggerRequest,
     GraphAdminTriggerResponse,
+    GraphJobResponse,
     JiraReviewWorkflowRequest,
     JiraReviewWorkflowResponse,
     PromptListResponse,
@@ -42,11 +46,23 @@ from app.slack_client import SlackClient
 from app.slack_review_workflow import SlackReviewWorkflow
 from app.ticket_analyzer import TicketAnalyzer
 
+log = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    try:
+        run_migrations(settings.database_url)
+    except Exception as exc:
+        log.error("DB migration failed on startup: %s", exc)
+    yield
+
 
 app = FastAPI(
     title="Jira AI Ticket Analyzer",
-    version="0.1.0",
-    description="Injects Jira ticket metadata into prompt templates and returns LLM analysis.",
+    version="0.2.0",
+    description="Jira ticket analysis, Slack review workflow, and graph DB administration.",
+    lifespan=lifespan,
 )
 
 prompt_store = PromptStore(settings.prompt_dir)
@@ -57,6 +73,8 @@ SLACK_CHAT_SYSTEM_PROMPT = (
     "in a single line of 11-21 words."
 )
 
+
+# ─── Health ──────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health() -> dict:
@@ -72,6 +90,8 @@ def list_prompts() -> PromptListResponse:
     return PromptListResponse(prompts=prompt_store.list_prompts())
 
 
+# ─── Graph admin UI ──────────────────────────────────────────────────────────
+
 @app.get("/", response_class=HTMLResponse)
 def graph_admin_ui() -> str:
     return GRAPH_ADMIN_HTML
@@ -81,6 +101,8 @@ def graph_admin_ui() -> str:
 def graph_admin_ui_alias() -> str:
     return GRAPH_ADMIN_HTML
 
+
+# ─── Graph admin API ─────────────────────────────────────────────────────────
 
 @app.get("/graph-admin/repositories")
 def graph_admin_repositories() -> dict[str, Any]:
@@ -93,47 +115,46 @@ def graph_admin_repositories() -> dict[str, Any]:
 
 
 @app.post("/graph-admin/trigger", response_model=GraphAdminTriggerResponse)
-def graph_admin_trigger(request: GraphAdminTriggerRequest) -> GraphAdminTriggerResponse:
+def graph_admin_trigger(
+    request: GraphAdminTriggerRequest,
+    background_tasks: BackgroundTasks,
+) -> GraphAdminTriggerResponse:
     repositories = discover_graph_repositories(settings)
-    payload = {
-        "source": "jira-ai-admin-ui",
-        "requested_at": datetime.now(timezone.utc).isoformat(),
-        "action": request.action,
-        "graph_db": {
-            "operation": request.action,
-            "scope": "all_repositories_and_jira_tickets",
-        },
-        "github": {
-            "clone_strategy": "use_existing_local_clones",
-            "local_clone_root": settings.repository_host_root,
-            "container_scan_root": settings.repository_search_root,
-            "pull_latest_code": request.pull_latest_code,
-            "pull_mode": "git_pull_ff_only_per_repo",
-            "repositories": repositories,
-            "excluded_repository_names": _excluded_repositories(),
-        },
-        "jira": {
-            "fetch_latest_tickets": request.fetch_latest_jira_tickets,
-            "include_tickets_in_graph": request.include_jira_tickets,
-            "base_url_configured": bool(settings.jira_base_url),
-        },
-        "notes": request.notes,
-    }
 
-    try:
-        n8n_result = N8NGraphClient(settings).trigger_graph_job(payload)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"n8n trigger failed: {exc}") from exc
+    job = job_store.create(action=request.action)
 
-    return GraphAdminTriggerResponse(
-        action=request.action,
-        repository_count=len(repositories),
-        excluded_repositories=_excluded_repositories(),
-        n8n=n8n_result,
+    background_tasks.add_task(
+        run_graph_job,
+        job,
+        pull_latest_code=request.pull_latest_code,
+        fetch_latest_jira=request.fetch_latest_jira_tickets,
+        include_jira_in_graph=request.include_jira_tickets,
     )
 
+    return GraphAdminTriggerResponse(
+        job_id=job.job_id,
+        action=job.action,
+        status=job.status,
+        repository_count=len(repositories),
+        excluded_repositories=_excluded_repositories(),
+    )
+
+
+@app.get("/graph-admin/jobs", response_model=list[GraphJobResponse])
+def list_graph_jobs(limit: int = 10) -> list[GraphJobResponse]:
+    jobs = job_store.list_recent(limit=min(limit, 50))
+    return [GraphJobResponse(**j.to_dict()) for j in jobs]
+
+
+@app.get("/graph-admin/jobs/{job_id}", response_model=GraphJobResponse)
+def get_graph_job(job_id: str) -> GraphJobResponse:
+    job = job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return GraphJobResponse(**job.to_dict())
+
+
+# ─── Ticket analysis ─────────────────────────────────────────────────────────
 
 @app.post("/graph-admin/jobs")
 def graph_admin_start_job(request: GraphAdminTriggerRequest) -> dict[str, Any]:
@@ -208,6 +229,8 @@ def analyze_ticket(request: AnalyzeTicketRequest) -> AnalyzeTicketResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+# ─── Chat ────────────────────────────────────────────────────────────────────
+
 @app.post("/chat", response_model=SlackMessageResponse)
 def reply_to_message(request: SlackMessageRequest) -> SlackMessageResponse:
     try:
@@ -218,6 +241,8 @@ def reply_to_message(request: SlackMessageRequest) -> SlackMessageResponse:
 
     return SlackMessageResponse(userid=request.userid, llm_reply=llm_reply)
 
+
+# ─── Jira review workflow ────────────────────────────────────────────────────
 
 @app.post("/workflow/jira-review", response_model=JiraReviewWorkflowResponse)
 def workflow_jira_review(request: JiraReviewWorkflowRequest) -> JiraReviewWorkflowResponse:
@@ -283,6 +308,8 @@ def workflow_slack_events(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "result": response.model_dump()}
 
 
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
 def build_workflow() -> SlackReviewWorkflow:
     return SlackReviewWorkflow(
         settings=settings,
@@ -303,6 +330,8 @@ def _excluded_repositories() -> list[str]:
     ]
 
 
+# ─── Graph admin HTML UI ─────────────────────────────────────────────────────
+
 GRAPH_ADMIN_HTML = """
 <!doctype html>
 <html lang="en">
@@ -321,6 +350,7 @@ GRAPH_ADMIN_HTML = """
       --accent-strong: #0f3f91;
       --danger: #b42318;
       --ok: #067647;
+      --warn: #b54708;
     }
     * { box-sizing: border-box; }
     body {
@@ -337,16 +367,10 @@ GRAPH_ADMIN_HTML = """
       justify-content: space-between;
       gap: 16px;
     }
-    h1 {
-      margin: 0;
-      font-size: 20px;
-      line-height: 1.2;
-      font-weight: 700;
-      letter-spacing: 0;
-    }
+    h1 { margin: 0; font-size: 20px; font-weight: 700; }
     main {
       display: grid;
-      grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+      grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
       min-height: calc(100vh - 70px);
     }
     aside {
@@ -354,15 +378,8 @@ GRAPH_ADMIN_HTML = """
       background: var(--surface);
       padding: 22px;
     }
-    section {
-      padding: 22px;
-      min-width: 0;
-    }
-    .toolbar {
-      display: grid;
-      gap: 10px;
-      margin-top: 18px;
-    }
+    section { padding: 22px; min-width: 0; }
+    .toolbar { display: grid; gap: 10px; margin-top: 18px; }
     button {
       width: 100%;
       min-height: 44px;
@@ -374,18 +391,10 @@ GRAPH_ADMIN_HTML = """
       font-weight: 650;
       cursor: pointer;
     }
-    button.secondary {
-      background: #ffffff;
-      color: var(--accent-strong);
-    }
-    button.danger {
-      border-color: var(--danger);
-      background: var(--danger);
-    }
-    button:disabled {
-      cursor: wait;
-      opacity: 0.7;
-    }
+    button.secondary { background: #ffffff; color: var(--accent-strong); }
+    button.danger { border-color: var(--danger); background: var(--danger); }
+    button.warn { border-color: var(--warn); background: var(--warn); }
+    button:disabled { cursor: wait; opacity: 0.7; }
     label {
       display: flex;
       align-items: center;
@@ -394,14 +403,10 @@ GRAPH_ADMIN_HTML = """
       color: var(--ink);
       font-size: 14px;
     }
-    input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      accent-color: var(--accent);
-    }
+    input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
     textarea {
       width: 100%;
-      min-height: 92px;
+      min-height: 72px;
       resize: vertical;
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -409,26 +414,35 @@ GRAPH_ADMIN_HTML = """
       font: inherit;
       margin-top: 14px;
     }
-    .meta {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.55;
-      margin-top: 16px;
+    .meta { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 16px; }
+    .status-bar { min-height: 34px; padding: 8px 0; color: var(--muted); font-size: 14px; }
+    .status-bar.ok { color: var(--ok); }
+    .status-bar.error { color: var(--danger); }
+    .status-bar.running { color: var(--accent); }
+
+    /* Stats row */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
     }
-    .status {
-      min-height: 34px;
-      padding: 8px 0;
-      color: var(--muted);
-      font-size: 14px;
+    .stat-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
     }
-    .status.ok { color: var(--ok); }
-    .status.error { color: var(--danger); }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      table-layout: fixed;
-      font-size: 14px;
-    }
+    .stat-value { font-size: 22px; font-weight: 700; }
+    .stat-label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-top: 4px; }
+
+    /* Progress bars */
+    .progress-section { margin-bottom: 18px; }
+    .progress-label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    .progress-track { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.4s; }
+
+    /* Repo table */
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
     th, td {
       border-bottom: 1px solid var(--line);
       padding: 10px 8px;
@@ -436,12 +450,7 @@ GRAPH_ADMIN_HTML = """
       vertical-align: top;
       overflow-wrap: anywhere;
     }
-    th {
-      color: var(--muted);
-      font-size: 12px;
-      text-transform: uppercase;
-      font-weight: 700;
-    }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; font-weight: 700; }
     pre {
       margin: 18px 0 0;
       padding: 14px;
@@ -452,18 +461,19 @@ GRAPH_ADMIN_HTML = """
       max-height: 280px;
       font-size: 13px;
     }
-    @media (max-width: 820px) {
-      header { padding: 16px; align-items: flex-start; flex-direction: column; }
+    @media (max-width: 900px) {
+      header { padding: 16px; flex-direction: column; align-items: flex-start; }
       main { grid-template-columns: 1fr; }
       aside { border-right: 0; border-bottom: 1px solid var(--line); }
       section, aside { padding: 16px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
 <body>
   <header>
     <h1>Graph DB Admin</h1>
-    <div class="status" id="status">Loading repositories...</div>
+    <div class="status-bar" id="status">Loading repositories...</div>
   </header>
   <main>
     <aside>
@@ -475,183 +485,202 @@ GRAPH_ADMIN_HTML = """
       <div class="toolbar">
         <button data-action="update">Update Graph DB</button>
         <button class="secondary" data-action="regenerate">Regenerate Graph DB</button>
+        <button class="warn" data-action="jira_tickets_only">Fetch Jira Tickets Only</button>
         <button class="danger" data-action="create_new">Create New Graph DB</button>
         <button class="secondary" data-action="jira_tickets_only">Refresh Jira Tickets Only</button>
       </div>
       <div class="meta" id="meta"></div>
     </aside>
     <section>
-      <table>
+      <!-- Stats cards -->
+      <div class="stats-grid" id="statsGrid" hidden>
+        <div class="stat-card">
+          <div class="stat-value" id="statStatus">—</div>
+          <div class="stat-label">Status</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statRepos">—</div>
+          <div class="stat-label">Repositories</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statJira">—</div>
+          <div class="stat-label">Jira Tickets</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statAction">—</div>
+          <div class="stat-label">Action</div>
+        </div>
+      </div>
+
+      <!-- Progress bars -->
+      <div id="progressSection" hidden>
+        <div class="progress-section">
+          <div class="progress-label">Repository progress</div>
+          <div class="progress-track"><div class="progress-fill" id="repoProgress" style="width:0%"></div></div>
+        </div>
+        <div class="progress-section">
+          <div class="progress-label">Jira ticket progress</div>
+          <div class="progress-track"><div class="progress-fill" id="jiraProgress" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Repo table -->
+      <table id="repoTable">
         <thead>
           <tr>
-            <th style="width: 20%">Repository</th>
+            <th style="width:20%">Repository</th>
             <th>Local clone path</th>
-            <th style="width: 16%">Branch</th>
-            <th style="width: 18%">Commit</th>
+            <th style="width:16%">Branch</th>
+            <th style="width:18%">Commit</th>
           </tr>
         </thead>
         <tbody id="repoRows"></tbody>
       </table>
+
+      <!-- Raw JSON result -->
       <pre id="result" hidden></pre>
     </section>
   </main>
   <script>
-    const statusEl = document.querySelector("#status");
-    const metaEl = document.querySelector("#meta");
-    const resultEl = document.querySelector("#result");
-    const repoRows = document.querySelector("#repoRows");
-    const buttons = [...document.querySelectorAll("button[data-action]")];
-    let currentSocket = null;
+    const statusEl  = document.querySelector("#status");
+    const metaEl    = document.querySelector("#meta");
+    const resultEl  = document.querySelector("#result");
+    const repoRows  = document.querySelector("#repoRows");
+    const statsGrid = document.querySelector("#statsGrid");
+    const progressSection = document.querySelector("#progressSection");
+    const buttons   = [...document.querySelectorAll("button[data-action]")];
 
+    let pollTimer = null;
+
+    // ── Repo list ────────────────────────────────────────────────────────
     async function loadRepos() {
       try {
-        const response = await fetch("/graph-admin/repositories");
-        const data = await response.json();
-        repoRows.innerHTML = data.repositories.map(repo => `
+        const res  = await fetch("/graph-admin/repositories");
+        const data = await res.json();
+        repoRows.innerHTML = data.repositories.map(r => `
           <tr>
-            <td>${escapeHtml(repo.name)}</td>
-            <td>${escapeHtml(repo.path)}</td>
-            <td>${escapeHtml(repo.branch || "-")}</td>
-            <td>${escapeHtml((repo.current_commit || "-").slice(0, 12))}</td>
+            <td>${esc(r.name)}</td>
+            <td>${esc(r.path)}</td>
+            <td>${esc(r.branch || "-")}</td>
+            <td>${esc((r.current_commit || "-").slice(0, 12))}</td>
           </tr>
         `).join("");
-        statusEl.textContent = `${data.repository_count} repositories ready`;
-        statusEl.className = "status ok";
-        metaEl.textContent = `Using existing local clones. Excluded: ${data.excluded_repositories.join(", ") || "none"}`;
-      } catch (error) {
-        statusEl.textContent = `Repository load failed: ${error.message}`;
-        statusEl.className = "status error";
+        setStatus(`${data.repository_count} repositories ready`, "ok");
+        metaEl.textContent =
+          `Using existing local clones. Excluded: ${data.excluded_repositories.join(", ") || "none"}`;
+      } catch (err) {
+        setStatus(`Repository load failed: ${err.message}`, "error");
       }
     }
 
+    // ── Trigger ──────────────────────────────────────────────────────────
     async function trigger(action) {
       setBusy(true);
       resultEl.hidden = true;
-      statusEl.textContent = "Starting graph job...";
-      statusEl.className = "status";
+      statsGrid.hidden = true;
+      progressSection.hidden = true;
+      setStatus("Starting job...", "running");
+
       try {
-        const response = await fetch("/graph-admin/jobs", {
+        const res  = await fetch("/graph-admin/trigger", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({
             action,
-            pull_latest_code: document.querySelector("#pullLatestCode").checked,
+            pull_latest_code:         document.querySelector("#pullLatestCode").checked,
             fetch_latest_jira_tickets: document.querySelector("#fetchLatestJira").checked,
-            include_jira_tickets: document.querySelector("#includeJira").checked,
-            build_embeddings: document.querySelector("#buildEmbeddings").checked,
-            notes: document.querySelector("#notes").value || null
-          })
+            include_jira_tickets:      document.querySelector("#includeJira").checked,
+            notes: document.querySelector("#notes").value || null,
+          }),
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Job start failed");
-        const job = normalizeJobPayload(data);
-        if (!job) throw new Error("Job start response did not include a job");
-        renderJob(job);
-        if (job.id) watchJob(job.id);
-      } catch (error) {
-        statusEl.textContent = error.message;
-        statusEl.className = "status error";
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Trigger failed");
+
+        setStatus(`Job started (${data.job_id.slice(0, 8)}...)`, "running");
+        statsGrid.hidden = false;
+        progressSection.hidden = false;
+        updateStats(data);
+        startPolling(data.job_id);
+
+      } catch (err) {
+        setStatus(err.message, "error");
         setBusy(false);
       }
     }
 
-    async function loadLatestJob() {
+    // ── Polling ──────────────────────────────────────────────────────────
+    function startPolling(jobId) {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => pollJob(jobId), 2000);
+    }
+
+    async function pollJob(jobId) {
       try {
-        const response = await fetch("/graph-admin/jobs");
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Job load failed");
-        const latest = (data.jobs || [])[0];
-        if (!latest) return;
-        renderJob(latest);
-        if (latest.id && (latest.status === "queued" || latest.status === "running")) {
-          setBusy(true);
-          watchJob(latest.id);
+        const res  = await fetch(`/graph-admin/jobs/${jobId}`);
+        const data = await res.json();
+        updateStats(data);
+
+        resultEl.textContent = JSON.stringify(data, null, 2);
+        resultEl.hidden = false;
+
+        if (data.status === "completed" || data.status === "failed") {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          setBusy(false);
+          setStatus(
+            data.status === "completed" ? "Job completed successfully" : `Job failed: ${data.error || "unknown"}`,
+            data.status === "completed" ? "ok" : "error",
+          );
         }
-      } catch (error) {
-        console.warn("Latest graph job load failed", error);
+      } catch (err) {
+        /* ignore transient poll errors */
       }
     }
 
-    function watchJob(jobId) {
-      if (currentSocket) {
-        currentSocket.close();
-      }
-      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const socket = new WebSocket(`${protocol}://${window.location.host}/graph-admin/jobs/${jobId}/ws`);
-      currentSocket = socket;
-      socket.onmessage = event => {
-        const job = normalizeJobPayload(JSON.parse(event.data));
-        if (job) renderJob(job);
-      };
-      socket.onerror = () => {
-        statusEl.textContent = "Job progress connection failed";
-        statusEl.className = "status error";
-        setBusy(false);
-      };
-      socket.onclose = () => {
-        if (currentSocket === socket) currentSocket = null;
-        setBusy(false);
-      };
+    // ── Stats / progress ─────────────────────────────────────────────────
+    function updateStats(data) {
+      const totals   = data.totals   || {};
+      const progress = data.progress || {};
+
+      document.querySelector("#statStatus").textContent = data.status || "—";
+      document.querySelector("#statAction").textContent = data.action || "—";
+
+      const repoT = totals.repositories   || 0;
+      const repoD = progress.repositories_done || 0;
+      const jiraT = totals.jira_tickets   || 0;
+      const jiraD = progress.jira_tickets_done || 0;
+
+      document.querySelector("#statRepos").textContent =
+        repoT > 0 ? `${repoD}/${repoT}` : (data.repository_count != null ? `${data.repository_count}` : "0/0");
+      document.querySelector("#statJira").textContent  =
+        jiraT > 0 ? `${jiraD}/${jiraT}` : "0/0";
+
+      setProgressBar("repoProgress", repoD, repoT);
+      setProgressBar("jiraProgress", jiraD, jiraT);
     }
 
-    function normalizeJobPayload(payload) {
-      if (!payload) return null;
-      if (payload.job) return payload.job;
-      return payload.id || payload.status || payload.progress || payload.totals ? payload : null;
+    function setProgressBar(id, done, total) {
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      document.querySelector(`#${id}`).style.width = `${pct}%`;
     }
 
-    function renderJob(job) {
-      const progress = job.progress || {};
-      const totals = job.totals || {};
-      const status = job.status || "unknown";
-      const repoDone = progress.repositories_done || 0;
-      const repoTotal = totals.repositories || 0;
-      const jiraDone = progress.jira_tickets_done || 0;
-      const jiraTotal = totals.jira_tickets || 0;
-      const summary = `${status}: repos ${repoDone}/${repoTotal}, Jira ${jiraDone}/${jiraTotal}`;
-      statusEl.textContent = status === "failed" && job.error ? `${summary} - ${job.error}` : summary;
-      statusEl.className = status === "failed" ? "status error" : "status ok";
-
-      const recentLogs = (job.logs || []).slice(-80).map(log => (
-        `[${log.ts || ""}] ${(log.level || "info").toUpperCase()} ${log.message || ""}`
-      ));
-      resultEl.textContent = JSON.stringify({
-        id: job.id,
-        action: job.action,
-        status,
-        error: job.error,
-        totals,
-        progress,
-        repositories: job.repositories || [],
-        recent_logs: recentLogs
-      }, null, 2);
-      resultEl.hidden = false;
-      if (status === "completed" || status === "failed") {
-        setBusy(false);
-      }
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function setStatus(msg, cls = "") {
+      statusEl.textContent  = msg;
+      statusEl.className    = `status-bar ${cls}`;
     }
 
-    function setBusy(isBusy) {
-      buttons.forEach(button => button.disabled = isBusy);
+    function setBusy(busy) {
+      buttons.forEach(b => b.disabled = busy);
     }
 
-    function escapeHtml(value) {
-      return String(value).replace(/[&<>"']/g, char => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#039;"
-      })[char]);
+    function esc(v) {
+      return String(v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[c]);
     }
 
-    buttons.forEach(button => button.addEventListener("click", () => trigger(button.dataset.action)));
-    async function init() {
-      await loadRepos();
-      await loadLatestJob();
-    }
-
-    init();
+    // ── Init ─────────────────────────────────────────────────────────────
+    buttons.forEach(b => b.addEventListener("click", () => trigger(b.dataset.action)));
+    loadRepos();
   </script>
 </body>
 </html>

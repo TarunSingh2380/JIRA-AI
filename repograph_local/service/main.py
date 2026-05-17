@@ -22,18 +22,20 @@ Endpoints (Stage 3, stubbed):
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from neo4j import AsyncGraphDatabase, AsyncDriver
 from pydantic import BaseModel
 
 from config import settings
-from stage3_semantic.bge_m3_embeddings import (
-    rebuild_embeddings as rebuild_bge_m3_embeddings,
-    semantic_search as search_bge_m3_embeddings,
-)
+from ingest.git_history import ingest_repo, make_driver
+from ingest.local_repos import discover_from_settings
+
+log = logging.getLogger(__name__)
 
 
 # ─── Lifecycle ─────────────────────────────────────────────────────────
@@ -183,6 +185,60 @@ async def files_touched_recently(
     async with driver.session(database=settings.neo4j_database) as s:
         result = await s.run(q, keyword=keyword, days=days, limit=limit)
         return [FileTouchOut(**r.data()) async for r in result]
+
+
+# ─── Ingest trigger ────────────────────────────────────────────────────────
+
+class IngestRequest(BaseModel):
+    fetch_first: bool = False
+    since_days: Optional[int] = None
+
+
+class IngestResponse(BaseModel):
+    repos_found: int
+    repos_ingested: int
+    commits_total: int
+    branches_total: int
+    failures: list[str]
+
+
+@app.post("/ingest", response_model=IngestResponse)
+async def trigger_ingest(
+    req: IngestRequest,
+    driver: AsyncDriver = Depends(get_driver),
+) -> IngestResponse:
+    """Discover local repos and ingest them into Neo4j (Stage 1)."""
+    repos = discover_from_settings()
+    if not repos:
+        return IngestResponse(
+            repos_found=0, repos_ingested=0, commits_total=0, branches_total=0, failures=[]
+        )
+
+    sem = asyncio.Semaphore(settings.ingest_concurrency)
+    total_commits = 0
+    total_branches = 0
+    failures: list[str] = []
+
+    async def _one(repo) -> None:
+        nonlocal total_commits, total_branches
+        async with sem:
+            try:
+                stats = await ingest_repo(driver, repo, fetch_first=req.fetch_first)
+                total_commits += stats["commits"]
+                total_branches += stats["branches"]
+            except Exception as exc:
+                log.exception("Ingest failed for %s", repo.full_name)
+                failures.append(f"{repo.full_name}: {str(exc)[:200]}")
+
+    await asyncio.gather(*(_one(r) for r in repos))
+
+    return IngestResponse(
+        repos_found=len(repos),
+        repos_ingested=len(repos) - len(failures),
+        commits_total=total_commits,
+        branches_total=total_branches,
+        failures=failures,
+    )
 
 
 # ─── Stage 2 stubs ─────────────────────────────────────────────────────

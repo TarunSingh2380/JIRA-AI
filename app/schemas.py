@@ -87,7 +87,19 @@ class GraphAdminTriggerRequest(BaseModel):
 
 
 class GraphAdminTriggerResponse(BaseModel):
+    job_id: str
     action: str
+    status: str
     repository_count: int
     excluded_repositories: List[str]
-    n8n: Dict[str, Any]
+
+
+class GraphJobResponse(BaseModel):
+    job_id: str
+    action: str
+    status: str
+    totals: Dict[str, int]
+    progress: Dict[str, int]
+    error: str | None = None
+    started_at: str
+    completed_at: str | None = None
