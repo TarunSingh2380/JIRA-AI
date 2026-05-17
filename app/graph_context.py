@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 import requests
 
 from app.config import Settings
+
+log = logging.getLogger(__name__)
 
 
 STOP_WORDS = {
@@ -35,13 +38,17 @@ class GraphContextClient:
 
     def fetch_context(self, *, ticket_data: dict[str, Any], user_reply: str = "") -> dict[str, Any]:
         query_text = self._query_text(ticket_data, user_reply)
+        log.info("Fetching graph context (query_chars=%d)", len(query_text))
         context: dict[str, Any] = {"query": query_text, "items": [], "errors": []}
 
         ask_result = self._post_ask(query_text)
         if ask_result:
             context["items"].append({"source": "repograph.ask", "data": ask_result})
+            log.debug("repograph.ask returned a result")
 
-        for keyword in self._keywords(query_text)[:5]:
+        keywords = self._keywords(query_text)[:5]
+        log.debug("Querying files_touched_recently for keywords: %s", keywords)
+        for keyword in keywords:
             touched = self._get_files_touched(keyword)
             if touched:
                 context["items"].append(
@@ -52,6 +59,7 @@ class GraphContextClient:
                     }
                 )
 
+        log.info("Graph context: %d items collected", len(context["items"]))
         return context
 
     def _post_ask(self, question: str) -> dict[str, Any] | None:
@@ -62,10 +70,12 @@ class GraphContextClient:
                 timeout=self.settings.external_request_timeout_seconds,
             )
             if response.status_code == 501:
+                log.debug("repograph /ask returned 501 (not implemented); skipping")
                 return None
             response.raise_for_status()
             return response.json()
         except requests.RequestException as exc:
+            log.warning("repograph /ask request failed: %s", exc)
             return {"unavailable": True, "error": str(exc)}
 
     def _get_files_touched(self, keyword: str) -> list[dict[str, Any]]:

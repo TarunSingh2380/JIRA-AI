@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import requests
 from requests.auth import HTTPBasicAuth
 
 from app.config import Settings
+
+log = logging.getLogger(__name__)
 
 
 class JiraClient:
@@ -19,8 +22,10 @@ class JiraClient:
 
     def add_comment(self, issue_key: str, text: str) -> dict[str, Any]:
         if not self.is_configured():
+            log.warning("Jira not configured; skipping add_comment for %s (dry run)", issue_key)
             return {"dry_run": True, "reason": "Jira credentials are not configured"}
 
+        log.info("Adding comment to Jira issue %s", issue_key)
         return self._request(
             "POST",
             f"/rest/api/3/issue/{issue_key}/comment",
@@ -40,8 +45,10 @@ class JiraClient:
 
     def transition_to_approved(self, issue_key: str) -> dict[str, Any]:
         if not self.settings.jira_approved_transition_name:
+            log.warning("JIRA_APPROVED_TRANSITION_NAME not set; skipping transition for %s", issue_key)
             return {"skipped": True, "reason": "JIRA_APPROVED_TRANSITION_NAME is not configured"}
 
+        log.info("Looking up transitions for Jira issue %s", issue_key)
         transitions = self._request("GET", f"/rest/api/3/issue/{issue_key}/transitions")
         target = None
         for transition in transitions.get("transitions", []):
@@ -50,11 +57,23 @@ class JiraClient:
                 break
 
         if not target:
+            log.warning(
+                "Transition '%s' not found for issue %s; available: %s",
+                self.settings.jira_approved_transition_name,
+                issue_key,
+                [t.get("name") for t in transitions.get("transitions", [])],
+            )
             return {
                 "skipped": True,
                 "reason": f"Transition '{self.settings.jira_approved_transition_name}' not found",
             }
 
+        log.info(
+            "Transitioning issue %s via '%s' (id=%s)",
+            issue_key,
+            target.get("name"),
+            target.get("id"),
+        )
         return self._request(
             "POST",
             f"/rest/api/3/issue/{issue_key}/transitions",
@@ -63,8 +82,10 @@ class JiraClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         if not self.is_configured():
+            log.warning("Jira not configured; returning dry_run for %s %s", method, path)
             return {"dry_run": True, "reason": "Jira credentials are not configured"}
 
+        log.debug("Jira API %s %s", method, path)
         response = requests.request(
             method,
             f"{self.settings.jira_base_url}{path}",
@@ -74,6 +95,8 @@ class JiraClient:
             **kwargs,
         )
         if response.status_code == 204:
+            log.debug("Jira API %s %s → 204 No Content", method, path)
             return {"ok": True}
         response.raise_for_status()
+        log.debug("Jira API %s %s → %d", method, path, response.status_code)
         return response.json() if response.content else {"ok": True}

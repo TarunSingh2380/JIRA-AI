@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 from app.config import Settings
+
+log = logging.getLogger(__name__)
 
 
 class ConversationStoreError(RuntimeError):
@@ -79,6 +82,10 @@ class PostgresConversationStore:
         status: str,
         bot_message: str,
     ) -> ConversationRecord:
+        log.info(
+            "Upserting conversation for issue=%s thread=%s status=%s",
+            jira_issue_key, slack_thread_ts, status,
+        )
         self.init_schema()
         messages = [
             {
@@ -134,12 +141,17 @@ class PostgresConversationStore:
         return self._record(row)
 
     def get_by_thread(self, slack_thread_ts: str) -> ConversationRecord | None:
+        log.debug("Looking up conversation for thread=%s", slack_thread_ts)
         self.init_schema()
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM jira_slack_conversations WHERE slack_thread_ts = %s",
                 (slack_thread_ts,),
             ).fetchone()
+        if row:
+            log.debug("Found conversation for thread=%s issue=%s", slack_thread_ts, row["jira_issue_key"])
+        else:
+            log.warning("No conversation found for thread=%s", slack_thread_ts)
         return self._record(row) if row else None
 
     def append_message_and_update(
@@ -151,6 +163,7 @@ class PostgresConversationStore:
         previous_review: dict[str, Any],
         status: str,
     ) -> ConversationRecord:
+        log.info("Appending messages and updating conversation thread=%s status=%s", slack_thread_ts, status)
         self.init_schema()
         with self._connect() as conn:
             row = conn.execute(
