@@ -253,17 +253,21 @@ async def run_graph_job(
                     pull_results.append((repo, success, output))
 
             # Write all pull logs in a single fresh connection after all awaits are done.
+            # Non-fatal: a DB failure here must not abort the whole job.
             if pull_results:
-                log_conn = _db_connect()
-                if log_conn:
-                    with log_conn:
-                        for repo, success, output in pull_results:
-                            _log_pull(
-                                log_conn, job.job_id,
-                                repo.get("name", ""),
-                                repo.get("container_path") or repo.get("path", ""),
-                                success, output,
-                            )
+                try:
+                    log_conn = _db_connect()
+                    if log_conn:
+                        with log_conn:
+                            for repo, success, output in pull_results:
+                                _log_pull(
+                                    log_conn, job.job_id,
+                                    repo.get("name", ""),
+                                    repo.get("container_path") or repo.get("path", ""),
+                                    success, output,
+                                )
+                except Exception as exc:
+                    log.warning("Could not persist pull logs (non-fatal): %s", exc)
 
             log.info("Triggering repograph ingest for %d repos ...", len(repos))
             ingest_result = await asyncio.to_thread(_trigger_repograph_ingest, pull_latest_code)
