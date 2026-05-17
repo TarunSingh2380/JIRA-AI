@@ -12,7 +12,7 @@ import logging
 
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 from fastapi.responses import HTMLResponse
 
@@ -66,7 +66,6 @@ app = FastAPI(
 )
 
 prompt_store = PromptStore(settings.prompt_dir)
-graph_job_runner = GraphJobRunner(settings)
 
 SLACK_CHAT_SYSTEM_PROMPT = (
     "You are a helpful assistant. Send the reply of the user message and only "
@@ -154,51 +153,71 @@ def get_graph_job(job_id: str) -> GraphJobResponse:
     return GraphJobResponse(**job.to_dict())
 
 
+# ─── Jira ticket cache browser ───────────────────────────────────────────────
+
+@app.get("/graph-admin/jira-tickets")
+def graph_admin_jira_tickets(
+    limit: int = 100,
+    offset: int = 0,
+    project_key: str | None = None,
+) -> dict[str, Any]:
+    if not settings.database_url:
+        return {"count": 0, "tickets": [], "error": "DATABASE_URL not configured"}
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        where = "WHERE project_key = %s" if project_key else ""
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+            count_params = (project_key,) if project_key else ()
+            row = conn.execute(
+                f"SELECT COUNT(*) AS n FROM jira_ticket_cache {where}",
+                count_params,
+            ).fetchone()
+            count = row["n"] if row else 0
+
+            list_params = (project_key, limit, offset) if project_key else (limit, offset)
+            tickets = conn.execute(
+                f"""
+                SELECT ticket_key, project_key, summary, status, issue_type,
+                       priority, assignee_name, reporter_name, updated_at, fetched_at
+                FROM jira_ticket_cache
+                {where}
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT %s OFFSET %s
+                """,
+                list_params,
+            ).fetchall()
+            return {"count": count, "tickets": [dict(t) for t in tickets]}
+    except Exception as exc:
+        return {"count": 0, "tickets": [], "error": str(exc)}
+
+
+@app.get("/graph-admin/fetch-logs")
+def graph_admin_fetch_logs(limit: int = 100) -> dict[str, Any]:
+    if not settings.database_url:
+        return {"logs": [], "error": "DATABASE_URL not configured"}
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+            logs = conn.execute(
+                """
+                SELECT project_key, ticket_count, from_cache, force_refresh,
+                       duration_ms, error, fetched_at
+                FROM jira_fetch_log
+                ORDER BY fetched_at DESC NULLS LAST
+                LIMIT %s
+                """,
+                (limit,),
+            ).fetchall()
+            return {"logs": [dict(l) for l in logs]}
+    except Exception as exc:
+        return {"logs": [], "error": str(exc)}
+
+
 # ─── Ticket analysis ─────────────────────────────────────────────────────────
-
-@app.post("/graph-admin/jobs")
-def graph_admin_start_job(request: GraphAdminTriggerRequest) -> dict[str, Any]:
-    return graph_job_runner.start(request)
-
-
-@app.get("/graph-admin/jobs")
-def graph_admin_jobs() -> dict[str, Any]:
-    return {"jobs": graph_job_runner.list()}
-
-
-@app.get("/graph-admin/jobs/{job_id}")
-def graph_admin_job(job_id: str) -> dict[str, Any]:
-    try:
-        return graph_job_runner.get(job_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Graph job not found") from exc
-
-
-@app.websocket("/graph-admin/jobs/{job_id}/ws")
-async def graph_admin_job_ws(websocket: WebSocket, job_id: str) -> None:
-    await websocket.accept()
-    last_updated_at = None
-
-    try:
-        while True:
-            payload = graph_job_runner.get(job_id)
-            updated_at = payload["job"].get("updated_at")
-            if updated_at != last_updated_at:
-                await websocket.send_json(payload)
-                last_updated_at = updated_at
-
-            if payload["job"].get("status") in {"completed", "failed"}:
-                await websocket.close(code=1000)
-                return
-            else:
-                await asyncio.sleep(0.5)
-    except KeyError:
-        await websocket.close(code=1008, reason="Graph job not found")
-    except WebSocketDisconnect:
-        return
-    except RuntimeError:
-        return
-
 
 @app.post("/analyze-ticket", response_model=AnalyzeTicketResponse)
 def analyze_ticket(request: AnalyzeTicketRequest) -> AnalyzeTicketResponse:
@@ -339,6 +358,51 @@ GRAPH_ADMIN_HTML = """
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Graph DB Admin</title>
+  <style>
+    /* ── tab nav ── */
+    .tab-nav {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--line);
+      margin-bottom: 18px;
+    }
+    .tab-btn {
+      padding: 9px 20px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: auto;
+      min-height: unset;
+      border-radius: 0;
+      margin-bottom: -2px;
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    /* ── badge ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--line);
+      color: var(--muted);
+      vertical-align: middle;
+    }
+    .badge.ok  { background: #dcfce7; color: var(--ok); }
+    .badge.err { background: #fee2e2; color: var(--danger); }
+    .badge.run { background: #dbeafe; color: var(--accent); }
+  </style>
+  <!-- original styles below -->
   <style>
     :root {
       color-scheme: light;
@@ -492,7 +556,7 @@ GRAPH_ADMIN_HTML = """
       <div class="meta" id="meta"></div>
     </aside>
     <section>
-      <!-- Stats cards -->
+      <!-- Stats cards (shown during/after a job) -->
       <div class="stats-grid" id="statsGrid" hidden>
         <div class="stat-card">
           <div class="stat-value" id="statStatus">—</div>
@@ -524,21 +588,97 @@ GRAPH_ADMIN_HTML = """
         </div>
       </div>
 
-      <!-- Repo table -->
-      <table id="repoTable">
-        <thead>
-          <tr>
-            <th style="width:20%">Repository</th>
-            <th>Local clone path</th>
-            <th style="width:16%">Branch</th>
-            <th style="width:18%">Commit</th>
-          </tr>
-        </thead>
-        <tbody id="repoRows"></tbody>
-      </table>
+      <!-- Tab navigation -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="repos">Repositories</button>
+        <button class="tab-btn" data-tab="jira">Jira Tickets</button>
+        <button class="tab-btn" data-tab="logs">Logs</button>
+      </nav>
 
-      <!-- Raw JSON result -->
-      <pre id="result" hidden></pre>
+      <!-- Tab: Repositories -->
+      <div class="tab-panel active" id="tab-repos">
+        <table id="repoTable">
+          <thead>
+            <tr>
+              <th style="width:20%">Repository</th>
+              <th>Local clone path</th>
+              <th style="width:16%">Branch</th>
+              <th style="width:18%">Commit</th>
+            </tr>
+          </thead>
+          <tbody id="repoRows"></tbody>
+        </table>
+        <pre id="result" hidden></pre>
+      </div>
+
+      <!-- Tab: Jira Tickets -->
+      <div class="tab-panel" id="tab-jira">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+          <span id="jiraTicketCount" style="font-size:13px;color:var(--muted)">Loading…</span>
+          <input id="jiraProjectFilter" type="text" placeholder="Filter by project key…"
+            style="border:1px solid var(--line);border-radius:5px;padding:5px 10px;font:inherit;font-size:13px;width:180px;">
+          <button class="secondary" id="jiraRefreshBtn"
+            style="width:auto;min-height:unset;padding:6px 14px;font-size:13px;">Refresh</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:10%">Key</th>
+              <th style="width:9%">Project</th>
+              <th>Summary</th>
+              <th style="width:10%">Status</th>
+              <th style="width:10%">Type</th>
+              <th style="width:9%">Priority</th>
+              <th style="width:12%">Assignee</th>
+              <th style="width:13%">Updated</th>
+            </tr>
+          </thead>
+          <tbody id="jiraRows"></tbody>
+        </table>
+        <div id="jiraError" style="color:var(--danger);font-size:13px;margin-top:8px;"></div>
+      </div>
+
+      <!-- Tab: Logs -->
+      <div class="tab-panel" id="tab-logs">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+          <span style="font-size:13px;color:var(--muted)">Recent graph jobs &amp; Jira fetch log</span>
+          <button class="secondary" id="logsRefreshBtn"
+            style="width:auto;min-height:unset;padding:6px 14px;font-size:13px;">Refresh</button>
+        </div>
+
+        <p style="font-size:13px;font-weight:700;color:var(--muted);margin:0 0 8px;">Graph Jobs</p>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:10%">Job ID</th>
+              <th style="width:14%">Action</th>
+              <th style="width:10%">Status</th>
+              <th style="width:8%">Repos</th>
+              <th style="width:8%">Jira</th>
+              <th style="width:14%">Started</th>
+              <th style="width:14%">Completed</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="jobRows"></tbody>
+        </table>
+
+        <p style="font-size:13px;font-weight:700;color:var(--muted);margin:18px 0 8px;">Jira Fetch Log</p>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:12%">Project</th>
+              <th style="width:10%">Tickets</th>
+              <th style="width:9%">From Cache</th>
+              <th style="width:10%">Duration ms</th>
+              <th style="width:16%">Fetched At</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="fetchLogRows"></tbody>
+        </table>
+        <div id="logsError" style="color:var(--danger);font-size:13px;margin-top:8px;"></div>
+      </div>
     </section>
   </main>
   <script>
@@ -676,6 +816,118 @@ GRAPH_ADMIN_HTML = """
 
     function esc(v) {
       return String(v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[c]);
+    }
+
+    // ── Tab switching ────────────────────────────────────────────────────
+    const tabBtns   = [...document.querySelectorAll(".tab-btn")];
+    const tabPanels = [...document.querySelectorAll(".tab-panel")];
+
+    function switchTab(name) {
+      tabBtns.forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+      tabPanels.forEach(p => p.classList.toggle("active", p.id === `tab-${name}`));
+      if (name === "jira")  loadJiraTickets();
+      if (name === "logs")  loadLogs();
+    }
+
+    tabBtns.forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+    // ── Jira tickets tab ─────────────────────────────────────────────────
+    let jiraProjectFilter = "";
+
+    async function loadJiraTickets() {
+      const countEl = document.querySelector("#jiraTicketCount");
+      const rowsEl  = document.querySelector("#jiraRows");
+      const errEl   = document.querySelector("#jiraError");
+      countEl.textContent = "Loading…";
+      errEl.textContent   = "";
+      const project = document.querySelector("#jiraProjectFilter").value.trim().toUpperCase();
+      const qs = project ? `?project_key=${encodeURIComponent(project)}&limit=200` : "?limit=200";
+      try {
+        const res  = await fetch(`/graph-admin/jira-tickets${qs}`);
+        const data = await res.json();
+        if (data.error) {
+          errEl.textContent = data.error;
+          countEl.textContent = "—";
+          rowsEl.innerHTML = "";
+          return;
+        }
+        countEl.textContent = `${data.count} ticket${data.count !== 1 ? "s" : ""} in cache`;
+        rowsEl.innerHTML = (data.tickets || []).map(t => `
+          <tr>
+            <td><b>${esc(t.ticket_key)}</b></td>
+            <td>${esc(t.project_key)}</td>
+            <td>${esc(t.summary || "")}</td>
+            <td><span class="badge">${esc(t.status || "—")}</span></td>
+            <td>${esc(t.issue_type || "—")}</td>
+            <td>${esc(t.priority || "—")}</td>
+            <td>${esc(t.assignee_name || "—")}</td>
+            <td>${esc(fmtDate(t.updated_at))}</td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        errEl.textContent = err.message;
+        countEl.textContent = "—";
+      }
+    }
+
+    document.querySelector("#jiraRefreshBtn").addEventListener("click", loadJiraTickets);
+    document.querySelector("#jiraProjectFilter").addEventListener("keydown", e => {
+      if (e.key === "Enter") loadJiraTickets();
+    });
+
+    // ── Logs tab ─────────────────────────────────────────────────────────
+    async function loadLogs() {
+      const jobRowsEl   = document.querySelector("#jobRows");
+      const fetchRowsEl = document.querySelector("#fetchLogRows");
+      const errEl       = document.querySelector("#logsError");
+      errEl.textContent = "";
+
+      try {
+        const [jobsRes, fetchRes] = await Promise.all([
+          fetch("/graph-admin/jobs?limit=50"),
+          fetch("/graph-admin/fetch-logs?limit=100"),
+        ]);
+        const jobs      = await jobsRes.json();
+        const fetchData = await fetchRes.json();
+
+        jobRowsEl.innerHTML = (Array.isArray(jobs) ? jobs : []).map(j => `
+          <tr>
+            <td style="font-family:monospace;font-size:12px">${esc((j.job_id||"").slice(0,8))}</td>
+            <td>${esc(j.action || "—")}</td>
+            <td><span class="badge ${j.status==="completed"?"ok":j.status==="failed"?"err":"run"}">${esc(j.status||"—")}</span></td>
+            <td>${esc(String((j.progress||{}).repositories_done||0))}/${esc(String((j.totals||{}).repositories||0))}</td>
+            <td>${esc(String((j.progress||{}).jira_tickets_done||0))}/${esc(String((j.totals||{}).jira_tickets||0))}</td>
+            <td>${esc(fmtDate(j.started_at))}</td>
+            <td>${esc(fmtDate(j.completed_at))}</td>
+            <td style="color:var(--danger);font-size:12px">${esc(j.error||"")}</td>
+          </tr>
+        `).join("") || '<tr><td colspan="8" style="color:var(--muted)">No jobs yet</td></tr>';
+
+        if (fetchData.error) {
+          errEl.textContent = fetchData.error;
+        }
+        fetchRowsEl.innerHTML = (fetchData.logs || []).map(l => `
+          <tr>
+            <td>${esc(l.project_key)}</td>
+            <td>${esc(String(l.ticket_count))}</td>
+            <td>${l.from_cache ? "✓" : ""}</td>
+            <td>${esc(String(l.duration_ms))}</td>
+            <td>${esc(fmtDate(l.fetched_at))}</td>
+            <td style="color:var(--danger);font-size:12px">${esc(l.error||"")}</td>
+          </tr>
+        `).join("") || '<tr><td colspan="6" style="color:var(--muted)">No fetch log entries yet</td></tr>';
+
+      } catch (err) {
+        errEl.textContent = err.message;
+      }
+    }
+
+    document.querySelector("#logsRefreshBtn").addEventListener("click", loadLogs);
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function fmtDate(val) {
+      if (!val) return "—";
+      try { return new Date(val).toLocaleString(); } catch { return val; }
     }
 
     // ── Init ─────────────────────────────────────────────────────────────
