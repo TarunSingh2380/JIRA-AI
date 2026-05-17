@@ -29,6 +29,10 @@ log = logging.getLogger(__name__)
 _HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
 
+class ProjectGoneError(Exception):
+    """Raised when Jira returns 410 Gone for a project (archived / deleted)."""
+
+
 # ─── Jira REST helpers ───────────────────────────────────────────────────────
 
 def _auth() -> HTTPBasicAuth:
@@ -44,18 +48,25 @@ def _jira_get(path: str, params: Optional[dict] = None) -> dict[str, Any]:
             log.warning("Jira rate-limited; sleeping %ds", wait)
             time.sleep(wait)
             continue
+        if resp.status_code == 410:
+            raise ProjectGoneError(f"Project is archived or deleted (410 Gone): {url}")
         resp.raise_for_status()
         return resp.json() if resp.text else {}
     raise RuntimeError(f"Jira GET {path} failed after retries")
 
 
 def _fetch_all_projects() -> list[dict[str, Any]]:
+    """Return all non-archived Jira projects."""
     projects: list[dict] = []
     start = 0
     while True:
-        data = _jira_get("/rest/api/3/project/search", {"startAt": start, "maxResults": 50})
+        data = _jira_get(
+            "/rest/api/3/project/search",
+            {"startAt": start, "maxResults": 50, "status": "live"},
+        )
         batch = data.get("values", [])
-        projects.extend(batch)
+        # Belt-and-suspenders: also filter the `archived` flag if present
+        projects.extend(p for p in batch if not p.get("archived", False))
         if data.get("isLast", True) or len(batch) < 50:
             break
         start += 50
@@ -257,7 +268,7 @@ def fetch_all_tickets(
 
     with psycopg.connect(settings.database_url) as conn:
         projects = _fetch_all_projects()
-        log.info("Found %d Jira projects", len(projects))
+        log.info("Found %d active Jira projects", len(projects))
 
         for project in projects:
             key = project["key"]
@@ -284,6 +295,16 @@ def fetch_all_tickets(
             try:
                 tickets = _fetch_tickets_for_project(key)
                 _upsert_tickets(conn, tickets)
+            except ProjectGoneError as exc:
+                # Project is archived — already filtered at discovery, but
+                # catch it here as a fallback so one bad project can't abort the run.
+                elapsed_ms = int((time.monotonic() - t0) * 1000)
+                log.info("Project %s returned 410 (archived); skipping: %s", key, exc)
+                _log_fetch(conn, key, 0, from_cache=False,
+                           force_refresh=force_refresh, duration_ms=elapsed_ms,
+                           error="410 Gone – project is archived")
+                conn.commit()
+                continue
             except Exception as exc:
                 error_msg = str(exc)[:500]
                 log.warning("Failed to fetch/store project %s: %s", key, error_msg)
