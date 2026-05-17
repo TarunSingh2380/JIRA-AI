@@ -301,7 +301,7 @@ async def run_graph_job(
                 if settings.qdrant_url:
                     embedder = OllamaEmbedder(settings.ollama_url, settings.ollama_embed_model)
                     if embedder.is_available():
-                        log.info("Generating BGE-M3 embeddings for %d Jira tickets ...", len(tickets))
+                        log.info("Generating Ollama embeddings for %d Jira tickets ...", len(tickets))
                         texts = _ticket_embed_texts(tickets)
                         embeddings = await asyncio.to_thread(embedder.embed_batch, texts)
                         stored = upsert_jira_embeddings(
@@ -312,7 +312,7 @@ async def run_graph_job(
                         )
                         log.info("Stored %d Jira embeddings in Qdrant", stored)
                     else:
-                        log.info("Ollama BGE-M3 not available; skipping Jira embeddings")
+                        log.info("Ollama model not available; skipping Jira embeddings")
 
         # ── Step 4: Commit embeddings ────────────────────────────────────
         if not jira_only and settings.qdrant_url:
@@ -324,7 +324,7 @@ async def run_graph_job(
                 )
             embedder = OllamaEmbedder(settings.ollama_url, settings.ollama_embed_model)
             if embedder.is_available():
-                log.info("Generating BGE-M3 embeddings for recent commits ...")
+                log.info("Generating Ollama embeddings for recent commits ...")
                 stored = await _embed_recent_commits(
                     embedder, neo4j_driver, settings.neo4j_database
                 )

@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 GITHUB_COLLECTION = "github_commits"
 JIRA_COLLECTION = "jira_tickets"
-VECTOR_SIZE = 1024  # BGE-M3 output dimensionality
+_DEFAULT_VECTOR_SIZE = 1024  # qwen3:0.6b and BGE-M3 both output 1024-dim vectors
 
 
 def _get_client(url: str, api_key: Optional[str] = None):
@@ -30,7 +30,15 @@ def _get_client(url: str, api_key: Optional[str] = None):
     return QdrantClient(url=url, api_key=api_key or None)
 
 
-def _ensure_collection(client, name: str) -> None:
+def _infer_vector_size(embeddings: list[Optional[list[float]]]) -> int:
+    """Return the dimension of the first non-None embedding, or the default."""
+    for emb in embeddings:
+        if emb is not None:
+            return len(emb)
+    return _DEFAULT_VECTOR_SIZE
+
+
+def _ensure_collection(client, name: str, vector_size: int = _DEFAULT_VECTOR_SIZE) -> None:
     try:
         from qdrant_client.models import Distance, VectorParams
     except ImportError:
@@ -39,9 +47,9 @@ def _ensure_collection(client, name: str) -> None:
     if name not in existing:
         client.create_collection(
             name,
-            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
         )
-        log.info("Created Qdrant collection '%s'", name)
+        log.info("Created Qdrant collection '%s' (dim=%d)", name, vector_size)
 
 
 def _stable_id(seed: str) -> str:
@@ -66,7 +74,7 @@ def upsert_jira_embeddings(
 
     try:
         client = _get_client(qdrant_url, api_key)
-        _ensure_collection(client, JIRA_COLLECTION)
+        _ensure_collection(client, JIRA_COLLECTION, _infer_vector_size(embeddings))
 
         points: list[PointStruct] = []
         for ticket, emb in zip(tickets, embeddings):
@@ -116,7 +124,7 @@ def upsert_commit_embeddings(
 
     try:
         client = _get_client(qdrant_url, api_key)
-        _ensure_collection(client, GITHUB_COLLECTION)
+        _ensure_collection(client, GITHUB_COLLECTION, _infer_vector_size(embeddings))
 
         points: list[PointStruct] = []
         for commit, emb in zip(commits, embeddings):
