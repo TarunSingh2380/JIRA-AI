@@ -30,6 +30,10 @@ from neo4j import AsyncGraphDatabase, AsyncDriver
 from pydantic import BaseModel
 
 from config import settings
+from stage3_semantic.bge_m3_embeddings import (
+    rebuild_embeddings as rebuild_bge_m3_embeddings,
+    semantic_search as search_bge_m3_embeddings,
+)
 
 
 # ─── Lifecycle ─────────────────────────────────────────────────────────
@@ -209,13 +213,40 @@ async def pr_impact(req: ImpactRequest) -> dict:
 class SemanticQuery(BaseModel):
     query: str
     repos: Optional[list[str]] = None
+    kinds: Optional[list[str]] = None
     top_k: int = 10
 
 
 @app.post("/search/semantic")
-async def search_semantic(q: SemanticQuery) -> dict:
-    """STUB. Stage 3: vector search over code chunks (LlamaIndex + Qdrant)."""
-    raise HTTPException(501, "Stage 3 (semantic layer) not yet implemented")
+async def search_semantic(q: SemanticQuery, driver: AsyncDriver = Depends(get_driver)) -> dict:
+    results = await search_bge_m3_embeddings(
+        driver,
+        q.query,
+        repos=q.repos,
+        kinds=q.kinds,
+        top_k=q.top_k,
+    )
+    return {"query": q.query, "results": results}
+
+
+class EmbeddingRebuildRequest(BaseModel):
+    kinds: Optional[list[str]] = None
+    limit: Optional[int] = None
+    batch_size: Optional[int] = None
+
+
+@app.post("/embeddings/rebuild")
+async def rebuild_semantic_embeddings(
+    req: EmbeddingRebuildRequest,
+    driver: AsyncDriver = Depends(get_driver),
+) -> dict:
+    stats = await rebuild_bge_m3_embeddings(
+        driver,
+        kinds=req.kinds,
+        limit=req.limit,
+        batch_size=req.batch_size,
+    )
+    return {"embedding_model": settings.bge_m3_model_name, **stats}
 
 
 class AskRequest(BaseModel):

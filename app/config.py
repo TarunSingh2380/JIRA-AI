@@ -29,6 +29,7 @@ class Settings:
     jira_base_url: str = os.getenv("JIRA_BASE_URL", "").rstrip("/")
     jira_email: str = os.getenv("JIRA_EMAIL", "")
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")
+    jira_project_keys: str = os.getenv("JIRA_PROJECT_KEYS", "")
     jira_approved_transition_name: str = os.getenv("JIRA_APPROVED_TRANSITION_NAME", "")
     repograph_base_url: str = os.getenv("REPOGRAPH_BASE_URL", "http://127.0.0.1:8088").rstrip("/")
     external_request_timeout_seconds: int = int(os.getenv("EXTERNAL_REQUEST_TIMEOUT_SECONDS", "15"))
@@ -37,6 +38,14 @@ class Settings:
     repository_search_root: str = os.getenv("REPOSITORY_SEARCH_ROOT", "/home/ubuntu")
     repository_host_root: str = os.getenv("REPOSITORY_HOST_ROOT", os.getenv("REPOSITORY_SEARCH_ROOT", "/home/ubuntu"))
     excluded_repository_names: str = os.getenv("EXCLUDED_REPOSITORY_NAMES", "JIRA-AI")
+    neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user: str = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "")
+    neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
+    graph_job_repo_timeout_seconds: int = int(os.getenv("GRAPH_JOB_REPO_TIMEOUT_SECONDS", "900"))
+    graph_job_commit_batch_size: int = int(os.getenv("GRAPH_JOB_COMMIT_BATCH_SIZE", "500"))
+    graph_job_limit_jira_issues: int = int(os.getenv("GRAPH_JOB_LIMIT_JIRA_ISSUES", "0"))
+    graph_job_build_embeddings: bool = os.getenv("GRAPH_JOB_BUILD_EMBEDDINGS", "true").lower() in {"1", "true", "yes", "on"}
 
 
 settings = Settings()

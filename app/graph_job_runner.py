@@ -11,7 +11,6 @@ import threading
 import traceback
 import uuid
 from copy import deepcopy
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,24 +19,10 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 from app.config import Settings
+from app.graph_job_store import GraphJobStoreError, PostgresGraphJobStore, graph_job_to_dict
+from app.graph_job_types import GraphJob
 from app.repository_discovery import discover_graph_repositories
 from app.schemas import GraphAdminTriggerRequest
-
-
-@dataclass
-class GraphJob:
-    id: str
-    action: str
-    status: str
-    created_at: str
-    updated_at: str
-    options: dict[str, Any]
-    totals: dict[str, int] = field(default_factory=dict)
-    progress: dict[str, int] = field(default_factory=dict)
-    repositories: list[dict[str, Any]] = field(default_factory=list)
-    jira_tickets: list[dict[str, Any]] = field(default_factory=list)
-    logs: list[dict[str, Any]] = field(default_factory=list)
-    error: str | None = None
 
 
 class GraphJobRunner:
@@ -45,6 +30,8 @@ class GraphJobRunner:
         self.settings = settings
         self._jobs: dict[str, GraphJob] = {}
         self._lock = threading.Lock()
+        self._store = self._build_store()
+        self._load_persisted_jobs()
 
     def start(self, request: GraphAdminTriggerRequest) -> dict[str, Any]:
         now = _now()
@@ -60,6 +47,7 @@ class GraphJobRunner:
         )
         with self._lock:
             self._jobs[job.id] = job
+        self._persist(job)
 
         thread = threading.Thread(target=self._run_job, args=(job.id, request), daemon=True)
         thread.start()
@@ -68,16 +56,30 @@ class GraphJobRunner:
     def get(self, job_id: str) -> dict[str, Any]:
         with self._lock:
             job = self._jobs.get(job_id)
-            if job is None:
-                raise KeyError(job_id)
-            return {"job": deepcopy(job.__dict__)}
+        if job is None and self._store is not None:
+            job = self._store.get(job_id)
+            if job is not None:
+                with self._lock:
+                    self._jobs[job.id] = job
+        if job is None:
+            raise KeyError(job_id)
+        return {"job": graph_job_to_dict(job)}
 
     def list(self) -> list[dict[str, Any]]:
+        if self._store is not None:
+            persisted = self._store.list()
+            with self._lock:
+                for job in persisted:
+                    self._jobs[job.id] = job
         with self._lock:
-            jobs = [deepcopy(job.__dict__) for job in self._jobs.values()]
-        return sorted(jobs, key=lambda item: item["created_at"], reverse=True)
+            jobs = [graph_job_to_dict(job) for job in self._jobs.values()]
+        return sorted(jobs, key=lambda item: item["updated_at"], reverse=True)
 
     def latest_jira_tickets(self) -> list[dict[str, Any]]:
+        if self._store is not None:
+            for job in self._store.list():
+                if job.jira_tickets:
+                    return deepcopy(job.jira_tickets)
         with self._lock:
             jobs = sorted(self._jobs.values(), key=lambda item: item.created_at, reverse=True)
             for job in jobs:
@@ -113,6 +115,9 @@ class GraphJobRunner:
                 self._update(job_id, jira_tickets=tickets, totals={"repositories": len(repositories), "jira_tickets": len(tickets)})
                 if should_ingest_jira:
                     self._ingest_jira_tickets(job_id, tickets)
+
+            if request.build_embeddings and self.settings.graph_job_build_embeddings:
+                self._build_embeddings(job_id)
 
             self._set_status(job_id, "completed")
             self._log(job_id, "Job completed")
@@ -412,6 +417,27 @@ class GraphJobRunner:
 
         asyncio.run(ingest())
 
+    def _build_embeddings(self, job_id: str) -> None:
+        self._log(job_id, "Building BGE-M3 embeddings in Neo4j")
+
+        async def build() -> dict[str, int]:
+            repograph_path = str(Path("repograph_local").resolve())
+            if repograph_path not in sys.path:
+                sys.path.insert(0, repograph_path)
+
+            from ingest.git_history import make_driver
+            from stage3_semantic.bge_m3_embeddings import rebuild_embeddings
+
+            driver = make_driver()
+            try:
+                return await rebuild_embeddings(driver)
+            finally:
+                await driver.close()
+
+        stats = asyncio.run(build())
+        self._update(job_id, totals={**self.get(job_id)["job"]["totals"], "embedding_documents": stats["documents"]})
+        self._log(job_id, f"BGE-M3 embeddings complete: {stats['embedded']} documents")
+
     def _jira_get_all(self, path: str, item_key: str) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         start_at = 0
@@ -474,6 +500,8 @@ class GraphJobRunner:
             job.status = status
             job.error = error
             job.updated_at = _now()
+            snapshot = deepcopy(job)
+        self._persist(snapshot)
 
     def _update(self, job_id: str, **changes: Any) -> None:
         with self._lock:
@@ -484,12 +512,16 @@ class GraphJobRunner:
                 else:
                     setattr(job, key, value)
             job.updated_at = _now()
+            snapshot = deepcopy(job)
+        self._persist(snapshot)
 
     def _increment(self, job_id: str, key: str) -> None:
         with self._lock:
             job = self._jobs[job_id]
             job.progress[key] = job.progress.get(key, 0) + 1
             job.updated_at = _now()
+            snapshot = deepcopy(job)
+        self._persist(snapshot)
 
     def _repo_status(self, job_id: str, name: str, status: str, stats: dict[str, int] | None = None) -> None:
         with self._lock:
@@ -502,6 +534,8 @@ class GraphJobRunner:
                         repo.update(stats)
                     break
             job.updated_at = _now()
+            snapshot = deepcopy(job)
+        self._persist(snapshot)
 
     def _log(self, job_id: str, message: str, level: str = "info") -> None:
         with self._lock:
@@ -509,6 +543,32 @@ class GraphJobRunner:
             job.logs.append({"ts": _now(), "level": level, "message": message})
             job.logs = job.logs[-500:]
             job.updated_at = _now()
+            snapshot = deepcopy(job)
+        self._persist(snapshot)
+
+    def _build_store(self) -> PostgresGraphJobStore | None:
+        try:
+            store = PostgresGraphJobStore(self.settings)
+            store.init_schema()
+            return store
+        except GraphJobStoreError:
+            return None
+        except Exception:
+            return None
+
+    def _load_persisted_jobs(self) -> None:
+        if self._store is None:
+            return
+        for job in self._store.list():
+            self._jobs[job.id] = job
+
+    def _persist(self, job: GraphJob) -> None:
+        if self._store is None:
+            return
+        try:
+            self._store.save(job)
+        except Exception:
+            return
 
 
 def _repo_info_from_discovered(repo: dict[str, Any]) -> Any:

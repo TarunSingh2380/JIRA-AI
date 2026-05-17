@@ -77,6 +77,37 @@ curl http://localhost:8088/repos
 curl 'http://localhost:8088/files/touched_recently?keyword=razorpay&days=180'
 ```
 
+## BGE-M3 semantic embeddings
+
+Stage 3 stores dense BGE-M3 vectors directly in Neo4j on `EmbeddingDocument`
+nodes. Each document is linked back to the graph item it represents:
+`Repo`, `Commit`, `File`, or `JiraTicket`.
+
+Configure:
+
+```text
+BGE_M3_MODEL_NAME=BAAI/bge-m3
+SEMANTIC_EMBEDDING_DIMENSIONS=1024
+SEMANTIC_EMBED_BATCH_SIZE=32
+SEMANTIC_MAX_DOCS_PER_RUN=0
+```
+
+Build or refresh embeddings:
+
+```bash
+curl -X POST http://localhost:8088/embeddings/rebuild \
+  -H 'Content-Type: application/json' \
+  -d '{"kinds":["repo","commit","file","jira_ticket"],"batch_size":32}'
+```
+
+Search:
+
+```bash
+curl -X POST http://localhost:8088/search/semantic \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"payment retry failures","top_k":10}'
+```
+
 ## Re-running
 
 ```bash

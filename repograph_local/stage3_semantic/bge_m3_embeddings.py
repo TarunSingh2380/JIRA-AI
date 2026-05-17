@@ -1,0 +1,374 @@
+"""BGE-M3 semantic embeddings stored directly in Neo4j.
+
+The graph keeps embeddings on :EmbeddingDocument nodes and links each one back
+to the graph item it represents. This avoids duplicating vector properties
+across many labels while still making search results graph-native.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+from dataclasses import dataclass
+from typing import Any, Iterable, Sequence
+
+from neo4j import AsyncDriver
+
+from config import settings
+
+
+VECTOR_INDEX_NAME = "embedding_document_vector"
+EMBEDDING_LABEL = "EmbeddingDocument"
+
+
+@dataclass(slots=True)
+class EmbeddingDocument:
+    id: str
+    kind: str
+    source_key: str
+    repo_full_name: str | None
+    title: str
+    text: str
+    metadata: dict[str, Any]
+
+
+class BgeM3Embedder:
+    def __init__(self, model_name: str | None = None) -> None:
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as exc:
+            raise RuntimeError(
+                "sentence-transformers is required for BGE-M3 embeddings. "
+                "Install project dependencies first."
+            ) from exc
+
+        self.model_name = model_name or settings.bge_m3_model_name
+        self.model = SentenceTransformer(self.model_name)
+
+    async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        return await asyncio.to_thread(self._encode, texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        vectors = await self.embed_documents([text])
+        return vectors[0]
+
+    def _encode(self, texts: Sequence[str]) -> list[list[float]]:
+        vectors = self.model.encode(
+            list(texts),
+            batch_size=settings.semantic_embed_batch_size,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return [vector.astype(float).tolist() for vector in vectors]
+
+
+async def ensure_embedding_schema(driver: AsyncDriver) -> None:
+    dimensions = settings.semantic_embedding_dimensions
+    index_query = f"""
+    CREATE VECTOR INDEX {VECTOR_INDEX_NAME} IF NOT EXISTS
+    FOR (d:{EMBEDDING_LABEL}) ON (d.embedding)
+    OPTIONS {{indexConfig: {{
+      `vector.dimensions`: {dimensions},
+      `vector.similarity_function`: 'cosine'
+    }}}}
+    """
+    async with driver.session(database=settings.neo4j_database) as session:
+        await session.run(
+            """
+            CREATE CONSTRAINT embedding_document_id IF NOT EXISTS
+            FOR (d:EmbeddingDocument) REQUIRE d.id IS UNIQUE
+            """
+        )
+        await session.run(index_query)
+
+
+async def rebuild_embeddings(
+    driver: AsyncDriver,
+    *,
+    kinds: Sequence[str] | None = None,
+    limit: int | None = None,
+    batch_size: int | None = None,
+) -> dict[str, int]:
+    await ensure_embedding_schema(driver)
+    docs = await fetch_embedding_documents(driver, kinds=kinds, limit=limit)
+    embedder = BgeM3Embedder()
+    batch = batch_size or settings.semantic_embed_batch_size
+    written = 0
+
+    for chunk in _chunks(docs, batch):
+        vectors = await embedder.embed_documents([doc.text for doc in chunk])
+        rows = [
+            {
+                "id": doc.id,
+                "kind": doc.kind,
+                "source_key": doc.source_key,
+                "repo_full_name": doc.repo_full_name,
+                "title": doc.title,
+                "text": doc.text,
+                "metadata": doc.metadata,
+                "metadata_json": json.dumps(doc.metadata, ensure_ascii=False, default=str),
+                "embedding": vector,
+                "model": embedder.model_name,
+                "dimensions": len(vector),
+            }
+            for doc, vector in zip(chunk, vectors)
+        ]
+        await upsert_embedding_documents(driver, rows)
+        written += len(rows)
+
+    return {"documents": len(docs), "embedded": written}
+
+
+async def semantic_search(
+    driver: AsyncDriver,
+    query: str,
+    *,
+    repos: Sequence[str] | None = None,
+    kinds: Sequence[str] | None = None,
+    top_k: int = 10,
+) -> list[dict[str, Any]]:
+    await ensure_embedding_schema(driver)
+    embedder = BgeM3Embedder()
+    vector = await embedder.embed_query(query)
+    repo_filter = list(repos or [])
+    kind_filter = list(kinds or [])
+    cypher = f"""
+    CALL db.index.vector.queryNodes('{VECTOR_INDEX_NAME}', $top_k, $embedding)
+    YIELD node, score
+    WHERE ($repos = [] OR node.repo_full_name IN $repos)
+      AND ($kinds = [] OR node.kind IN $kinds)
+    RETURN node.id AS id,
+           node.kind AS kind,
+           node.source_key AS source_key,
+           node.repo_full_name AS repo_full_name,
+           node.title AS title,
+           node.text AS text,
+           node.metadata_json AS metadata_json,
+           score
+    ORDER BY score DESC
+    """
+    async with driver.session(database=settings.neo4j_database) as session:
+        result = await session.run(
+            cypher,
+            top_k=max(1, min(top_k, 100)),
+            embedding=vector,
+            repos=repo_filter,
+            kinds=kind_filter,
+        )
+        rows = []
+        async for record in result:
+            data = record.data()
+            data["metadata"] = json.loads(data.pop("metadata_json") or "{}")
+            rows.append(data)
+        return rows
+
+
+async def fetch_embedding_documents(
+    driver: AsyncDriver,
+    *,
+    kinds: Sequence[str] | None = None,
+    limit: int | None = None,
+) -> list[EmbeddingDocument]:
+    wanted = set(kinds or ["repo", "commit", "file", "jira_ticket"])
+    max_docs = limit if limit is not None else settings.semantic_max_docs_per_run
+    docs: list[EmbeddingDocument] = []
+    async with driver.session(database=settings.neo4j_database) as session:
+        if "repo" in wanted:
+            docs.extend(await _fetch(session, _QUERY_REPO_DOCS))
+        if "commit" in wanted:
+            docs.extend(await _fetch(session, _QUERY_COMMIT_DOCS))
+        if "file" in wanted:
+            docs.extend(await _fetch(session, _QUERY_FILE_DOCS))
+        if "jira_ticket" in wanted:
+            docs.extend(await _fetch(session, _QUERY_JIRA_DOCS))
+
+    if max_docs and max_docs > 0:
+        docs = docs[:max_docs]
+    return docs
+
+
+async def upsert_embedding_documents(driver: AsyncDriver, rows: list[dict[str, Any]]) -> None:
+    by_kind = {
+        "repo": [row for row in rows if row["kind"] == "repo"],
+        "commit": [row for row in rows if row["kind"] == "commit"],
+        "file": [row for row in rows if row["kind"] == "file"],
+        "jira_ticket": [row for row in rows if row["kind"] == "jira_ticket"],
+    }
+    async with driver.session(database=settings.neo4j_database) as session:
+        for kind, kind_rows in by_kind.items():
+            if not kind_rows:
+                continue
+            await session.run(_UPSERT_BY_KIND[kind], rows=kind_rows)
+
+
+async def _fetch(session: Any, query: str) -> list[EmbeddingDocument]:
+    result = await session.run(query)
+    docs = []
+    async for record in result:
+        data = record.data()
+        text = _clean_text(data.pop("text", ""))
+        if not text:
+            continue
+        docs.append(
+            EmbeddingDocument(
+                id=data["id"],
+                kind=data["kind"],
+                source_key=data["source_key"],
+                repo_full_name=data.get("repo_full_name"),
+                title=data.get("title") or data["source_key"],
+                text=text,
+                metadata=data.get("metadata") or {},
+            )
+        )
+    return docs
+
+
+def _chunks(items: Sequence[EmbeddingDocument], size: int) -> Iterable[Sequence[EmbeddingDocument]]:
+    size = max(1, size)
+    for index in range(0, len(items), size):
+        yield items[index : index + size]
+
+
+def _clean_text(value: str) -> str:
+    return " ".join(str(value or "").split())
+
+
+_QUERY_REPO_DOCS = """
+MATCH (r:Repo)
+RETURN
+  'repo:' + r.full_name AS id,
+  'repo' AS kind,
+  r.full_name AS source_key,
+  r.full_name AS repo_full_name,
+  r.full_name AS title,
+  {
+    owner: r.owner,
+    name: r.name,
+    default_branch: r.default_branch,
+    language: r.language,
+    url: r.url
+  } AS metadata,
+  'Repository ' + r.full_name +
+  coalesce(' language ' + r.language, '') +
+  coalesce(' description ' + r.description, '') AS text
+ORDER BY r.full_name
+"""
+
+_QUERY_COMMIT_DOCS = """
+MATCH (c:Commit)-[:IN_REPO]->(r:Repo)
+OPTIONAL MATCH (c)-[:AUTHORED_BY]->(a:Author)
+RETURN
+  'commit:' + c.sha AS id,
+  'commit' AS kind,
+  c.sha AS source_key,
+  r.full_name AS repo_full_name,
+  coalesce(c.summary, c.short_sha) AS title,
+  {
+    sha: c.sha,
+    short_sha: c.short_sha,
+    author_email: a.email,
+    author_name: a.name,
+    committed_at: toString(c.committed_at),
+    additions: c.additions,
+    deletions: c.deletions,
+    files_changed_count: c.files_changed_count
+  } AS metadata,
+  'Commit in repository ' + r.full_name +
+  coalesce(' by ' + a.name, '') +
+  coalesce(' summary ' + c.summary, '') +
+  coalesce(' message ' + c.message, '') AS text
+ORDER BY c.committed_at DESC
+"""
+
+_QUERY_FILE_DOCS = """
+MATCH (f:File)-[:IN_REPO]->(r:Repo)
+OPTIONAL MATCH (c:Commit)-[touch:TOUCHES]->(f)
+WITH f, r, count(touch) AS touch_count, max(c.committed_at) AS last_touched
+RETURN
+  'file:' + f.repo_full_name + ':' + f.path AS id,
+  'file' AS kind,
+  f.repo_full_name + ':' + f.path AS source_key,
+  f.repo_full_name AS repo_full_name,
+  f.path AS title,
+  {
+    path: f.path,
+    extension: f.extension,
+    current: f.current,
+    touch_count: touch_count,
+    last_touched_at: toString(last_touched)
+  } AS metadata,
+  'File ' + f.path + ' in repository ' + r.full_name +
+  coalesce(' extension ' + f.extension, '') +
+  ' touched ' + toString(touch_count) + ' times' AS text
+ORDER BY last_touched DESC
+"""
+
+_QUERY_JIRA_DOCS = """
+MATCH (t:JiraTicket)
+RETURN
+  'jira:' + t.key AS id,
+  'jira_ticket' AS kind,
+  t.key AS source_key,
+  null AS repo_full_name,
+  t.key + ' ' + coalesce(t.summary, '') AS title,
+  {
+    key: t.key,
+    url: t.url,
+    status: t.status,
+    priority: t.priority,
+    issue_type: t.issue_type,
+    assignee: t.assignee,
+    project_key: t.project_key,
+    updated: t.updated
+  } AS metadata,
+  'Jira ticket ' + t.key +
+  coalesce(' summary ' + t.summary, '') +
+  coalesce(' description ' + t.description, '') +
+  coalesce(' status ' + t.status, '') +
+  coalesce(' priority ' + t.priority, '') AS text
+ORDER BY t.updated DESC
+"""
+
+_SET_EMBEDDING_DOC = """
+MERGE (d:EmbeddingDocument {id: row.id})
+SET d.kind = row.kind,
+    d.source_key = row.source_key,
+    d.repo_full_name = row.repo_full_name,
+    d.title = row.title,
+    d.text = row.text,
+    d.metadata_json = row.metadata_json,
+    d.embedding = row.embedding,
+    d.embedding_model = row.model,
+    d.embedding_dimensions = row.dimensions,
+    d.embedded_at = datetime()
+"""
+
+_UPSERT_BY_KIND = {
+    "repo": f"""
+    UNWIND $rows AS row
+    {_SET_EMBEDDING_DOC}
+    WITH d, row
+    MATCH (source:Repo {{full_name: row.source_key}})
+    MERGE (d)-[:EMBEDS]->(source)
+    """,
+    "commit": f"""
+    UNWIND $rows AS row
+    {_SET_EMBEDDING_DOC}
+    WITH d, row
+    MATCH (source:Commit {{sha: row.source_key}})
+    MERGE (d)-[:EMBEDS]->(source)
+    """,
+    "file": f"""
+    UNWIND $rows AS row
+    {_SET_EMBEDDING_DOC}
+    WITH d, row
+    MATCH (source:File {{repo_full_name: row.repo_full_name, path: row.metadata.path}})
+    MERGE (d)-[:EMBEDS]->(source)
+    """,
+    "jira_ticket": f"""
+    UNWIND $rows AS row
+    {_SET_EMBEDDING_DOC}
+    WITH d, row
+    MATCH (source:JiraTicket {{key: row.source_key}})
+    MERGE (d)-[:EMBEDS]->(source)
+    """,
+}

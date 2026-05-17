@@ -71,7 +71,7 @@ Open:
 http://SERVER_IP:8000/graph-admin
 ```
 
-The compose file mounts the server's existing cloned repositories from `/home/ubuntu` into the app container at `/host-repos`. The API scans `/host-repos`, but the n8n payload still sends host paths such as `/home/ubuntu/ramfincorp-backend`, so n8n can run pull commands on the server paths.
+The compose file mounts the server's existing cloned repositories from `/home/ubuntu` into the app container at `/host-repos`. The mount is writable so local graph jobs can run `git fetch`/`git pull` before ingestion. The n8n payload still sends host paths such as `/home/ubuntu/ramfincorp-backend`, so n8n can also run pull commands on the server paths.
 
 For Docker, set these values in `.env`:
 
@@ -115,6 +115,10 @@ docker compose down
 - `GET /graph-admin`
 - `GET /graph-admin/repositories`
 - `POST /graph-admin/trigger`
+- `POST /graph-admin/jobs`
+- `GET /graph-admin/jobs`
+- `GET /graph-admin/jobs/{job_id}`
+- `WS /graph-admin/jobs/{job_id}/ws`
 - `POST /chat`
 - `POST /analyze-ticket`
 - `POST /workflow/jira-review`
@@ -138,14 +142,30 @@ Example request:
 
 The admin page triggers n8n graph jobs for every top-level Git repository already cloned under `REPOSITORY_SEARCH_ROOT`, excluding `JIRA-AI` by default. Each trigger sends n8n the local clone path, remote URL, current branch, current commit, Jira flags, and instructions to run `git pull --ff-only` before rebuilding graph context.
 
+The API also supports local graph jobs at `/graph-admin/jobs`. These run inside the API process, stream progress over the job WebSocket, ingest Git history into Neo4j, and optionally fetch Jira ticket history.
+Graph job state is persisted to Postgres when `DATABASE_URL` is configured, so refreshing `/graph-admin` restores the latest job status, logs, repository progress, and Jira ticket snapshot instead of resetting to an empty in-memory view.
+
 Environment:
 
 ```text
 N8N_GRAPH_WEBHOOK_URL=https://your-n8n-host/webhook/graph-db-admin
 N8N_API_KEY=optional-shared-secret
+JIRA_PROJECT_KEYS=ABC,DEF
 REPOSITORY_SEARCH_ROOT=/home/ubuntu
 REPOSITORY_HOST_ROOT=/home/ubuntu
 EXCLUDED_REPOSITORY_NAMES=JIRA-AI
+NEO4J_URI=bolt://host.docker.internal:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your-neo4j-password
+NEO4J_DATABASE=neo4j
+GRAPH_JOB_REPO_TIMEOUT_SECONDS=900
+GRAPH_JOB_COMMIT_BATCH_SIZE=500
+GRAPH_JOB_LIMIT_JIRA_ISSUES=0
+GRAPH_JOB_BUILD_EMBEDDINGS=true
+BGE_M3_MODEL_NAME=BAAI/bge-m3
+SEMANTIC_EMBEDDING_DIMENSIONS=1024
+SEMANTIC_EMBED_BATCH_SIZE=32
+SEMANTIC_MAX_DOCS_PER_RUN=0
 ```
 
 Actions sent to n8n:
@@ -154,11 +174,17 @@ Actions sent to n8n:
 update
 regenerate
 create_new
+jira_tickets_only
 ```
 
 If `N8N_GRAPH_WEBHOOK_URL` is not configured, the UI returns a dry-run payload so you can verify the repository list before wiring n8n.
 
 n8n should treat the repository paths as existing local clones. It should not clone them again.
+
+When BGE-M3 embeddings are enabled, graph jobs create Neo4j `EmbeddingDocument`
+nodes with 1024-dimensional vectors and `:EMBEDS` relationships back to the
+source graph nodes. The repograph service exposes `POST /embeddings/rebuild`
+and `POST /search/semantic` for manual refreshes and semantic search.
 
 ## Jira Review + Slack Follow-up Workflow
 

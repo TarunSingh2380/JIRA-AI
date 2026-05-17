@@ -29,6 +29,9 @@ CREATE CONSTRAINT pr_id IF NOT EXISTS
 CREATE CONSTRAINT branch_id IF NOT EXISTS
   FOR (b:Branch) REQUIRE (b.repo_full_name, b.name) IS UNIQUE;
 
+CREATE CONSTRAINT embedding_document_id IF NOT EXISTS
+  FOR (d:EmbeddingDocument) REQUIRE d.id IS UNIQUE;
+
 // Stage 2 — code-structure layer (used by tree-sitter overlay)
 CREATE CONSTRAINT function_qualified IF NOT EXISTS
   FOR (fn:Function) REQUIRE fn.qualified_name IS UNIQUE;
@@ -61,6 +64,13 @@ CREATE INDEX pr_state IF NOT EXISTS
 CREATE INDEX function_file IF NOT EXISTS
   FOR (fn:Function) ON (fn.file_path);
 
+CREATE VECTOR INDEX embedding_document_vector IF NOT EXISTS
+  FOR (d:EmbeddingDocument) ON (d.embedding)
+  OPTIONS {indexConfig: {
+    `vector.dimensions`: 1024,
+    `vector.similarity_function`: 'cosine'
+  }};
+
 // ─────────────────────────────────────────────────────────────────────
 // Schema documentation as a comment block — kept here so the contract
 // between ingestion code and queries stays in one place.
@@ -78,6 +88,9 @@ CREATE INDEX function_file IF NOT EXISTS
 //   (:PullRequest {repo_full_name, number, title, state,
 //                  created_at, merged_at, base, head, url})
 //   (:Branch {repo_full_name, name, head_sha})
+//   (:EmbeddingDocument {id, kind, source_key, repo_full_name,
+//                        title, text, metadata_json, embedding,
+//                        embedding_model, embedding_dimensions, embedded_at})
 //
 //   // Stage 2
 //   (:Function {qualified_name, name, file_path, repo_full_name,
@@ -97,6 +110,7 @@ CREATE INDEX function_file IF NOT EXISTS
 //   (:PullRequest)-[:IN_REPO]->(:Repo)
 //   (:PullRequest)-[:MERGED_AS]->(:Commit)
 //   (:PullRequest)-[:AUTHORED_BY]->(:Author)
+//   (:EmbeddingDocument)-[:EMBEDS]->(:Repo|:Commit|:File|:JiraTicket)
 //
 //   // Stage 2
 //   (:Function)-[:DEFINED_IN]->(:File)

@@ -78,10 +78,11 @@ class SlackReplyResponse(BaseModel):
 
 
 class GraphAdminTriggerRequest(BaseModel):
-    action: Literal["update", "regenerate", "create_new"]
+    action: Literal["update", "regenerate", "create_new", "jira_tickets_only"]
     pull_latest_code: bool = True
     fetch_latest_jira_tickets: bool = True
     include_jira_tickets: bool = True
+    build_embeddings: bool = True
     notes: str | None = None
 
 

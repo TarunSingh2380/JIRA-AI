@@ -6,12 +6,13 @@ pydantic-settings
 fastapi
 uvicorn[standard]
 rich
+sentence-transformers>=3.0.0
 
 ## Stage 2 (AST overlay) — install when starting Stage 2
 # tree-sitter==0.22.3
 # tree-sitter-languages==1.10.2
 
-## Stage 3 (LlamaIndex semantic layer) — install when starting Stage 3
+## Stage 3 (optional LlamaIndex semantic layer) — install when starting GraphRAG
 # llama-index-core==0.10.55
 # llama-index-graph-stores-neo4j==0.2.7
 # llama-index-vector-stores-qdrant==0.2.13

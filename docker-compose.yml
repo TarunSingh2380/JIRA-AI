@@ -14,7 +14,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - /home/ubuntu:/host-repos:ro
+      - /home/ubuntu:/host-repos:rw
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

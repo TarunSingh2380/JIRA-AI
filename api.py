@@ -5,18 +5,20 @@ It wires together the prompt store, LLM client, request/response schemas,
 and the ticket analyzer service for external consumers.
 """
 
+import asyncio
 import json
 
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.conversation_store import ConversationStoreError, PostgresConversationStore
 from app.exceptions import LLMConfigurationError, PromptNotFoundError
 from app.graph_context import GraphContextClient
+from app.graph_job_runner import GraphJobRunner
 from app.jira_client import JiraClient
 from app.json_utils import parse_model_json, review_status, review_text
 from app.llm_client import build_llm_client
@@ -48,6 +50,7 @@ app = FastAPI(
 )
 
 prompt_store = PromptStore(settings.prompt_dir)
+graph_job_runner = GraphJobRunner(settings)
 
 SLACK_CHAT_SYSTEM_PROMPT = (
     "You are a helpful assistant. Send the reply of the user message and only "
@@ -130,6 +133,50 @@ def graph_admin_trigger(request: GraphAdminTriggerRequest) -> GraphAdminTriggerR
         excluded_repositories=_excluded_repositories(),
         n8n=n8n_result,
     )
+
+
+@app.post("/graph-admin/jobs")
+def graph_admin_start_job(request: GraphAdminTriggerRequest) -> dict[str, Any]:
+    return graph_job_runner.start(request)
+
+
+@app.get("/graph-admin/jobs")
+def graph_admin_jobs() -> dict[str, Any]:
+    return {"jobs": graph_job_runner.list()}
+
+
+@app.get("/graph-admin/jobs/{job_id}")
+def graph_admin_job(job_id: str) -> dict[str, Any]:
+    try:
+        return graph_job_runner.get(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Graph job not found") from exc
+
+
+@app.websocket("/graph-admin/jobs/{job_id}/ws")
+async def graph_admin_job_ws(websocket: WebSocket, job_id: str) -> None:
+    await websocket.accept()
+    last_updated_at = None
+
+    try:
+        while True:
+            payload = graph_job_runner.get(job_id)
+            updated_at = payload["job"].get("updated_at")
+            if updated_at != last_updated_at:
+                await websocket.send_json(payload)
+                last_updated_at = updated_at
+
+            if payload["job"].get("status") in {"completed", "failed"}:
+                await websocket.close(code=1000)
+                return
+            else:
+                await asyncio.sleep(0.5)
+    except KeyError:
+        await websocket.close(code=1008, reason="Graph job not found")
+    except WebSocketDisconnect:
+        return
+    except RuntimeError:
+        return
 
 
 @app.post("/analyze-ticket", response_model=AnalyzeTicketResponse)
@@ -423,11 +470,13 @@ GRAPH_ADMIN_HTML = """
       <label><input id="pullLatestCode" type="checkbox" checked> Run git pull in local clones</label>
       <label><input id="fetchLatestJira" type="checkbox" checked> Fetch latest Jira tickets</label>
       <label><input id="includeJira" type="checkbox" checked> Include Jira tickets in graph</label>
+      <label><input id="buildEmbeddings" type="checkbox" checked> Build BGE-M3 embeddings</label>
       <textarea id="notes" placeholder="Optional run note"></textarea>
       <div class="toolbar">
         <button data-action="update">Update Graph DB</button>
         <button class="secondary" data-action="regenerate">Regenerate Graph DB</button>
         <button class="danger" data-action="create_new">Create New Graph DB</button>
+        <button class="secondary" data-action="jira_tickets_only">Refresh Jira Tickets Only</button>
       </div>
       <div class="meta" id="meta"></div>
     </aside>
@@ -452,6 +501,7 @@ GRAPH_ADMIN_HTML = """
     const resultEl = document.querySelector("#result");
     const repoRows = document.querySelector("#repoRows");
     const buttons = [...document.querySelectorAll("button[data-action]")];
+    let currentSocket = null;
 
     async function loadRepos() {
       try {
@@ -477,10 +527,10 @@ GRAPH_ADMIN_HTML = """
     async function trigger(action) {
       setBusy(true);
       resultEl.hidden = true;
-      statusEl.textContent = "Triggering n8n...";
+      statusEl.textContent = "Starting graph job...";
       statusEl.className = "status";
       try {
-        const response = await fetch("/graph-admin/trigger", {
+        const response = await fetch("/graph-admin/jobs", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({
@@ -488,19 +538,95 @@ GRAPH_ADMIN_HTML = """
             pull_latest_code: document.querySelector("#pullLatestCode").checked,
             fetch_latest_jira_tickets: document.querySelector("#fetchLatestJira").checked,
             include_jira_tickets: document.querySelector("#includeJira").checked,
+            build_embeddings: document.querySelector("#buildEmbeddings").checked,
             notes: document.querySelector("#notes").value || null
           })
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Trigger failed");
-        statusEl.textContent = data.n8n.dry_run ? "Dry run prepared" : "n8n workflow triggered";
-        statusEl.className = "status ok";
-        resultEl.textContent = JSON.stringify(data, null, 2);
-        resultEl.hidden = false;
+        if (!response.ok) throw new Error(data.detail || "Job start failed");
+        const job = normalizeJobPayload(data);
+        if (!job) throw new Error("Job start response did not include a job");
+        renderJob(job);
+        if (job.id) watchJob(job.id);
       } catch (error) {
         statusEl.textContent = error.message;
         statusEl.className = "status error";
-      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadLatestJob() {
+      try {
+        const response = await fetch("/graph-admin/jobs");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Job load failed");
+        const latest = (data.jobs || [])[0];
+        if (!latest) return;
+        renderJob(latest);
+        if (latest.id && (latest.status === "queued" || latest.status === "running")) {
+          setBusy(true);
+          watchJob(latest.id);
+        }
+      } catch (error) {
+        console.warn("Latest graph job load failed", error);
+      }
+    }
+
+    function watchJob(jobId) {
+      if (currentSocket) {
+        currentSocket.close();
+      }
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${protocol}://${window.location.host}/graph-admin/jobs/${jobId}/ws`);
+      currentSocket = socket;
+      socket.onmessage = event => {
+        const job = normalizeJobPayload(JSON.parse(event.data));
+        if (job) renderJob(job);
+      };
+      socket.onerror = () => {
+        statusEl.textContent = "Job progress connection failed";
+        statusEl.className = "status error";
+        setBusy(false);
+      };
+      socket.onclose = () => {
+        if (currentSocket === socket) currentSocket = null;
+        setBusy(false);
+      };
+    }
+
+    function normalizeJobPayload(payload) {
+      if (!payload) return null;
+      if (payload.job) return payload.job;
+      return payload.id || payload.status || payload.progress || payload.totals ? payload : null;
+    }
+
+    function renderJob(job) {
+      const progress = job.progress || {};
+      const totals = job.totals || {};
+      const status = job.status || "unknown";
+      const repoDone = progress.repositories_done || 0;
+      const repoTotal = totals.repositories || 0;
+      const jiraDone = progress.jira_tickets_done || 0;
+      const jiraTotal = totals.jira_tickets || 0;
+      const summary = `${status}: repos ${repoDone}/${repoTotal}, Jira ${jiraDone}/${jiraTotal}`;
+      statusEl.textContent = status === "failed" && job.error ? `${summary} - ${job.error}` : summary;
+      statusEl.className = status === "failed" ? "status error" : "status ok";
+
+      const recentLogs = (job.logs || []).slice(-80).map(log => (
+        `[${log.ts || ""}] ${(log.level || "info").toUpperCase()} ${log.message || ""}`
+      ));
+      resultEl.textContent = JSON.stringify({
+        id: job.id,
+        action: job.action,
+        status,
+        error: job.error,
+        totals,
+        progress,
+        repositories: job.repositories || [],
+        recent_logs: recentLogs
+      }, null, 2);
+      resultEl.hidden = false;
+      if (status === "completed" || status === "failed") {
         setBusy(false);
       }
     }
@@ -520,7 +646,12 @@ GRAPH_ADMIN_HTML = """
     }
 
     buttons.forEach(button => button.addEventListener("click", () => trigger(button.dataset.action)));
-    loadRepos();
+    async function init() {
+      await loadRepos();
+      await loadLatestJob();
+    }
+
+    init();
   </script>
 </body>
 </html>

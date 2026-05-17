@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # Stage 3
     anthropic_api_key: Optional[str] = None
     embed_model: str = "voyage-code-3"
+    bge_m3_model_name: str = "BAAI/bge-m3"
+    semantic_embedding_dimensions: int = 1024
+    semantic_embed_batch_size: int = 32
+    semantic_max_docs_per_run: int = 0
     voyage_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
 
