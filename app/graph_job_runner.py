@@ -236,20 +236,30 @@ async def run_graph_job(
             job.totals["repositories"] = len(repos)
             _persist_job_progress(job)
 
+            # Upsert repo metadata with a short-lived connection (no awaits inside).
             conn = _db_connect()
             if conn:
                 with conn:
                     for repo in repos:
                         _upsert_repo_row(conn, repo)
 
+            # Run all git pulls first (they involve many awaits / long blocking calls).
+            # Collect results in memory to avoid holding a DB connection open across them.
+            pull_results: list[tuple[dict, bool, str]] = []
             if pull_latest_code:
                 log.info("Running git pull on %d repos ...", len(repos))
                 for repo in repos:
                     success, output = await asyncio.to_thread(_git_pull, repo)
-                    if conn:
-                        with conn:
+                    pull_results.append((repo, success, output))
+
+            # Write all pull logs in a single fresh connection after all awaits are done.
+            if pull_results:
+                log_conn = _db_connect()
+                if log_conn:
+                    with log_conn:
+                        for repo, success, output in pull_results:
                             _log_pull(
-                                conn, job.job_id,
+                                log_conn, job.job_id,
                                 repo.get("name", ""),
                                 repo.get("container_path") or repo.get("path", ""),
                                 success, output,
