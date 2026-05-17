@@ -56,16 +56,16 @@ def _jira_get(path: str, params: Optional[dict] = None) -> dict[str, Any]:
 
 
 def _fetch_all_projects() -> list[dict[str, Any]]:
-    """Return all non-archived Jira projects."""
+    """Return all Jira projects, skipping any the API flags as archived."""
     projects: list[dict] = []
     start = 0
     while True:
         data = _jira_get(
             "/rest/api/3/project/search",
-            {"startAt": start, "maxResults": 50, "status": "live"},
+            {"startAt": start, "maxResults": 50},
         )
         batch = data.get("values", [])
-        # Belt-and-suspenders: also filter the `archived` flag if present
+        # Skip projects Jira explicitly marks as archived (field may be absent).
         projects.extend(p for p in batch if not p.get("archived", False))
         if data.get("isLast", True) or len(batch) < 50:
             break
