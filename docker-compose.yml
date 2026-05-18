@@ -3,38 +3,27 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+
     container_name: jira-ai-api
     restart: unless-stopped
+
     env_file:
       - .env
+
     environment:
       REPOSITORY_SEARCH_ROOT: /host-repos
       REPOSITORY_HOST_ROOT: /home/ubuntu
       EXCLUDED_REPOSITORY_NAMES: JIRA-AI
+
+      # IMPORTANT
+      OLLAMA_URL: http://host.docker.internal:11434
+      QDRANT_URL: http://host.docker.internal:6333
+
     ports:
       - "8000:8000"
+
     volumes:
       - /home/ubuntu:/host-repos:rw
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: jira-ai-postgres
-    profiles:
-      - local-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: jira_ai
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - jira_ai_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d jira_ai"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  jira_ai_postgres_data:

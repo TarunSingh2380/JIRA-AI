@@ -34,6 +34,11 @@ from pydantic import BaseModel
 from config import settings
 from ingest.git_history import ingest_repo, make_driver
 from ingest.local_repos import discover_from_settings
+from stage3_semantic.bge_m3_embeddings import (
+    embedding_model_options,
+    rebuild_embeddings as rebuild_semantic_embedding_documents,
+    semantic_search as search_semantic_embeddings,
+)
 
 log = logging.getLogger(__name__)
 
@@ -271,24 +276,35 @@ class SemanticQuery(BaseModel):
     repos: Optional[list[str]] = None
     kinds: Optional[list[str]] = None
     top_k: int = 10
+    model_key: str = "bge-m3"
+
+
+@app.get("/embedding-models")
+async def list_embedding_models() -> dict:
+    return {"models": embedding_model_options()}
 
 
 @app.post("/search/semantic")
 async def search_semantic(q: SemanticQuery, driver: AsyncDriver = Depends(get_driver)) -> dict:
-    results = await search_bge_m3_embeddings(
-        driver,
-        q.query,
-        repos=q.repos,
-        kinds=q.kinds,
-        top_k=q.top_k,
-    )
-    return {"query": q.query, "results": results}
+    try:
+        results = await search_semantic_embeddings(
+            driver,
+            q.query,
+            repos=q.repos,
+            kinds=q.kinds,
+            top_k=q.top_k,
+            model_key=q.model_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"query": q.query, "model_key": q.model_key, "results": results}
 
 
 class EmbeddingRebuildRequest(BaseModel):
     kinds: Optional[list[str]] = None
     limit: Optional[int] = None
     batch_size: Optional[int] = None
+    model_key: str = "bge-m3"
 
 
 @app.post("/embeddings/rebuild")
@@ -296,13 +312,17 @@ async def rebuild_semantic_embeddings(
     req: EmbeddingRebuildRequest,
     driver: AsyncDriver = Depends(get_driver),
 ) -> dict:
-    stats = await rebuild_bge_m3_embeddings(
-        driver,
-        kinds=req.kinds,
-        limit=req.limit,
-        batch_size=req.batch_size,
-    )
-    return {"embedding_model": settings.bge_m3_model_name, **stats}
+    try:
+        stats = await rebuild_semantic_embedding_documents(
+            driver,
+            kinds=req.kinds,
+            limit=req.limit,
+            batch_size=req.batch_size,
+            model_key=req.model_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return stats
 
 
 class AskRequest(BaseModel):

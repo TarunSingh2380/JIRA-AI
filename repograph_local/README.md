@@ -77,17 +77,18 @@ curl http://localhost:8088/repos
 curl 'http://localhost:8088/files/touched_recently?keyword=razorpay&days=180'
 ```
 
-## BGE-M3 semantic embeddings
+## Semantic embeddings
 
-Stage 3 stores dense BGE-M3 vectors directly in Neo4j on `EmbeddingDocument`
-nodes. Each document is linked back to the graph item it represents:
-`Repo`, `Commit`, `File`, or `JiraTicket`.
+Stage 3 stores dense model-specific vectors directly in Neo4j on
+`EmbeddingDocument` nodes. Each document is linked back to the graph item it
+represents: `Repo`, `Commit`, `File`, or `JiraTicket`.
 
-Configure:
+Supported models:
 
 ```text
-BGE_M3_MODEL_NAME=BAAI/bge-m3
-SEMANTIC_EMBEDDING_DIMENSIONS=1024
+BGE-M3 (568M)                  -> bge-m3
+Qwen3-Embedding-0.6B           -> qwen3-embedding-0.6b
+mxbai-embed-large-v1 (335M)    -> mxbai-embed-large-v1
 SEMANTIC_EMBED_BATCH_SIZE=32
 SEMANTIC_MAX_DOCS_PER_RUN=0
 ```
@@ -97,15 +98,17 @@ Build or refresh embeddings:
 ```bash
 curl -X POST http://localhost:8088/embeddings/rebuild \
   -H 'Content-Type: application/json' \
-  -d '{"kinds":["repo","commit","file","jira_ticket"],"batch_size":32}'
+  -d '{"model_key":"bge-m3","kinds":["repo","commit","file","jira_ticket"],"batch_size":32}'
 ```
+
+The Graph DB admin UI also calls this endpoint during graph jobs when **Build semantic embeddings** is checked. These Neo4j-native embeddings populate `(:EmbeddingDocument)` nodes used by the code analysis report's semantic clustering sections.
 
 Search:
 
 ```bash
 curl -X POST http://localhost:8088/search/semantic \
   -H 'Content-Type: application/json' \
-  -d '{"query":"payment retry failures","top_k":10}'
+  -d '{"model_key":"bge-m3","query":"payment retry failures","top_k":10}'
 ```
 
 ## Re-running

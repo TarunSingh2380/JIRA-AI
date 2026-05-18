@@ -83,6 +83,7 @@ class GraphAdminTriggerRequest(BaseModel):
     fetch_latest_jira_tickets: bool = True
     include_jira_tickets: bool = True
     build_embeddings: bool = True
+    embedding_model: Literal["bge-m3", "qwen3-embedding-0.6b", "mxbai-embed-large-v1"] = "bge-m3"
     notes: str | None = None
 
 
@@ -103,3 +104,9 @@ class GraphJobResponse(BaseModel):
     error: str | None = None
     started_at: str
     completed_at: str | None = None
+
+
+class CodeAnalysisReportRequest(BaseModel):
+    repositories: List[str]
+    include_graph_context: bool = True
+    embedding_model: Literal["bge-m3", "qwen3-embedding-0.6b", "mxbai-embed-large-v1"] = "bge-m3"

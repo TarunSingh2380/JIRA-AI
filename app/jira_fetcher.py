@@ -48,55 +48,85 @@ def _jira_get(path: str, params: Optional[dict] = None) -> dict[str, Any]:
             log.warning("Jira rate-limited; sleeping %ds", wait)
             time.sleep(wait)
             continue
-        if resp.status_code == 410:
-            raise ProjectGoneError(f"Project is archived or deleted (410 Gone): {url}")
+            if resp.status_code == 410:
+                raise RuntimeError(
+                    f"Jira API returned 410 Gone for {url}: {resp.text[:500]}"
+                )
         resp.raise_for_status()
         return resp.json() if resp.text else {}
     raise RuntimeError(f"Jira GET {path} failed after retries")
 
 
 def _fetch_all_projects() -> list[dict[str, Any]]:
-    """Return all Jira projects, skipping any the API flags as archived."""
-    projects: list[dict] = []
+    """Return all Jira projects, skipping archived ones."""
+    projects: list[dict[str, Any]] = []
+
     start = 0
+
     while True:
         data = _jira_get(
             "/rest/api/3/project/search",
-            {"startAt": start, "maxResults": 50},
+            {
+                "startAt": start,
+                "maxResults": 50,
+            },
         )
+
         batch = data.get("values", [])
-        # Skip projects Jira explicitly marks as archived (field may be absent).
-        projects.extend(p for p in batch if not p.get("archived", False))
-        if data.get("isLast", True) or len(batch) < 50:
+
+        # Skip archived projects safely
+        active_projects = [
+            p for p in batch
+            if not p.get("archived", False)
+        ]
+
+        projects.extend(active_projects)
+
+        total = data.get("total", 0)
+
+        start += len(batch)
+
+        if start >= total or not batch:
             break
-        start += 50
+
     return projects
 
 
 def _fetch_tickets_for_project(project_key: str) -> list[dict[str, Any]]:
-    """Paginate through all issues in a project via JQL search."""
-    tickets: list[dict] = []
+    """Paginate through all issues in a Jira project."""
+
+    tickets: list[dict[str, Any]] = []
+
     start = 0
+
     fields = (
-        "summary,description,status,issuetype,priority,assignee,reporter,"
-        "created,updated,parent,subtasks,components,labels,fixVersions,comment"
+        "summary,description,status,issuetype,priority,"
+        "assignee,reporter,created,updated,parent,"
+        "subtasks,components,labels,fixVersions,comment"
     )
+
     while True:
         data = _jira_get(
-            "/rest/api/3/search",
+            "/rest/api/3/search/jql",
             {
-                "jql": f"project={project_key} ORDER BY created DESC",
+                "jql": f'project="{project_key}" ORDER BY created DESC',
                 "startAt": start,
                 "maxResults": 100,
                 "fields": fields,
             },
         )
+
         batch = data.get("issues", [])
+
         tickets.extend(batch)
+
         total = data.get("total", 0)
+
         start += len(batch)
+
         if start >= total or not batch:
             break
+
     return tickets
 
 

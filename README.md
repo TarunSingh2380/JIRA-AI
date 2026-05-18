@@ -145,6 +145,8 @@ The admin page triggers n8n graph jobs for every top-level Git repository alread
 The API also supports local graph jobs at `/graph-admin/jobs`. These run inside the API process, stream progress over the job WebSocket, ingest Git history into Neo4j, and optionally fetch Jira ticket history.
 Graph job state is persisted to Postgres when `DATABASE_URL` is configured, so refreshing `/graph-admin` restores the latest job status, logs, repository progress, and Jira ticket snapshot instead of resetting to an empty in-memory view.
 
+The repositories tab also supports downloadable code analysis reports. Select one or more repositories and click **Download Code Analysis** to generate a Markdown document from local clone inspection plus Neo4j graph context when available. The backing endpoint is `POST /graph-admin/code-analysis-report`.
+
 Environment:
 
 ```text
@@ -162,7 +164,6 @@ GRAPH_JOB_REPO_TIMEOUT_SECONDS=900
 GRAPH_JOB_COMMIT_BATCH_SIZE=500
 GRAPH_JOB_LIMIT_JIRA_ISSUES=0
 GRAPH_JOB_BUILD_EMBEDDINGS=true
-BGE_M3_MODEL_NAME=BAAI/bge-m3
 SEMANTIC_EMBEDDING_DIMENSIONS=1024
 SEMANTIC_EMBED_BATCH_SIZE=32
 SEMANTIC_MAX_DOCS_PER_RUN=0
@@ -181,10 +182,12 @@ If `N8N_GRAPH_WEBHOOK_URL` is not configured, the UI returns a dry-run payload s
 
 n8n should treat the repository paths as existing local clones. It should not clone them again.
 
-When BGE-M3 embeddings are enabled, graph jobs create Neo4j `EmbeddingDocument`
-nodes with 1024-dimensional vectors and `:EMBEDS` relationships back to the
-source graph nodes. The repograph service exposes `POST /embeddings/rebuild`
-and `POST /search/semantic` for manual refreshes and semantic search.
+When semantic embeddings are enabled, graph jobs create model-specific Neo4j
+`EmbeddingDocument` nodes with 1024-dimensional vectors and `:EMBEDS`
+relationships back to the source graph nodes. The admin UI supports BGE-M3,
+Qwen3-Embedding-0.6B, and mxbai-embed-large-v1. The repograph service exposes
+`POST /embeddings/rebuild` and `POST /search/semantic` for manual refreshes and
+semantic search.
 
 ## Jira Review + Slack Follow-up Workflow
 

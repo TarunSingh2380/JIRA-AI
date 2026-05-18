@@ -1,4 +1,4 @@
-"""BGE-M3 semantic embeddings stored directly in Neo4j.
+"""Semantic embeddings stored directly in Neo4j.
 
 The graph keeps embeddings on :EmbeddingDocument nodes and links each one back
 to the graph item it represents. This avoids duplicating vector properties
@@ -18,6 +18,25 @@ from config import settings
 
 VECTOR_INDEX_NAME = "embedding_document_vector"
 EMBEDDING_LABEL = "EmbeddingDocument"
+DEFAULT_EMBEDDING_MODEL_KEY = "bge-m3"
+
+EMBEDDING_MODEL_OPTIONS = {
+    "bge-m3": {
+        "label": "BGE-M3 (568M)",
+        "model_name": settings.bge_m3_model_name,
+        "dimensions": 1024,
+    },
+    "qwen3-embedding-0.6b": {
+        "label": "Qwen3-Embedding-0.6B",
+        "model_name": "Qwen/Qwen3-Embedding-0.6B",
+        "dimensions": 1024,
+    },
+    "mxbai-embed-large-v1": {
+        "label": "mxbai-embed-large-v1 (335M)",
+        "model_name": "mixedbread-ai/mxbai-embed-large-v1",
+        "dimensions": 1024,
+    },
+}
 
 
 @dataclass(slots=True)
@@ -31,17 +50,21 @@ class EmbeddingDocument:
     metadata: dict[str, Any]
 
 
-class BgeM3Embedder:
-    def __init__(self, model_name: str | None = None) -> None:
+class SentenceTransformerEmbedder:
+    def __init__(self, model_key: str | None = None) -> None:
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
             raise RuntimeError(
-                "sentence-transformers is required for BGE-M3 embeddings. "
+                "sentence-transformers is required for semantic embeddings. "
                 "Install project dependencies first."
             ) from exc
 
-        self.model_name = model_name or settings.bge_m3_model_name
+        self.profile = resolve_embedding_model(model_key)
+        self.model_key = self.profile["key"]
+        self.model_label = self.profile["label"]
+        self.model_name = self.profile["model_name"]
+        self.dimensions = int(self.profile["dimensions"])
         self.model = SentenceTransformer(self.model_name)
 
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
@@ -61,8 +84,8 @@ class BgeM3Embedder:
         return [vector.astype(float).tolist() for vector in vectors]
 
 
-async def ensure_embedding_schema(driver: AsyncDriver) -> None:
-    dimensions = settings.semantic_embedding_dimensions
+async def ensure_embedding_schema(driver: AsyncDriver, dimensions: int | None = None) -> None:
+    dimensions = dimensions or settings.semantic_embedding_dimensions
     index_query = f"""
     CREATE VECTOR INDEX {VECTOR_INDEX_NAME} IF NOT EXISTS
     FOR (d:{EMBEDDING_LABEL}) ON (d.embedding)
@@ -87,10 +110,11 @@ async def rebuild_embeddings(
     kinds: Sequence[str] | None = None,
     limit: int | None = None,
     batch_size: int | None = None,
-) -> dict[str, int]:
-    await ensure_embedding_schema(driver)
+    model_key: str | None = None,
+) -> dict[str, Any]:
+    embedder = SentenceTransformerEmbedder(model_key)
+    await ensure_embedding_schema(driver, dimensions=embedder.dimensions)
     docs = await fetch_embedding_documents(driver, kinds=kinds, limit=limit)
-    embedder = BgeM3Embedder()
     batch = batch_size or settings.semantic_embed_batch_size
     written = 0
 
@@ -98,7 +122,8 @@ async def rebuild_embeddings(
         vectors = await embedder.embed_documents([doc.text for doc in chunk])
         rows = [
             {
-                "id": doc.id,
+                "id": f"{embedder.model_key}:{doc.id}",
+                "source_document_id": doc.id,
                 "kind": doc.kind,
                 "source_key": doc.source_key,
                 "repo_full_name": doc.repo_full_name,
@@ -107,6 +132,8 @@ async def rebuild_embeddings(
                 "metadata": doc.metadata,
                 "metadata_json": json.dumps(doc.metadata, ensure_ascii=False, default=str),
                 "embedding": vector,
+                "model_key": embedder.model_key,
+                "model_label": embedder.model_label,
                 "model": embedder.model_name,
                 "dimensions": len(vector),
             }
@@ -115,7 +142,14 @@ async def rebuild_embeddings(
         await upsert_embedding_documents(driver, rows)
         written += len(rows)
 
-    return {"documents": len(docs), "embedded": written}
+    return {
+        "documents": len(docs),
+        "embedded": written,
+        "embedding_model_key": embedder.model_key,
+        "embedding_model": embedder.model_name,
+        "embedding_model_label": embedder.model_label,
+        "embedding_dimensions": embedder.dimensions,
+    }
 
 
 async def semantic_search(
@@ -125,9 +159,10 @@ async def semantic_search(
     repos: Sequence[str] | None = None,
     kinds: Sequence[str] | None = None,
     top_k: int = 10,
+    model_key: str | None = None,
 ) -> list[dict[str, Any]]:
-    await ensure_embedding_schema(driver)
-    embedder = BgeM3Embedder()
+    embedder = SentenceTransformerEmbedder(model_key)
+    await ensure_embedding_schema(driver, dimensions=embedder.dimensions)
     vector = await embedder.embed_query(query)
     repo_filter = list(repos or [])
     kind_filter = list(kinds or [])
@@ -136,6 +171,10 @@ async def semantic_search(
     YIELD node, score
     WHERE ($repos = [] OR node.repo_full_name IN $repos)
       AND ($kinds = [] OR node.kind IN $kinds)
+      AND (
+        coalesce(node.embedding_model_key, '') = $model_key
+        OR coalesce(node.embedding_model, '') = $model_name
+      )
     RETURN node.id AS id,
            node.kind AS kind,
            node.source_key AS source_key,
@@ -143,6 +182,8 @@ async def semantic_search(
            node.title AS title,
            node.text AS text,
            node.metadata_json AS metadata_json,
+           node.embedding_model_key AS embedding_model_key,
+           node.embedding_model AS embedding_model,
            score
     ORDER BY score DESC
     """
@@ -153,6 +194,8 @@ async def semantic_search(
             embedding=vector,
             repos=repo_filter,
             kinds=kind_filter,
+            model_key=embedder.model_key,
+            model_name=embedder.model_name,
         )
         rows = []
         async for record in result:
@@ -230,6 +273,26 @@ def _chunks(items: Sequence[EmbeddingDocument], size: int) -> Iterable[Sequence[
 
 def _clean_text(value: str) -> str:
     return " ".join(str(value or "").split())
+
+
+def resolve_embedding_model(model_key: str | None = None) -> dict[str, Any]:
+    requested = (model_key or DEFAULT_EMBEDDING_MODEL_KEY).strip()
+    if not requested:
+        requested = DEFAULT_EMBEDDING_MODEL_KEY
+
+    for key, profile in EMBEDDING_MODEL_OPTIONS.items():
+        if requested == key or requested == profile["model_name"] or requested == profile["label"]:
+            return {"key": key, **profile}
+
+    allowed = ", ".join(EMBEDDING_MODEL_OPTIONS)
+    raise ValueError(f"Unsupported embedding model '{requested}'. Expected one of: {allowed}")
+
+
+def embedding_model_options() -> list[dict[str, Any]]:
+    return [
+        {"key": key, **profile}
+        for key, profile in EMBEDDING_MODEL_OPTIONS.items()
+    ]
 
 
 _QUERY_REPO_DOCS = """
@@ -330,13 +393,16 @@ ORDER BY t.updated DESC
 
 _SET_EMBEDDING_DOC = """
 MERGE (d:EmbeddingDocument {id: row.id})
-SET d.kind = row.kind,
+SET d.source_document_id = row.source_document_id,
+    d.kind = row.kind,
     d.source_key = row.source_key,
     d.repo_full_name = row.repo_full_name,
     d.title = row.title,
     d.text = row.text,
     d.metadata_json = row.metadata_json,
     d.embedding = row.embedding,
+    d.embedding_model_key = row.model_key,
+    d.embedding_model_label = row.model_label,
     d.embedding_model = row.model,
     d.embedding_dimensions = row.dimensions,
     d.embedded_at = datetime()

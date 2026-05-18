@@ -14,8 +14,9 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
+from app.code_analysis_report import build_code_analysis_report
 from app.config import settings
 from app.conversation_store import ConversationStoreError, PostgresConversationStore
 from app.db_init import run_migrations
@@ -31,6 +32,7 @@ from app.repository_discovery import discover_graph_repositories
 from app.schemas import (
     AnalyzeTicketRequest,
     AnalyzeTicketResponse,
+    CodeAnalysisReportRequest,
     GraphAdminTriggerRequest,
     GraphAdminTriggerResponse,
     GraphJobResponse,
@@ -128,6 +130,8 @@ def graph_admin_trigger(
         pull_latest_code=request.pull_latest_code,
         fetch_latest_jira=request.fetch_latest_jira_tickets,
         include_jira_in_graph=request.include_jira_tickets,
+        build_embeddings=request.build_embeddings,
+        embedding_model=request.embedding_model,
     )
 
     return GraphAdminTriggerResponse(
@@ -151,6 +155,30 @@ def get_graph_job(job_id: str) -> GraphJobResponse:
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     return GraphJobResponse(**job.to_dict())
+
+
+@app.post("/graph-admin/code-analysis-report")
+async def download_code_analysis_report(request: CodeAnalysisReportRequest) -> Response:
+    repositories = discover_graph_repositories(settings)
+    selected = set(request.repositories)
+    selected_repositories = [
+        repo for repo in repositories
+        if repo.get("name") in selected or repo.get("path") in selected
+    ]
+    if not selected_repositories:
+        raise HTTPException(status_code=400, detail="Select at least one known repository")
+
+    filename, markdown = await build_code_analysis_report(
+        settings=settings,
+        selected_repositories=selected_repositories,
+        include_graph_context=request.include_graph_context,
+        embedding_model=request.embedding_model,
+    )
+    return Response(
+        content=markdown,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ─── Jira ticket cache browser ───────────────────────────────────────────────
@@ -468,6 +496,20 @@ GRAPH_ADMIN_HTML = """
       font-size: 14px;
     }
     input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+    .repo-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .repo-actions label { margin: 0; }
+    .repo-actions button {
+      width: auto;
+      min-height: 36px;
+      padding: 7px 14px;
+      white-space: nowrap;
+    }
     textarea {
       width: 100%;
       min-height: 72px;
@@ -487,7 +529,7 @@ GRAPH_ADMIN_HTML = """
     /* Stats row */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 12px;
       margin-bottom: 20px;
     }
@@ -544,7 +586,15 @@ GRAPH_ADMIN_HTML = """
       <label><input id="pullLatestCode" type="checkbox" checked> Run git pull in local clones</label>
       <label><input id="fetchLatestJira" type="checkbox" checked> Fetch latest Jira tickets</label>
       <label><input id="includeJira" type="checkbox" checked> Include Jira tickets in graph</label>
-      <label><input id="buildEmbeddings" type="checkbox" checked> Build BGE-M3 embeddings</label>
+      <label><input id="buildEmbeddings" type="checkbox" checked> Build semantic embeddings</label>
+      <label style="display:block;">
+        <span style="display:block;margin-bottom:6px;">Embedding model</span>
+        <select id="embeddingModel" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:9px 10px;font:inherit;background:#fff;">
+          <option value="bge-m3">BGE-M3 (568M)</option>
+          <option value="qwen3-embedding-0.6b">Qwen3-Embedding-0.6B</option>
+          <option value="mxbai-embed-large-v1">mxbai-embed-large-v1 (335M)</option>
+        </select>
+      </label>
       <textarea id="notes" placeholder="Optional run note"></textarea>
       <div class="toolbar">
         <button data-action="update">Update Graph DB</button>
@@ -571,6 +621,10 @@ GRAPH_ADMIN_HTML = """
           <div class="stat-label">Jira Tickets</div>
         </div>
         <div class="stat-card">
+          <div class="stat-value" id="statEmbeddings">—</div>
+          <div class="stat-label">Embeddings</div>
+        </div>
+        <div class="stat-card">
           <div class="stat-value" id="statAction">—</div>
           <div class="stat-label">Action</div>
         </div>
@@ -586,6 +640,10 @@ GRAPH_ADMIN_HTML = """
           <div class="progress-label">Jira ticket progress</div>
           <div class="progress-track"><div class="progress-fill" id="jiraProgress" style="width:0%"></div></div>
         </div>
+        <div class="progress-section" id="embeddingProgressSection" hidden>
+          <div class="progress-label" id="embeddingProgressLabel">Semantic embedding progress</div>
+          <div class="progress-track"><div class="progress-fill" id="embeddingProgress" style="width:0%"></div></div>
+        </div>
       </div>
 
       <!-- Tab navigation -->
@@ -597,9 +655,14 @@ GRAPH_ADMIN_HTML = """
 
       <!-- Tab: Repositories -->
       <div class="tab-panel active" id="tab-repos">
+        <div class="repo-actions">
+          <label><input id="selectAllRepos" type="checkbox" checked> Select all repositories</label>
+          <button class="secondary" id="downloadAnalysisBtn">Download Code Analysis</button>
+        </div>
         <table id="repoTable">
           <thead>
             <tr>
+              <th style="width:6%">Use</th>
               <th style="width:20%">Repository</th>
               <th>Local clone path</th>
               <th style="width:16%">Branch</th>
@@ -655,6 +718,7 @@ GRAPH_ADMIN_HTML = """
               <th style="width:10%">Status</th>
               <th style="width:8%">Repos</th>
               <th style="width:8%">Jira</th>
+              <th style="width:10%">Embeddings</th>
               <th style="width:14%">Started</th>
               <th style="width:14%">Completed</th>
               <th>Error</th>
@@ -689,16 +753,24 @@ GRAPH_ADMIN_HTML = """
     const statsGrid = document.querySelector("#statsGrid");
     const progressSection = document.querySelector("#progressSection");
     const buttons   = [...document.querySelectorAll("button[data-action]")];
+    const downloadAnalysisBtn = document.querySelector("#downloadAnalysisBtn");
+    const selectAllRepos = document.querySelector("#selectAllRepos");
 
     let pollTimer = null;
+    let repositories = [];
+    let selectedRepos = new Set();
 
     // ── Repo list ────────────────────────────────────────────────────────
     async function loadRepos() {
       try {
         const res  = await fetch("/graph-admin/repositories");
         const data = await res.json();
-        repoRows.innerHTML = data.repositories.map(r => `
+        repositories = data.repositories || [];
+        selectedRepos = new Set(repositories.map(r => r.name));
+        selectAllRepos.checked = true;
+        repoRows.innerHTML = repositories.map(r => `
           <tr>
+            <td><input class="repo-select" type="checkbox" data-repo="${escAttr(r.name)}" checked></td>
             <td>${esc(r.name)}</td>
             <td>${esc(r.path)}</td>
             <td>${esc(r.branch || "-")}</td>
@@ -708,8 +780,67 @@ GRAPH_ADMIN_HTML = """
         setStatus(`${data.repository_count} repositories ready`, "ok");
         metaEl.textContent =
           `Using existing local clones. Excluded: ${data.excluded_repositories.join(", ") || "none"}`;
+        wireRepoSelection();
       } catch (err) {
         setStatus(`Repository load failed: ${err.message}`, "error");
+      }
+    }
+
+    function wireRepoSelection() {
+      [...document.querySelectorAll(".repo-select")].forEach(input => {
+        input.addEventListener("change", () => {
+          if (input.checked) selectedRepos.add(input.dataset.repo);
+          else selectedRepos.delete(input.dataset.repo);
+          selectAllRepos.checked = selectedRepos.size === repositories.length;
+        });
+      });
+    }
+
+    selectAllRepos.addEventListener("change", () => {
+      selectedRepos = new Set(selectAllRepos.checked ? repositories.map(r => r.name) : []);
+      [...document.querySelectorAll(".repo-select")].forEach(input => {
+        input.checked = selectAllRepos.checked;
+      });
+    });
+
+    async function downloadCodeAnalysis() {
+      if (selectedRepos.size === 0) {
+        setStatus("Select at least one repository for analysis", "error");
+        return;
+      }
+      downloadAnalysisBtn.disabled = true;
+      setStatus("Generating code analysis document...", "running");
+      try {
+        const res = await fetch("/graph-admin/code-analysis-report", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            repositories: [...selectedRepos],
+            include_graph_context: true,
+            embedding_model: document.querySelector("#embeddingModel").value,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || "Report generation failed");
+        }
+        const blob = await res.blob();
+        const disposition = res.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="([^"]+)"/);
+        const filename = match ? match[1] : "code-analysis-report.md";
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        setStatus("Code analysis document downloaded", "ok");
+      } catch (err) {
+        setStatus(err.message, "error");
+      } finally {
+        downloadAnalysisBtn.disabled = false;
       }
     }
 
@@ -730,6 +861,8 @@ GRAPH_ADMIN_HTML = """
             pull_latest_code:         document.querySelector("#pullLatestCode").checked,
             fetch_latest_jira_tickets: document.querySelector("#fetchLatestJira").checked,
             include_jira_tickets:      document.querySelector("#includeJira").checked,
+            build_embeddings:          document.querySelector("#buildEmbeddings").checked,
+            embedding_model:           document.querySelector("#embeddingModel").value,
             notes: document.querySelector("#notes").value || null,
           }),
         });
@@ -759,6 +892,9 @@ GRAPH_ADMIN_HTML = """
         const res  = await fetch(`/graph-admin/jobs/${jobId}`);
         const data = await res.json();
         updateStats(data);
+        if (data.status === "running") {
+          setStatus(runningStatusMessage(data), "running");
+        }
 
         resultEl.textContent = JSON.stringify(data, null, 2);
         resultEl.hidden = false;
@@ -789,19 +925,58 @@ GRAPH_ADMIN_HTML = """
       const repoD = progress.repositories_done || 0;
       const jiraT = totals.jira_tickets   || 0;
       const jiraD = progress.jira_tickets_done || 0;
+      const embT  = totals.embedding_documents || 0;
+      const embD  = progress.embedding_documents_done || 0;
+      const embActive = embT > 0 || embD > 0;
+      const inferEmbeddingActive =
+        !embActive &&
+        data.status === "running" &&
+        document.querySelector("#buildEmbeddings").checked &&
+        repoT > 0 &&
+        repoD >= repoT &&
+        (jiraT === 0 || jiraD >= jiraT);
 
       document.querySelector("#statRepos").textContent =
         repoT > 0 ? `${repoD}/${repoT}` : (data.repository_count != null ? `${data.repository_count}` : "0/0");
       document.querySelector("#statJira").textContent  =
         jiraT > 0 ? `${jiraD}/${jiraT}` : "0/0";
+      document.querySelector("#statEmbeddings").textContent =
+        embActive ? `${embD}/${embT}` : (inferEmbeddingActive ? "running" : "—");
 
       setProgressBar("repoProgress", repoD, repoT);
       setProgressBar("jiraProgress", jiraD, jiraT);
+      document.querySelector("#embeddingProgressSection").hidden = !(embActive || inferEmbeddingActive);
+      document.querySelector("#embeddingProgressLabel").textContent =
+        (embActive && data.status === "running" && embD === 0) || inferEmbeddingActive
+          ? "Semantic embedding progress (model running)"
+          : "Semantic embedding progress";
+      if (inferEmbeddingActive) {
+        document.querySelector("#embeddingProgress").style.width = "15%";
+      } else {
+        setProgressBar("embeddingProgress", embD, embT);
+      }
     }
 
     function setProgressBar(id, done, total) {
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
       document.querySelector(`#${id}`).style.width = `${pct}%`;
+    }
+
+    function runningStatusMessage(data) {
+      const totals = data.totals || {};
+      const progress = data.progress || {};
+      const repoDone = (totals.repositories || 0) > 0 && progress.repositories_done >= totals.repositories;
+      const jiraDone = (totals.jira_tickets || 0) > 0 && progress.jira_tickets_done >= totals.jira_tickets;
+      const embTotal = totals.embedding_documents || 0;
+      const embDone = progress.embedding_documents_done || 0;
+      if (embTotal > 0 && embDone < embTotal) return "Building semantic embeddings...";
+      if (
+        document.querySelector("#buildEmbeddings").checked &&
+        repoDone &&
+        (jiraDone || (totals.jira_tickets || 0) === 0)
+      ) return "Building semantic embeddings...";
+      if (repoDone && jiraDone) return "Finalizing graph job...";
+      return "Graph job running...";
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -816,6 +991,10 @@ GRAPH_ADMIN_HTML = """
 
     function esc(v) {
       return String(v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[c]);
+    }
+
+    function escAttr(v) {
+      return esc(v).replace(/`/g, "&#096;");
     }
 
     // ── Tab switching ────────────────────────────────────────────────────
@@ -897,11 +1076,12 @@ GRAPH_ADMIN_HTML = """
             <td><span class="badge ${j.status==="completed"?"ok":j.status==="failed"?"err":"run"}">${esc(j.status||"—")}</span></td>
             <td>${esc(String((j.progress||{}).repositories_done||0))}/${esc(String((j.totals||{}).repositories||0))}</td>
             <td>${esc(String((j.progress||{}).jira_tickets_done||0))}/${esc(String((j.totals||{}).jira_tickets||0))}</td>
+            <td>${esc(String((j.progress||{}).embedding_documents_done||0))}/${esc(String((j.totals||{}).embedding_documents||0))}</td>
             <td>${esc(fmtDate(j.started_at))}</td>
             <td>${esc(fmtDate(j.completed_at))}</td>
             <td style="color:var(--danger);font-size:12px">${esc(j.error||"")}</td>
           </tr>
-        `).join("") || '<tr><td colspan="8" style="color:var(--muted)">No jobs yet</td></tr>';
+        `).join("") || '<tr><td colspan="9" style="color:var(--muted)">No jobs yet</td></tr>';
 
         if (fetchData.error) {
           errEl.textContent = fetchData.error;
@@ -932,6 +1112,7 @@ GRAPH_ADMIN_HTML = """
 
     // ── Init ─────────────────────────────────────────────────────────────
     buttons.forEach(b => b.addEventListener("click", () => trigger(b.dataset.action)));
+    downloadAnalysisBtn.addEventListener("click", downloadCodeAnalysis);
     loadRepos();
   </script>
 </body>
