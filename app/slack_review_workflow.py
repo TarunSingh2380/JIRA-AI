@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 from app.config import Settings
 from app.conversation_store import ConversationRecord, PostgresConversationStore
@@ -65,6 +68,8 @@ class SlackReviewWorkflow:
         ticket_data: dict[str, Any],
         slack_channel_id: str | None,
     ) -> dict[str, Any]:
+        issue_key = self._ticket_key(ticket_data)
+        log.info("Starting Jira review for issue %s", issue_key)
         analyzer = TicketAnalyzer(
             settings=self.settings,
             prompt_store=self.prompt_store,
@@ -74,9 +79,10 @@ class SlackReviewWorkflow:
         model_json = parse_model_json(result["model_output"])
         status = review_status(model_json)
         review = review_text(model_json)
-        issue_key = self._ticket_key(ticket_data)
+        log.info("Review result for %s: status=%s", issue_key, status)
 
         if status == "good":
+            log.info("Issue %s approved; writing Jira comment and transitioning", issue_key)
             jira_update = self._approve_jira(issue_key, review)
             return {
                 "jira_issue_key": issue_key,
@@ -92,6 +98,7 @@ class SlackReviewWorkflow:
         if not channel_id:
             raise ValueError("A Slack channel id is required when the review needs user follow-up")
 
+        log.info("Issue %s needs follow-up; posting to Slack channel %s", issue_key, channel_id)
         message = self._initial_slack_message(issue_key, review)
         slack_result = self.slack_client.post_message(channel_id=channel_id, text=message)
         self.store.upsert_initial(
@@ -102,6 +109,10 @@ class SlackReviewWorkflow:
             previous_review=model_json,
             status="awaiting_reply",
             bot_message=message,
+        )
+        log.info(
+            "Conversation stored for issue %s; thread_ts=%s slack_sent=%s",
+            issue_key, slack_result.thread_ts, slack_result.sent,
         )
 
         return {
@@ -123,10 +134,13 @@ class SlackReviewWorkflow:
         text: str,
         event_ts: str | None = None,
     ) -> dict[str, Any]:
+        log.info("Handling Slack reply from user=%s thread=%s", user_id, thread_ts)
         record = self.store.get_by_thread(thread_ts)
         if record is None:
+            log.warning("No conversation found for thread=%s; ignoring reply", thread_ts)
             raise ValueError(f"No Jira review conversation found for Slack thread {thread_ts}")
 
+        log.info("Follow-up review for issue=%s", record.jira_issue_key)
         graph_context = self.graph_client.fetch_context(
             ticket_data=record.original_ticket_data,
             user_reply=text,
@@ -134,6 +148,7 @@ class SlackReviewWorkflow:
         model_json = self._review_follow_up(record=record, user_reply=text, graph_context=graph_context)
         status = review_status(model_json)
         review = review_text(model_json)
+        log.info("Follow-up review result for issue=%s: status=%s", record.jira_issue_key, status)
 
         slack_result = self.slack_client.post_message(
             channel_id=channel_id,
@@ -161,7 +176,10 @@ class SlackReviewWorkflow:
             status=workflow_status,
         )
 
-        jira_update = self._approve_jira(record.jira_issue_key, review) if status == "good" else None
+        jira_update = None
+        if status == "good":
+            log.info("Follow-up approved issue=%s; writing Jira comment and transitioning", record.jira_issue_key)
+            jira_update = self._approve_jira(record.jira_issue_key, review)
 
         return {
             "jira_issue_key": record.jira_issue_key,
@@ -180,6 +198,7 @@ class SlackReviewWorkflow:
         user_reply: str,
         graph_context: dict[str, Any],
     ) -> dict[str, Any]:
+        log.debug("Calling LLM for follow-up review of issue=%s", record.jira_issue_key)
         user_message = {
             "original_ticket_data": record.original_ticket_data,
             "previous_review": record.previous_review,

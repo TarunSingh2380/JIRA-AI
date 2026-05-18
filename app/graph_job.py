@@ -6,10 +6,13 @@ background runner updates as work proceeds.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,11 +41,13 @@ class GraphJob:
     def mark_done(self) -> None:
         self.status = "completed"
         self.completed_at = datetime.now(timezone.utc)
+        log.info("Job %s completed", self.job_id)
 
     def mark_failed(self, reason: str) -> None:
         self.status = "failed"
         self.error = reason[:1000]
         self.completed_at = datetime.now(timezone.utc)
+        log.error("Job %s failed: %s", self.job_id, reason[:200])
 
 
 class JobStore:
@@ -61,6 +66,7 @@ class JobStore:
         if len(self._order) > self._max:
             oldest = self._order.pop(0)
             self._jobs.pop(oldest, None)
+        log.info("Created graph job %s (action=%s)", job_id, action)
         return job
 
     def get(self, job_id: str) -> Optional[GraphJob]:

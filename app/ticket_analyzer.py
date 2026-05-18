@@ -6,11 +6,14 @@ user message, calls the model, and returns a consistent result object.
 """
 
 import json
+import logging
 from typing import Any, Dict, Optional
 
 from app.config import Settings
 from app.llm_client import LLMClient
 from app.prompt_store import PromptStore
+
+log = logging.getLogger(__name__)
 
 
 class TicketAnalyzer:
@@ -26,9 +29,12 @@ class TicketAnalyzer:
 
     def analyze(self, ticket_data: Dict[str, Any], prompt_name: Optional[str] = None) -> Dict[str, Any]:
         selected_prompt = prompt_name or self.settings.default_prompt
+        ticket_key = ticket_data.get("key") or ticket_data.get("issue_key") or "unknown"
+        log.info("Analyzing ticket %s with prompt '%s'", ticket_key, selected_prompt)
         system_prompt = self.prompt_store.load(selected_prompt)
         user_message = self._build_user_message(ticket_data)
         model_output = self.llm_client.complete(system_prompt, user_message)
+        log.info("LLM analysis complete for ticket %s: output_chars=%d", ticket_key, len(model_output))
 
         return {
             "prompt_name": selected_prompt,

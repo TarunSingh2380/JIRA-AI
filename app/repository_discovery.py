@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from app.config import Settings
+
+log = logging.getLogger(__name__)
 
 
 def discover_graph_repositories(settings: Settings) -> list[dict[str, Any]]:
@@ -18,19 +21,24 @@ def discover_graph_repositories(settings: Settings) -> list[dict[str, Any]]:
         if name.strip()
     }
 
+    log.info("Discovering repositories under %s (excluded: %s)", root, excluded_names or "none")
+
     repositories: list[dict[str, Any]] = []
     for child in root.iterdir():
         if not child.is_dir():
             continue
 
         if child.name.startswith(".") or child.name in excluded_names:
+            log.debug("Skipping directory: %s", child.name)
             continue
 
         if _is_git_repository(child):
             host_path = host_root / child.name
             repositories.append(_repository_info(scan_path=child, host_path=host_path))
+            log.debug("Found git repository: %s", child.name)
 
     repositories.sort(key=lambda repo: repo["path"])
+    log.info("Discovered %d repositories", len(repositories))
     return repositories
 
 

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict
 from typing import Any
 
 from app.config import Settings
 from app.graph_job_types import GraphJob
+
+log = logging.getLogger(__name__)
 
 
 class GraphJobStoreError(RuntimeError):
@@ -64,6 +67,7 @@ class PostgresGraphJobStore:
             )
 
     def save(self, job: GraphJob) -> None:
+        log.debug("Saving graph job %s (status=%s)", job.id, job.status)
         self.init_schema()
         completed_at = job.updated_at if job.status in {"completed", "failed"} else None
         with self._connect() as conn:
@@ -135,15 +139,19 @@ class PostgresGraphJobStore:
             )
 
     def get(self, job_id: str) -> GraphJob | None:
+        log.debug("Fetching graph job %s", job_id)
         self.init_schema()
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM graph_jobs WHERE job_id = %s::uuid",
                 (job_id,),
             ).fetchone()
+        if not row:
+            log.warning("Graph job %s not found in DB", job_id)
         return self._job(row) if row else None
 
     def list(self, limit: int = 50) -> list[GraphJob]:
+        log.debug("Listing graph jobs (limit=%d)", limit)
         self.init_schema()
         with self._connect() as conn:
             rows = conn.execute(

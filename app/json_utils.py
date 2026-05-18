@@ -1,8 +1,11 @@
 """Helpers for extracting structured JSON from model output."""
 
 import json
+import logging
 import re
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 
 def parse_model_json(model_output: str) -> dict[str, Any]:
@@ -10,17 +13,22 @@ def parse_model_json(model_output: str) -> dict[str, Any]:
     try:
         parsed = json.loads(model_output)
     except json.JSONDecodeError:
+        log.debug("Direct JSON parse failed; attempting fenced/object extraction")
         fenced_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", model_output, re.DOTALL)
         if fenced_match:
+            log.debug("Extracted JSON from fenced code block")
             return json.loads(fenced_match.group(1))
 
         object_match = re.search(r"\{.*\}", model_output, re.DOTALL)
         if object_match:
+            log.debug("Extracted JSON from raw object match")
             return json.loads(object_match.group(0))
 
+        log.error("Failed to parse JSON from model output (first 200 chars): %s", model_output[:200])
         raise
 
     if not isinstance(parsed, dict):
+        log.error("Model output parsed as non-dict type=%s", type(parsed).__name__)
         raise json.JSONDecodeError("Expected a JSON object", model_output, 0)
 
     return parsed

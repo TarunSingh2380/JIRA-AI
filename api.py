@@ -107,7 +107,9 @@ def graph_admin_ui_alias() -> str:
 
 @app.get("/graph-admin/repositories")
 def graph_admin_repositories() -> dict[str, Any]:
+    log.info("GET /graph-admin/repositories")
     repositories = discover_graph_repositories(settings)
+    log.info("Returning %d repositories", len(repositories))
     return {
         "repository_count": len(repositories),
         "repositories": repositories,
@@ -120,9 +122,17 @@ def graph_admin_trigger(
     request: GraphAdminTriggerRequest,
     background_tasks: BackgroundTasks,
 ) -> GraphAdminTriggerResponse:
+    log.info(
+        "POST /graph-admin/trigger action=%s pull_code=%s fetch_jira=%s include_jira=%s",
+        request.action,
+        request.pull_latest_code,
+        request.fetch_latest_jira_tickets,
+        request.include_jira_tickets,
+    )
     repositories = discover_graph_repositories(settings)
 
     job = job_store.create(action=request.action)
+    log.info("Enqueuing background job %s for action=%s", job.job_id, request.action)
 
     background_tasks.add_task(
         run_graph_job,
@@ -145,14 +155,17 @@ def graph_admin_trigger(
 
 @app.get("/graph-admin/jobs", response_model=list[GraphJobResponse])
 def list_graph_jobs(limit: int = 10) -> list[GraphJobResponse]:
+    log.debug("GET /graph-admin/jobs limit=%d", limit)
     jobs = job_store.list_recent(limit=min(limit, 50))
     return [GraphJobResponse(**j.to_dict()) for j in jobs]
 
 
 @app.get("/graph-admin/jobs/{job_id}", response_model=GraphJobResponse)
 def get_graph_job(job_id: str) -> GraphJobResponse:
+    log.debug("GET /graph-admin/jobs/%s", job_id)
     job = job_store.get(job_id)
     if job is None:
+        log.warning("Job %s not found", job_id)
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     return GraphJobResponse(**job.to_dict())
 
@@ -189,6 +202,7 @@ def graph_admin_jira_tickets(
     offset: int = 0,
     project_key: str | None = None,
 ) -> dict[str, Any]:
+    log.debug("GET /graph-admin/jira-tickets project=%s limit=%d offset=%d", project_key, limit, offset)
     if not settings.database_url:
         return {"count": 0, "tickets": [], "error": "DATABASE_URL not configured"}
     try:
@@ -216,13 +230,16 @@ def graph_admin_jira_tickets(
                 """,
                 list_params,
             ).fetchall()
+            log.info("Returning %d of %d jira tickets (project=%s)", len(tickets), count, project_key)
             return {"count": count, "tickets": [dict(t) for t in tickets]}
     except Exception as exc:
+        log.error("Failed to query jira_ticket_cache: %s", exc)
         return {"count": 0, "tickets": [], "error": str(exc)}
 
 
 @app.get("/graph-admin/fetch-logs")
 def graph_admin_fetch_logs(limit: int = 100) -> dict[str, Any]:
+    log.debug("GET /graph-admin/fetch-logs limit=%d", limit)
     if not settings.database_url:
         return {"logs": [], "error": "DATABASE_URL not configured"}
     try:
@@ -240,8 +257,10 @@ def graph_admin_fetch_logs(limit: int = 100) -> dict[str, Any]:
                 """,
                 (limit,),
             ).fetchall()
+            log.debug("Returning %d fetch log entries", len(logs))
             return {"logs": [dict(l) for l in logs]}
     except Exception as exc:
+        log.error("Failed to query jira_fetch_log: %s", exc)
         return {"logs": [], "error": str(exc)}
 
 
@@ -249,6 +268,8 @@ def graph_admin_fetch_logs(limit: int = 100) -> dict[str, Any]:
 
 @app.post("/analyze-ticket", response_model=AnalyzeTicketResponse)
 def analyze_ticket(request: AnalyzeTicketRequest) -> AnalyzeTicketResponse:
+    ticket_key = request.ticket_data.get("key") or request.ticket_data.get("issue_key") or "unknown"
+    log.info("POST /analyze-ticket key=%s", ticket_key)
     try:
         analyzer = TicketAnalyzer(
             settings=settings,
@@ -262,17 +283,22 @@ def analyze_ticket(request: AnalyzeTicketRequest) -> AnalyzeTicketResponse:
         try:
             model_json = parse_model_json(result["model_output"])
         except json.JSONDecodeError as exc:
+            log.error("LLM returned non-JSON for ticket %s", ticket_key)
             raise HTTPException(
                 status_code=502,
                 detail="LLM returned non-JSON output. Use a prompt that returns only JSON.",
             ) from exc
 
-        return AnalyzeTicketResponse(status=review_status(model_json), review=review_text(model_json))
+        status = review_status(model_json)
+        log.info("Ticket %s analysis complete: status=%s", ticket_key, status)
+        return AnalyzeTicketResponse(status=status, review=review_text(model_json))
 
     except PromptNotFoundError as exc:
+        log.error("Prompt not found: %s", exc)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     except LLMConfigurationError as exc:
+        log.error("LLM configuration error: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -280,12 +306,15 @@ def analyze_ticket(request: AnalyzeTicketRequest) -> AnalyzeTicketResponse:
 
 @app.post("/chat", response_model=SlackMessageResponse)
 def reply_to_message(request: SlackMessageRequest) -> SlackMessageResponse:
+    log.info("POST /chat user=%s msg_chars=%d", request.userid, len(request.user_message))
     try:
         llm_client = build_llm_client(settings)
         llm_reply = llm_client.complete(SLACK_CHAT_SYSTEM_PROMPT, request.user_message).strip()
     except LLMConfigurationError as exc:
+        log.error("LLM configuration error in /chat: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    log.info("Chat reply generated for user=%s reply_chars=%d", request.userid, len(llm_reply))
     return SlackMessageResponse(userid=request.userid, llm_reply=llm_reply)
 
 
@@ -293,21 +322,30 @@ def reply_to_message(request: SlackMessageRequest) -> SlackMessageResponse:
 
 @app.post("/workflow/jira-review", response_model=JiraReviewWorkflowResponse)
 def workflow_jira_review(request: JiraReviewWorkflowRequest) -> JiraReviewWorkflowResponse:
+    ticket_key = request.ticket_data.get("key") or request.ticket_data.get("issue_key") or "unknown"
+    log.info("POST /workflow/jira-review key=%s channel=%s", ticket_key, request.slack_channel_id)
     try:
         workflow = build_workflow()
         result = workflow.handle_jira_review(
             ticket_data=request.ticket_data,
             slack_channel_id=request.slack_channel_id,
         )
+        log.info("Jira review complete for %s: status=%s slack_sent=%s", ticket_key, result.get("status"), result.get("slack_sent"))
         return JiraReviewWorkflowResponse(**result)
     except json.JSONDecodeError as exc:
+        log.error("LLM returned non-JSON for ticket %s", ticket_key)
         raise HTTPException(status_code=502, detail="LLM returned non-JSON output") from exc
     except (ConversationStoreError, LLMConfigurationError, RuntimeError, ValueError) as exc:
+        log.error("Jira review workflow error for %s: %s", ticket_key, exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/workflow/slack-reply", response_model=SlackReplyResponse)
 def workflow_slack_reply(request: SlackReplyRequest) -> SlackReplyResponse:
+    log.info(
+        "POST /workflow/slack-reply user=%s channel=%s thread=%s",
+        request.user_id, request.channel_id, request.thread_ts,
+    )
     try:
         workflow = build_workflow()
         result = workflow.handle_slack_reply(
@@ -317,16 +355,20 @@ def workflow_slack_reply(request: SlackReplyRequest) -> SlackReplyResponse:
             text=request.text,
             event_ts=request.event_ts,
         )
+        log.info("Slack reply handled: issue=%s status=%s", result.get("jira_issue_key"), result.get("status"))
         return SlackReplyResponse(**result)
     except json.JSONDecodeError as exc:
+        log.error("LLM returned non-JSON in slack-reply: %s", exc)
         raise HTTPException(status_code=502, detail="LLM returned non-JSON output") from exc
     except (ConversationStoreError, LLMConfigurationError, RuntimeError, ValueError) as exc:
+        log.error("Slack reply workflow error: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/workflow/slack-events")
 def workflow_slack_events(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("type") == "url_verification":
+        log.debug("Slack url_verification challenge received")
         return {"challenge": payload.get("challenge")}
 
     event = payload.get("event")
@@ -334,6 +376,7 @@ def workflow_slack_events(payload: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "ignored": "missing_event"}
 
     if event.get("bot_id") or event.get("subtype") == "bot_message":
+        log.debug("Ignoring bot message in Slack events")
         return {"ok": True, "ignored": "bot_message"}
 
     thread_ts = event.get("thread_ts")
@@ -341,7 +384,10 @@ def workflow_slack_events(payload: dict[str, Any]) -> dict[str, Any]:
     channel_id = event.get("channel")
     user_id = event.get("user")
     if not all(isinstance(value, str) and value for value in [thread_ts, text, channel_id, user_id]):
+        log.debug("Ignoring non-thread-reply Slack event")
         return {"ok": True, "ignored": "not_a_thread_reply"}
+
+    log.info("Slack event: thread reply from user=%s channel=%s thread=%s", user_id, channel_id, thread_ts)
 
     response = workflow_slack_reply(
         SlackReplyRequest(
