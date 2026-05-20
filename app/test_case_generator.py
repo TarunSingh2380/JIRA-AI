@@ -151,7 +151,7 @@ class TestCaseGenerator:
             context=context_block or "(no code context retrieved — answering from ticket alone)",
         )
         log.info("Calling LLM (context_chars=%d)", len(context_block))
-        test_cases_md = self.llm_client.complete(_SYSTEM_PROMPT, user_message, max_tokens=1024)
+        test_cases_md = self.llm_client.complete(_SYSTEM_PROMPT, user_message, max_tokens=1500)
 
         return {
             "test_cases": test_cases_md,
@@ -202,9 +202,13 @@ class TestCaseGenerator:
             )
             search_filter = None
             if repo:
+                # Qdrant stores just the repo name (e.g. "ramfincorp-backend"),
+                # not the full org/repo slug. Try both forms.
+                repo_name = repo.split("/")[-1] if "/" in repo else repo
                 search_filter = Filter(
-                    must=[FieldCondition(key="repo", match=MatchValue(value=repo))]
+                    must=[FieldCondition(key="repo", match=MatchValue(value=repo_name))]
                 )
+                log.info("Qdrant repo filter: %s → '%s'", repo, repo_name)
 
             # qdrant-client ≥ 1.9 uses query_points(); older versions use search()
             try:
