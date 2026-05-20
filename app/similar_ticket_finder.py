@@ -49,7 +49,10 @@ class SimilarTicketFinder:
         if statuses is None:
             statuses = ["Done", "Closed", "Resolved"]
 
-        query = f"{summary} {description or ''}".strip()
+        # Mirror _ticket_embed_texts() in graph_job_runner.py exactly:
+        # stored vector = summary[:200] + "\n" + description[:500]
+        # Matching this format is what makes identical tickets score ~100%.
+        query = f"{summary[:200]}\n{(description or '')[:500]}".strip()
 
         # 1. Try semantic search via Qdrant + Ollama
         hits, method = self._semantic_search(
