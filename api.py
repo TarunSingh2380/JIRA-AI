@@ -250,7 +250,7 @@ def graph_admin_jira_tickets(
             tickets = conn.execute(
                 f"""
                 SELECT ticket_key, project_key, summary, status, issue_type,
-                       priority, assignee_name, reporter_name, updated_at, fetched_at
+                       updated_at, fetched_at
                 FROM jira_ticket_cache
                 {where}
                 ORDER BY updated_at DESC NULLS LAST
@@ -938,8 +938,6 @@ GRAPH_ADMIN_HTML = """
               <th>Summary</th>
               <th style="width:10%">Status</th>
               <th style="width:10%">Type</th>
-              <th style="width:9%">Priority</th>
-              <th style="width:12%">Assignee</th>
               <th style="width:13%">Updated</th>
             </tr>
           </thead>
@@ -1553,8 +1551,6 @@ GRAPH_ADMIN_HTML = """
             <td>${esc(t.summary || "")}</td>
             <td><span class="badge">${esc(t.status || "—")}</span></td>
             <td>${esc(t.issue_type || "—")}</td>
-            <td>${esc(t.priority || "—")}</td>
-            <td>${esc(t.assignee_name || "—")}</td>
             <td>${esc(fmtDate(t.updated_at))}</td>
           </tr>
         `).join("");
