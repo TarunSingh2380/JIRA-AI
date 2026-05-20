@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 GITHUB_COLLECTION = "github_commits"
 JIRA_COLLECTION = "jira_tickets"
+JIRA_HYBRID_COLLECTION = "jira_tickets_hybrid"  # dense + sparse, used for RRF hybrid search
 _DEFAULT_VECTOR_SIZE = 1024  # qwen3:0.6b and BGE-M3 both output 1024-dim vectors
 
 
@@ -214,4 +215,83 @@ def upsert_codebase_embeddings(
 
     except Exception as exc:
         log.warning("Qdrant codebase upsert failed: %s", exc)
+        return 0
+
+
+# ─── Jira tickets — hybrid (dense + sparse) ──────────────────────────────────
+
+def _ensure_hybrid_collection(client, name: str, vector_size: int = _DEFAULT_VECTOR_SIZE) -> None:
+    """Create or verify a Qdrant collection with named dense + sparse vectors."""
+    try:
+        from qdrant_client.models import Distance, VectorParams, SparseVectorParams
+    except ImportError:
+        return
+
+    existing = {c.name for c in client.get_collections().collections}
+    if name in existing:
+        return
+
+    client.create_collection(
+        name,
+        vectors_config={
+            "dense": VectorParams(size=vector_size, distance=Distance.COSINE),
+        },
+        sparse_vectors_config={
+            "sparse": SparseVectorParams(),
+        },
+    )
+    log.info("Created hybrid Qdrant collection '%s' (dense=%d + sparse)", name, vector_size)
+
+
+def upsert_jira_hybrid_embeddings(
+    qdrant_url: str,
+    tickets: list[dict[str, Any]],
+    encoded: list[dict[str, Any]],   # list of {dense, sparse_indices, sparse_values}
+    api_key: Optional[str] = None,
+) -> int:
+    """Store BGE-M3 hybrid (dense + sparse) Jira embeddings.  Returns points written."""
+    try:
+        from qdrant_client.models import PointStruct, SparseVector
+    except ImportError:
+        log.warning("qdrant-client not installed; skipping hybrid Jira embedding storage")
+        return 0
+
+    try:
+        client = _get_client(qdrant_url, api_key)
+        _ensure_hybrid_collection(client, JIRA_HYBRID_COLLECTION)
+
+        points: list[PointStruct] = []
+        for ticket, enc in zip(tickets, encoded):
+            if not enc.get("dense"):
+                continue
+            fields = ticket.get("fields", {}) or {}
+            key = ticket.get("key", "")
+            points.append(
+                PointStruct(
+                    id=_stable_id(key or str(uuid.uuid4())),
+                    vector={
+                        "dense": enc["dense"],
+                        "sparse": SparseVector(
+                            indices=enc.get("sparse_indices", []),
+                            values=enc.get("sparse_values", []),
+                        ),
+                    },
+                    payload={
+                        "key": key,
+                        "summary": (fields.get("summary") or "")[:300],
+                        "status": (fields.get("status") or {}).get("name", ""),
+                        "issue_type": (fields.get("issuetype") or {}).get("name", ""),
+                        "project_key": key.rsplit("-", 1)[0] if "-" in key else key,
+                    },
+                )
+            )
+
+        if points:
+            client.upsert(collection_name=JIRA_HYBRID_COLLECTION, points=points)
+            log.info("Stored %d hybrid Jira embeddings in Qdrant", len(points))
+
+        return len(points)
+
+    except Exception as exc:
+        log.warning("Qdrant hybrid Jira upsert failed: %s", exc)
         return 0

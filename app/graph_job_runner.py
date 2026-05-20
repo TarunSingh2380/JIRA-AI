@@ -32,8 +32,9 @@ from app.codebase_graph import (
 from app.graph_job import GraphJob
 from app.jira_fetcher import fetch_all_tickets
 from app.jira_graph import _adf_to_text, make_neo4j_driver, upsert_jira_tickets
+from app.flag_embedder import BGEM3Embedder
 from app.ollama_embedder import OllamaEmbedder
-from app.qdrant_store import upsert_jira_embeddings
+from app.qdrant_store import upsert_jira_embeddings, upsert_jira_hybrid_embeddings
 from app.repository_discovery import discover_graph_repositories
 
 log = logging.getLogger(__name__)
@@ -541,10 +542,34 @@ async def run_graph_job(
                             api_key=settings.qdrant_api_key or None,
                         )
 
-                        log.info(
-                            "Stored %d Jira embeddings in Qdrant",
-                            stored,
-                        )
+                        log.info("Stored %d Jira dense embeddings in Qdrant", stored)
+
+                        # ── Hybrid ingest (BGE-M3 dense + sparse via FlagEmbedding) ──
+                        flag_embedder = BGEM3Embedder()
+                        if flag_embedder.is_available():
+                            try:
+                                _append_job_log(job, "embeddings", "info",
+                                    "Running BGE-M3 hybrid (dense+sparse) encoding for Qdrant RRF search…")
+                                hybrid_encoded = await asyncio.to_thread(
+                                    flag_embedder.encode_batch, texts, 8
+                                )
+                                hybrid_stored = upsert_jira_hybrid_embeddings(
+                                    qdrant_url=settings.qdrant_url,
+                                    tickets=tickets,
+                                    encoded=hybrid_encoded,
+                                    api_key=settings.qdrant_api_key or None,
+                                )
+                                _append_job_log(job, "embeddings", "info",
+                                    f"Stored {hybrid_stored} hybrid Jira embeddings (jira_tickets_hybrid).")
+                            except Exception as _he:
+                                log.warning("Hybrid Jira ingest failed (non-fatal): %s", _he)
+                                _append_job_log(job, "embeddings", "warning",
+                                    f"Hybrid Jira embedding skipped: {_he}")
+                        else:
+                            _append_job_log(job, "embeddings", "info",
+                                "FlagEmbedding not installed — skipping hybrid ingest. "
+                                "Run: pip install FlagEmbedding")
+
                         job.progress["jira_embedding_documents_done"] = stored
                         job.progress["jira_embedding_eta_seconds"] = 0
                         _sync_embedding_progress(job)

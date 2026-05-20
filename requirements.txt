@@ -9,5 +9,6 @@ anthropic>=0.40.0
 requests>=2.31.0
 psycopg[binary]>=3.2.0
 neo4j>=5.18.0
-qdrant-client>=1.9.0
+qdrant-client>=1.10.0
+FlagEmbedding>=1.2.9
 codegraphcontext==0.4.10

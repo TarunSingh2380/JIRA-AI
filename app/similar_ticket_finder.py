@@ -1,11 +1,13 @@
-"""Finds historically similar Jira tickets using semantic search + PostgreSQL fallback.
+"""Finds historically similar Jira tickets — three-tier search pipeline.
 
-Pipeline
+Priority
 --------
-1. Embed (summary + description) with Ollama
-2. Search Qdrant `jira_tickets` collection filtered by status
-3. Enrich hits with full details from PostgreSQL `jira_ticket_cache`
-4. Fallback: keyword ILIKE search in PostgreSQL when Ollama is unavailable
+1. Hybrid  — BGE-M3 dense + sparse → Qdrant RRF fusion (best accuracy)
+             Requires FlagEmbedding + jira_tickets_hybrid collection populated.
+2. Dense   — Ollama bge-m3 → Qdrant cosine sim on jira_tickets collection.
+             Falls back to this when FlagEmbedding is not installed.
+3. Keyword — PostgreSQL ILIKE on summary + description.
+             Last resort when Qdrant / Ollama are both unavailable.
 """
 from __future__ import annotations
 
@@ -14,8 +16,9 @@ import re
 from typing import Any, Dict, List, Optional
 
 from app.config import Settings
+from app.flag_embedder import BGEM3Embedder
 from app.ollama_embedder import OllamaEmbedder
-from app.qdrant_store import JIRA_COLLECTION
+from app.qdrant_store import JIRA_COLLECTION, JIRA_HYBRID_COLLECTION
 
 log = logging.getLogger(__name__)
 
@@ -27,14 +30,55 @@ _STOP_WORDS = {
     "where", "which", "with",
 }
 
+# ── shared Qdrant helpers ─────────────────────────────────────────────────────
+
+def _qdrant_client(url: str, api_key: Optional[str] = None):
+    from qdrant_client import QdrantClient
+    return QdrantClient(url=url, api_key=api_key or None)
+
+
+def _build_filter(statuses: List[str], project_key: Optional[str]) -> Any:
+    """Return a Qdrant Filter (or None) for status + project_key."""
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+    must = []
+    if project_key:
+        must.append(FieldCondition(key="project_key", match=MatchValue(value=project_key)))
+    if statuses:
+        try:
+            from qdrant_client.models import MatchAny
+            must.append(FieldCondition(key="status", match=MatchAny(any=statuses)))
+        except ImportError:
+            pass  # older client — caller must post-filter
+    return Filter(must=must) if must else None
+
+
+def _point_to_hit(r: Any, status_filter_applied: bool, statuses: List[str]) -> Optional[Dict[str, Any]]:
+    """Convert a Qdrant scored point to a hit dict, or None if filtered out."""
+    payload = r.payload or {}
+    status = payload.get("status", "")
+    if not status_filter_applied and statuses and status not in statuses:
+        return None
+    return {
+        "ticket_key":  payload.get("key", ""),
+        "project_key": payload.get("project_key", ""),
+        "summary":     payload.get("summary", ""),
+        "status":      status,
+        "issue_type":  payload.get("issue_type", ""),
+        "similarity_score": round(r.score, 4),
+        # filled later by _enrich_from_db
+        "description": None, "priority": None,
+        "assignee_name": None, "reporter_name": None,
+        "labels": [], "created_at": None, "updated_at": None,
+    }
+
+
+# ── main class ────────────────────────────────────────────────────────────────
 
 class SimilarTicketFinder:
-    """Orchestrates Qdrant semantic search and PostgreSQL enrichment."""
+    """Three-tier Jira ticket similarity search."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-
-    # ── public entry point ────────────────────────────────────────────────────
 
     def find_similar(
         self,
@@ -45,44 +89,115 @@ class SimilarTicketFinder:
         top_k: int = 10,
         statuses: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Return similar closed tickets ordered by similarity score."""
         if statuses is None:
             statuses = ["Done", "Closed", "Resolved"]
 
-        # Mirror _ticket_embed_texts() in graph_job_runner.py exactly:
-        # stored vector = summary[:200] + "\n" + description[:500]
-        # Matching this format is what makes identical tickets score ~100%.
+        # Match the text format used at ingest time (graph_job_runner._ticket_embed_texts)
         query = f"{summary[:200]}\n{(description or '')[:500]}".strip()
 
-        # 1. Try semantic search via Qdrant + Ollama
-        hits, method = self._semantic_search(
-            query, project_key=project_key, top_k=top_k * 2, statuses=statuses
-        )
+        # Tier 1 — hybrid (BGE-M3 dense + sparse, RRF)
+        hits, method = self._hybrid_search(query, project_key=project_key,
+                                            top_k=top_k * 2, statuses=statuses)
 
-        # 2. Keyword fallback when Ollama / Qdrant unavailable
+        # Tier 2 — dense-only cosine (Ollama)
         if not hits:
-            hits, method = self._keyword_search(
-                query, project_key=project_key, top_k=top_k, statuses=statuses
-            )
+            hits, method = self._dense_search(query, project_key=project_key,
+                                               top_k=top_k * 2, statuses=statuses)
+
+        # Tier 3 — PostgreSQL keyword ILIKE
+        if not hits:
+            hits, method = self._keyword_search(query, project_key=project_key,
+                                                 top_k=top_k, statuses=statuses)
         else:
-            # Enrich semantic hits with full PostgreSQL details
             hits = self._enrich_from_db(hits)
 
         hits = hits[:top_k]
-        log.info(
-            "SimilarTicketFinder: method=%s found=%d (statuses=%s project=%s)",
-            method, len(hits), statuses, project_key,
-        )
-        return {
-            "query_summary": summary,
-            "total_found": len(hits),
-            "search_method": method,
-            "tickets": hits,
-        }
+        log.info("SimilarTicketFinder method=%s found=%d project=%s statuses=%s",
+                 method, len(hits), project_key, statuses)
+        return {"query_summary": summary, "total_found": len(hits),
+                "search_method": method, "tickets": hits}
 
-    # ── semantic search ───────────────────────────────────────────────────────
+    # ── Tier 1: hybrid search (BGE-M3 dense + sparse → RRF) ─────────────────
 
-    def _semantic_search(
+    def _hybrid_search(
+        self,
+        query: str,
+        *,
+        project_key: Optional[str],
+        top_k: int,
+        statuses: List[str],
+    ) -> tuple[List[Dict[str, Any]], str]:
+        flag = BGEM3Embedder()
+        if not flag.is_available():
+            log.info("FlagEmbedding not installed — skipping hybrid search")
+            return [], "dense_fallback"
+
+        try:
+            encoded = flag.encode_one(query)
+        except Exception as exc:
+            log.warning("BGE-M3 encode failed: %s", exc)
+            return [], "dense_fallback"
+
+        if not encoded or not encoded.get("dense"):
+            return [], "dense_fallback"
+
+        try:
+            from qdrant_client.models import Prefetch, FusionQuery, Fusion, SparseVector
+        except ImportError:
+            log.warning("qdrant-client missing Prefetch/Fusion — hybrid unavailable")
+            return [], "dense_fallback"
+
+        try:
+            client = _qdrant_client(self.settings.qdrant_url, self.settings.qdrant_api_key)
+
+            # Check the hybrid collection exists and has points
+            existing = {c.name for c in client.get_collections().collections}
+            if JIRA_HYBRID_COLLECTION not in existing:
+                log.info("Hybrid collection '%s' not found — run graph job to populate",
+                         JIRA_HYBRID_COLLECTION)
+                return [], "dense_fallback"
+
+            info = client.get_collection(JIRA_HYBRID_COLLECTION)
+            if not info.points_count:
+                log.info("Hybrid collection empty — run graph job to populate")
+                return [], "dense_fallback"
+
+            search_filter = _build_filter(statuses, project_key)
+            status_filter_applied = bool(statuses)  # MatchAny applied in _build_filter
+
+            sparse_vec = SparseVector(
+                indices=encoded.get("sparse_indices", []),
+                values=encoded.get("sparse_values", []),
+            )
+
+            response = client.query_points(
+                collection_name=JIRA_HYBRID_COLLECTION,
+                prefetch=[
+                    Prefetch(query=encoded["dense"], using="dense", limit=top_k),
+                    Prefetch(query=sparse_vec,        using="sparse", limit=top_k),
+                ],
+                query=FusionQuery(fusion=Fusion.RRF),
+                limit=top_k,
+                query_filter=search_filter,
+                with_payload=True,
+            )
+
+            results = []
+            for r in response.points:
+                hit = _point_to_hit(r, status_filter_applied, statuses)
+                if hit:
+                    results.append(hit)
+
+            log.info("Hybrid RRF search returned %d hits", len(results))
+            return results, "hybrid_rrf"
+
+        except Exception as exc:
+            log.warning("Hybrid search failed: %s", exc)
+            return [], "dense_fallback"
+
+    # ── Tier 2: dense-only cosine search (Ollama) ────────────────────────────
+
+    def _dense_search(
         self,
         query: str,
         *,
@@ -96,42 +211,17 @@ class SimilarTicketFinder:
             timeout_seconds=self.settings.ollama_embed_timeout_seconds,
         )
         if not embedder.is_available():
-            log.warning("Ollama unavailable; skipping semantic search for similar tickets")
+            log.warning("Ollama unavailable — skipping dense search")
             return [], "keyword_fallback"
 
         vector = embedder.embed(query)
         if not vector:
-            log.warning("Empty embedding returned for similar-ticket query")
             return [], "keyword_fallback"
 
         try:
-            from qdrant_client import QdrantClient
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-        except ImportError:
-            log.warning("qdrant-client not installed; skipping semantic search")
-            return [], "keyword_fallback"
-
-        try:
-            client = QdrantClient(
-                url=self.settings.qdrant_url,
-                api_key=self.settings.qdrant_api_key or None,
-            )
-
-            must = []
-            if project_key:
-                must.append(FieldCondition(key="project_key", match=MatchValue(value=project_key)))
-
-            # Try MatchAny for multi-value status filter; fall back to post-filter
-            status_filter_applied = False
-            if statuses:
-                try:
-                    from qdrant_client.models import MatchAny
-                    must.append(FieldCondition(key="status", match=MatchAny(any=statuses)))
-                    status_filter_applied = True
-                except (ImportError, Exception):
-                    pass  # will post-filter below
-
-            search_filter = Filter(must=must) if must else None
+            client = _qdrant_client(self.settings.qdrant_url, self.settings.qdrant_api_key)
+            search_filter = _build_filter(statuses, project_key)
+            status_filter_applied = bool(statuses)
 
             try:
                 response = client.query_points(
@@ -151,91 +241,18 @@ class SimilarTicketFinder:
                     with_payload=True,
                 )
 
-            results = []
-            for r in scored:
-                payload = r.payload or {}
-                ticket_status = payload.get("status", "")
-                if not status_filter_applied and statuses and ticket_status not in statuses:
-                    continue
-                results.append({
-                    "ticket_key": payload.get("key", ""),
-                    "project_key": payload.get("project_key", ""),
-                    "summary": payload.get("summary", ""),
-                    "status": ticket_status,
-                    "issue_type": payload.get("issue_type", ""),
-                    "similarity_score": round(r.score, 4),
-                    # enriched fields filled in by _enrich_from_db
-                    "description": None,
-                    "priority": None,
-                    "assignee_name": None,
-                    "reporter_name": None,
-                    "labels": [],
-                    "created_at": None,
-                    "updated_at": None,
-                })
-
-            log.info("Qdrant returned %d similar ticket hits", len(results))
+            results = [
+                hit for r in scored
+                if (hit := _point_to_hit(r, status_filter_applied, statuses)) is not None
+            ]
+            log.info("Dense cosine search returned %d hits", len(results))
             return results, "semantic"
 
         except Exception as exc:
-            log.warning("Qdrant similar-ticket search failed: %s", exc)
+            log.warning("Dense search failed: %s", exc)
             return [], "keyword_fallback"
 
-    # ── PostgreSQL enrichment ─────────────────────────────────────────────────
-
-    def _enrich_from_db(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Fetch full ticket rows from PostgreSQL and merge into semantic hits."""
-        if not self.settings.database_url or not hits:
-            return hits
-
-        keys = [h["ticket_key"] for h in hits if h.get("ticket_key")]
-        if not keys:
-            return hits
-
-        try:
-            import psycopg
-            from psycopg.rows import dict_row
-
-            with psycopg.connect(self.settings.database_url, row_factory=dict_row) as conn:
-                rows = conn.execute(
-                    """
-                    SELECT ticket_key, project_key, summary, description,
-                           status, issue_type, priority,
-                           assignee_name, reporter_name, labels,
-                           created_at, updated_at
-                    FROM jira_ticket_cache
-                    WHERE ticket_key = ANY(%s)
-                    """,
-                    (keys,),
-                ).fetchall()
-
-            db_map = {r["ticket_key"]: dict(r) for r in rows}
-            enriched = []
-            for hit in hits:
-                key = hit.get("ticket_key", "")
-                db = db_map.get(key, {})
-                enriched.append({
-                    **hit,
-                    "description": db.get("description"),
-                    "priority": db.get("priority"),
-                    "assignee_name": db.get("assignee_name"),
-                    "reporter_name": db.get("reporter_name"),
-                    "labels": db.get("labels") or [],
-                    "created_at": _fmt_dt(db.get("created_at")),
-                    "updated_at": _fmt_dt(db.get("updated_at")),
-                    # Override with DB values if Qdrant payload was partial
-                    "status": db.get("status") or hit.get("status", ""),
-                    "issue_type": db.get("issue_type") or hit.get("issue_type", ""),
-                    "project_key": db.get("project_key") or hit.get("project_key", ""),
-                    "summary": db.get("summary") or hit.get("summary", ""),
-                })
-            return enriched
-
-        except Exception as exc:
-            log.warning("PostgreSQL enrichment failed: %s", exc)
-            return hits
-
-    # ── PostgreSQL keyword fallback ───────────────────────────────────────────
+    # ── Tier 3: PostgreSQL keyword fallback ──────────────────────────────────
 
     def _keyword_search(
         self,
@@ -271,7 +288,6 @@ class SimilarTicketFinder:
                 params.extend([f"%{kw}%", f"%{kw}%"])
 
             params.append(top_k)
-            where = " AND ".join(where_parts)
 
             with psycopg.connect(self.settings.database_url, row_factory=dict_row) as conn:
                 rows = conn.execute(
@@ -281,7 +297,7 @@ class SimilarTicketFinder:
                            assignee_name, reporter_name, labels,
                            created_at, updated_at
                     FROM jira_ticket_cache
-                    WHERE {where}
+                    WHERE {" AND ".join(where_parts)}
                     ORDER BY updated_at DESC NULLS LAST
                     LIMIT %s
                     """,
@@ -289,13 +305,10 @@ class SimilarTicketFinder:
                 ).fetchall()
 
             results = [
-                {
-                    **dict(r),
-                    "similarity_score": 0.0,
-                    "created_at": _fmt_dt(r.get("created_at")),
-                    "updated_at": _fmt_dt(r.get("updated_at")),
-                    "labels": r.get("labels") or [],
-                }
+                {**dict(r), "similarity_score": 0.0,
+                 "created_at": _fmt_dt(r.get("created_at")),
+                 "updated_at": _fmt_dt(r.get("updated_at")),
+                 "labels": r.get("labels") or []}
                 for r in rows
             ]
             log.info("PostgreSQL keyword fallback returned %d tickets", len(results))
@@ -304,6 +317,58 @@ class SimilarTicketFinder:
         except Exception as exc:
             log.warning("PostgreSQL keyword search failed: %s", exc)
             return [], "none"
+
+    # ── PostgreSQL enrichment ─────────────────────────────────────────────────
+
+    def _enrich_from_db(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Fetch full ticket rows from PostgreSQL and merge into Qdrant hits."""
+        if not self.settings.database_url or not hits:
+            return hits
+
+        keys = [h["ticket_key"] for h in hits if h.get("ticket_key")]
+        if not keys:
+            return hits
+
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+
+            with psycopg.connect(self.settings.database_url, row_factory=dict_row) as conn:
+                rows = conn.execute(
+                    """
+                    SELECT ticket_key, project_key, summary, description,
+                           status, issue_type, priority,
+                           assignee_name, reporter_name, labels,
+                           created_at, updated_at
+                    FROM jira_ticket_cache
+                    WHERE ticket_key = ANY(%s)
+                    """,
+                    (keys,),
+                ).fetchall()
+
+            db_map = {r["ticket_key"]: dict(r) for r in rows}
+            return [
+                {
+                    **hit,
+                    "description":   db.get("description"),
+                    "priority":      db.get("priority"),
+                    "assignee_name": db.get("assignee_name"),
+                    "reporter_name": db.get("reporter_name"),
+                    "labels":        db.get("labels") or [],
+                    "created_at":    _fmt_dt(db.get("created_at")),
+                    "updated_at":    _fmt_dt(db.get("updated_at")),
+                    "status":        db.get("status")      or hit.get("status", ""),
+                    "issue_type":    db.get("issue_type")  or hit.get("issue_type", ""),
+                    "project_key":   db.get("project_key") or hit.get("project_key", ""),
+                    "summary":       db.get("summary")     or hit.get("summary", ""),
+                }
+                for hit in hits
+                if (db := db_map.get(hit.get("ticket_key", ""), {})) is not None
+            ]
+
+        except Exception as exc:
+            log.warning("PostgreSQL enrichment failed: %s", exc)
+            return hits
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -320,7 +385,6 @@ class SimilarTicketFinder:
 
 
 def _fmt_dt(val: Any) -> Optional[str]:
-    """Serialize datetime / date objects to ISO strings."""
     if val is None:
         return None
     try:
