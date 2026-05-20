@@ -49,17 +49,16 @@ You receive:
   - A JIRA ticket (key, type, priority, summary, description)
   - Code context retrieved via semantic search and graph traversal of the actual codebase
 
-Your task: produce a thorough, actionable Markdown test-case document.
+Your task: produce a concise Markdown test-case document with EXACTLY 5 test cases — no more, no fewer.
 
 Rules:
 1. Write concrete test cases — not generic templates.
-2. Group by feature area or affected component.
-3. For each test case include: ID, title, preconditions, numbered steps, expected result.
-4. Add at least 3 edge-case / negative test cases.
-5. If the ticket is a bug, add a regression test that would have caught it.
-6. Reference function names / file paths from the code context when relevant.
-7. If the language is evident from context, use it for code snippets.
-8. Do NOT invent file contents not shown in the context.
+2. For each test case include: ID, title, preconditions, numbered steps, expected result.
+3. Include at least one negative/edge-case test.
+4. If the ticket is a bug, one test case must be a regression test.
+5. Reference function names / file paths from the code context when relevant.
+6. Do NOT invent file contents not shown in the context.
+7. Keep each test case brief — 3-5 steps maximum.
 """
 
 _USER_TEMPLATE = """\
@@ -78,7 +77,7 @@ _USER_TEMPLATE = """\
 
 ---
 
-Generate the test-case document now. Format each test case as:
+Generate EXACTLY 5 test cases (no more, no fewer). Format each test case as:
 
 ```
 TC-<N>: <Title>
@@ -88,7 +87,7 @@ TC-<N>: <Title>
   Expected: ...
 ```
 
-Finish with a **Summary** section: what is being tested and why.
+After TC-5, add one short **Summary** sentence (max 2 lines).
 """
 
 
@@ -152,7 +151,7 @@ class TestCaseGenerator:
             context=context_block or "(no code context retrieved — answering from ticket alone)",
         )
         log.info("Calling LLM (context_chars=%d)", len(context_block))
-        test_cases_md = self.llm_client.complete(_SYSTEM_PROMPT, user_message)
+        test_cases_md = self.llm_client.complete(_SYSTEM_PROMPT, user_message, max_tokens=1024)
 
         return {
             "test_cases": test_cases_md,
@@ -340,18 +339,18 @@ class TestCaseGenerator:
 
         if hits:
             parts.append("### Semantically Similar Code Files")
-            for h in hits[:12]:
+            for h in hits[:5]:
                 score = h.get("score", 0)
                 path = h.get("path", "")
                 lang = h.get("language", "")
                 text = h.get("text", "")
                 parts.append(f"\n**{path}** ({lang}, score={score:.3f})")
                 if text:
-                    parts.append(f"```{lang.lower()}\n{text[:400]}\n```")
+                    parts.append(f"```{lang.lower()}\n{text[:200]}\n```")
 
         if functions:
             parts.append("\n### Functions (from CGC call graph)")
-            for fn in functions[:20]:
+            for fn in functions[:8]:
                 name = fn.get("name", "")
                 path = fn.get("path") or ""
                 calls_str = ", ".join(fn.get("calls") or [])

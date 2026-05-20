@@ -355,7 +355,7 @@ def generate_test_cases(request: TestCaseRequest) -> TestCaseResponse:
         ticket_key, request.repo, request.embedding_model,
     )
     try:
-        llm_client = build_llm_client(settings)
+        llm_client = build_llm_client(settings, timeout_override=settings.llm_test_case_timeout_seconds)
         generator = TestCaseGenerator(settings=settings, llm_client=llm_client)
         result = generator.generate(
             request.ticket_data,

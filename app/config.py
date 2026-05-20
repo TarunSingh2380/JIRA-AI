@@ -23,6 +23,7 @@ class Settings:
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
     llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+    llm_test_case_timeout_seconds: int = int(os.getenv("LLM_TEST_CASE_TIMEOUT_SECONDS", "300"))
     database_url: str = os.getenv("DATABASE_URL", "")
     slack_bot_token: str = os.getenv("SLACK_BOT_TOKEN", "")
     slack_default_channel_id: str = os.getenv("SLACK_DEFAULT_CHANNEL_ID", "")

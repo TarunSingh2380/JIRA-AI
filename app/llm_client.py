@@ -17,12 +17,12 @@ log = logging.getLogger(__name__)
 
 
 class LLMClient(Protocol):
-    def complete(self, system_prompt: str, user_message: str) -> str:
+    def complete(self, system_prompt: str, user_message: str, *, max_tokens: int = 4096) -> str:
         """Return the model output for a system prompt plus user message."""
 
 
 class OpenAILLMClient:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, timeout_override: int | None = None) -> None:
         self.settings = settings
 
         if not settings.openai_api_key:
@@ -37,7 +37,7 @@ class OpenAILLMClient:
 
         self.client = OpenAI(
             api_key=settings.openai_api_key,
-            timeout=settings.llm_timeout_seconds,
+            timeout=timeout_override if timeout_override is not None else settings.llm_timeout_seconds,
         )
 
     def complete(self, system_prompt: str, user_message: str) -> str:
@@ -69,7 +69,7 @@ class OpenAILLMClient:
 
 
 class AnthropicLLMClient:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, timeout_override: int | None = None) -> None:
         self.settings = settings
 
         if not settings.anthropic_api_key:
@@ -84,14 +84,14 @@ class AnthropicLLMClient:
 
         self.client = Anthropic(
             api_key=settings.anthropic_api_key,
-            timeout=settings.llm_timeout_seconds,
+            timeout=timeout_override if timeout_override is not None else settings.llm_timeout_seconds,
         )
 
-    def complete(self, system_prompt: str, user_message: str) -> str:
-        log.info("Anthropic LLM call: model=%s input_chars=%d", self.settings.llm_model, len(user_message))
+    def complete(self, system_prompt: str, user_message: str, *, max_tokens: int = 4096) -> str:
+        log.info("Anthropic LLM call: model=%s input_chars=%d max_tokens=%d", self.settings.llm_model, len(user_message), max_tokens)
         response = self.client.messages.create(
             model=self.settings.llm_model,
-            max_tokens=4096,
+            max_tokens=max_tokens,
             system=system_prompt,
             messages=[
                 {
@@ -134,15 +134,16 @@ class MockLLMClient:
         )
 
 
-def build_llm_client(settings: Settings) -> LLMClient:
+def build_llm_client(settings: Settings, *, timeout_override: int | None = None) -> LLMClient:
     provider = settings.llm_provider.lower().strip()
-    log.info("Building LLM client: provider=%s model=%s", provider, settings.llm_model)
+    log.info("Building LLM client: provider=%s model=%s timeout=%s", provider, settings.llm_model,
+             timeout_override if timeout_override is not None else settings.llm_timeout_seconds)
 
     if provider == "openai":
-        return OpenAILLMClient(settings)
+        return OpenAILLMClient(settings, timeout_override=timeout_override)
 
     if provider == "anthropic":
-        return AnthropicLLMClient(settings)
+        return AnthropicLLMClient(settings, timeout_override=timeout_override)
 
     if provider == "mock":
         log.warning("LLM_PROVIDER=mock — no real LLM calls will be made")
