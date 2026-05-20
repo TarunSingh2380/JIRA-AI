@@ -570,6 +570,97 @@ GRAPH_ADMIN_HTML = """
     .badge.ok  { background: #dcfce7; color: var(--ok); }
     .badge.err { background: #fee2e2; color: var(--danger); }
     .badge.run { background: #dbeafe; color: var(--accent); }
+
+    /* ── Test Cases tab ── */
+    .tc-layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .tc-form-col { min-width: 0; }
+    .tc-result-col { min-width: 0; }
+    .tc-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: .05em;
+      margin: 0 0 10px;
+    }
+    .tc-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+    .tc-field-row { display: flex; gap: 12px; margin-bottom: 12px; }
+    .tc-label { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .tc-optional { font-weight: 400; color: var(--muted); }
+    .tc-required { color: var(--danger); }
+    .tc-input, .tc-select, .tc-textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 13px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .tc-input:focus, .tc-select:focus, .tc-textarea:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -1px;
+    }
+    .tc-textarea { resize: vertical; min-height: 90px; }
+    .tc-field { margin-bottom: 12px; }
+    .tc-field-row .tc-field { margin-bottom: 0; }
+    .tc-placeholder {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 48px 0;
+      text-align: center;
+    }
+    .tc-stats {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .tc-stat {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .tc-stat span { color: var(--accent); font-weight: 700; }
+    .tc-output { line-height: 1.65; font-size: 14px; }
+    .tc-output h2 { font-size: 16px; margin: 0 0 6px; }
+    .tc-output h3 { font-size: 14px; margin: 16px 0 6px; }
+    .tc-output hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
+    .tc-output strong { font-weight: 700; }
+    .tc-card {
+      background: #f0f4ff;
+      border: 1px solid #c7d7f8;
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 10px 0 16px;
+      font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+      font-size: 12.5px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #172033;
+    }
+    .tc-card-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--accent-strong);
+      margin-bottom: 8px;
+      display: block;
+    }
+    @media (max-width: 900px) {
+      .tc-layout { grid-template-columns: 1fr; }
+    }
   </style>
   <!-- original styles below -->
   <style>
@@ -806,6 +897,7 @@ GRAPH_ADMIN_HTML = """
         <button class="tab-btn active" data-tab="repos">Repositories</button>
         <button class="tab-btn" data-tab="jira">Jira Tickets</button>
         <button class="tab-btn" data-tab="logs">Logs</button>
+        <button class="tab-btn" data-tab="testcases">Test Cases</button>
       </nav>
 
       <!-- Tab: Repositories -->
@@ -897,6 +989,123 @@ GRAPH_ADMIN_HTML = """
           <tbody id="fetchLogRows"></tbody>
         </table>
         <div id="logsError" style="color:var(--danger);font-size:13px;margin-top:8px;"></div>
+      </div>
+      <!-- Tab: Test Cases -->
+      <div class="tab-panel" id="tab-testcases">
+        <div class="tc-layout">
+          <!-- ── Form ── -->
+          <div class="tc-form-col">
+            <p class="tc-section-label">Search settings</p>
+            <div class="tc-field-row">
+              <div class="tc-field">
+                <label class="tc-label">Embedding model</label>
+                <select id="tc-embeddingModel" class="tc-select">
+                  <option value="codebase_bge_m3">codebase_bge_m3</option>
+                  <option value="codebase_qwen3_0_6b">codebase_qwen3_0_6b</option>
+                  <option value="codebase_mxbai_large">codebase_mxbai_large</option>
+                </select>
+              </div>
+              <div class="tc-field">
+                <label class="tc-label">Top K hits</label>
+                <select id="tc-topK" class="tc-select">
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="15" selected>15</option>
+                  <option value="20">20</option>
+                  <option value="30">30</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+            </div>
+            <div class="tc-field">
+              <label class="tc-label">Repository <span class="tc-optional">(optional — leave blank for all repos)</span></label>
+              <input id="tc-repo" type="text" class="tc-input" placeholder="e.g. ramfincorp-backend">
+            </div>
+
+            <p class="tc-section-label" style="margin-top:18px;">Ticket fields</p>
+            <div class="tc-field-row">
+              <div class="tc-field">
+                <label class="tc-label">Issue key <span class="tc-required">*</span></label>
+                <input id="tc-issueKey" type="text" class="tc-input" placeholder="RFC-101">
+              </div>
+              <div class="tc-field">
+                <label class="tc-label">Issue type</label>
+                <select id="tc-issueType" class="tc-select">
+                  <option value="Bug">Bug</option>
+                  <option value="Story">Story</option>
+                  <option value="Task">Task</option>
+                  <option value="Epic">Epic</option>
+                  <option value="Improvement">Improvement</option>
+                  <option value="Sub-task">Sub-task</option>
+                </select>
+              </div>
+            </div>
+            <div class="tc-field-row">
+              <div class="tc-field">
+                <label class="tc-label">Priority</label>
+                <select id="tc-priority" class="tc-select">
+                  <option value="Highest">Highest</option>
+                  <option value="High">High</option>
+                  <option value="Medium" selected>Medium</option>
+                  <option value="Low">Low</option>
+                  <option value="Lowest">Lowest</option>
+                </select>
+              </div>
+              <div class="tc-field">
+                <label class="tc-label">Status</label>
+                <select id="tc-status" class="tc-select">
+                  <option value="Open">Open</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="In Review">In Review</option>
+                  <option value="To Do">To Do</option>
+                  <option value="Done">Done</option>
+                  <option value="Closed">Closed</option>
+                  <option value="Resolved">Resolved</option>
+                </select>
+              </div>
+            </div>
+            <div class="tc-field">
+              <label class="tc-label">Summary <span class="tc-required">*</span></label>
+              <input id="tc-summary" type="text" class="tc-input" placeholder="Short description of the ticket">
+            </div>
+            <div class="tc-field">
+              <label class="tc-label">Description</label>
+              <textarea id="tc-description" class="tc-textarea" rows="5" placeholder="Full ticket description…"></textarea>
+            </div>
+            <div class="tc-field-row">
+              <div class="tc-field">
+                <label class="tc-label">Reporter</label>
+                <input id="tc-reporter" type="text" class="tc-input" placeholder="Reporter name">
+              </div>
+              <div class="tc-field">
+                <label class="tc-label">Assignee</label>
+                <input id="tc-assignee" type="text" class="tc-input" placeholder="Assignee name">
+              </div>
+            </div>
+            <div class="tc-field">
+              <label class="tc-label">Due date</label>
+              <input id="tc-dueDate" type="date" class="tc-input">
+            </div>
+            <button id="tc-generateBtn" style="margin-top:18px;" onclick="generateTestCases()">Generate Test Cases</button>
+            <div id="tc-status" class="status-bar" style="margin-top:10px;"></div>
+          </div>
+
+          <!-- ── Results ── -->
+          <div class="tc-result-col" id="tc-result-col">
+            <div id="tc-placeholder" class="tc-placeholder">
+              Fill in the ticket details and click <strong>Generate Test Cases</strong>.
+            </div>
+            <div id="tc-stats" class="tc-stats" hidden>
+              <span class="tc-stat"><span id="tc-stat-hits">0</span> semantic hits</span>
+              <span class="tc-stat"><span id="tc-stat-funcs">0</span> functions</span>
+              <span class="tc-stat"><span id="tc-stat-files">0</span> files</span>
+              <button class="secondary" id="tc-copyBtn"
+                style="width:auto;min-height:32px;padding:5px 14px;font-size:13px;margin-left:auto;"
+                onclick="copyTestCases()">Copy Markdown</button>
+            </div>
+            <div id="tc-output" class="tc-output" hidden></div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -1246,6 +1455,118 @@ GRAPH_ADMIN_HTML = """
     }
 
     tabBtns.forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+    // ── Test Cases tab ───────────────────────────────────────────────────
+    let lastTestCaseMarkdown = "";
+
+    async function generateTestCases() {
+      const issueKey = document.querySelector("#tc-issueKey").value.trim();
+      const summary  = document.querySelector("#tc-summary").value.trim();
+      if (!issueKey || !summary) {
+        tcSetStatus("Issue key and summary are required", "error");
+        return;
+      }
+
+      const btn = document.querySelector("#tc-generateBtn");
+      btn.disabled = true;
+      tcSetStatus("Generating test cases… this may take 20–40 seconds", "running");
+      document.querySelector("#tc-placeholder").hidden = false;
+      document.querySelector("#tc-stats").hidden = true;
+      document.querySelector("#tc-output").hidden = true;
+
+      const ticket = {
+        issueKey:     issueKey,
+        issueType:    document.querySelector("#tc-issueType").value,
+        priority:     document.querySelector("#tc-priority").value,
+        status:       document.querySelector("#tc-status").value,
+        summary:      summary,
+        description:  document.querySelector("#tc-description").value.trim() || null,
+        reporter:     document.querySelector("#tc-reporter").value.trim() || null,
+        assignee:     document.querySelector("#tc-assignee").value.trim() || null,
+        dueDate:      document.querySelector("#tc-dueDate").value || null,
+      };
+
+      const repoVal = document.querySelector("#tc-repo").value.trim();
+      const body = {
+        ticket_data:     ticket,
+        repo:            repoVal || null,
+        embedding_model: document.querySelector("#tc-embeddingModel").value,
+        top_k:           parseInt(document.querySelector("#tc-topK").value, 10),
+      };
+
+      try {
+        const res  = await fetch("/analyze-ticket/test-cases", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Generation failed");
+
+        lastTestCaseMarkdown = data.test_cases || "";
+
+        document.querySelector("#tc-stat-hits").textContent  = data.semantic_hits_count ?? 0;
+        document.querySelector("#tc-stat-funcs").textContent = data.functions_found ?? 0;
+        document.querySelector("#tc-stat-files").textContent = data.files_touched_count ?? 0;
+        document.querySelector("#tc-stats").hidden  = false;
+        document.querySelector("#tc-placeholder").hidden = true;
+
+        const outputEl = document.querySelector("#tc-output");
+        outputEl.innerHTML = renderMarkdown(lastTestCaseMarkdown);
+        outputEl.hidden = false;
+
+        tcSetStatus("Done", "ok");
+      } catch (err) {
+        tcSetStatus(err.message, "error");
+        document.querySelector("#tc-placeholder").hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function copyTestCases() {
+      if (!lastTestCaseMarkdown) return;
+      navigator.clipboard.writeText(lastTestCaseMarkdown).then(() => {
+        const btn = document.querySelector("#tc-copyBtn");
+        const orig = btn.textContent;
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = orig; }, 1800);
+      });
+    }
+
+    function tcSetStatus(msg, cls = "") {
+      const el = document.querySelector("#tc-status");
+      el.textContent = msg;
+      el.className = `status-bar ${cls}`;
+    }
+
+    function renderMarkdown(md) {
+      // Split on fenced code blocks, render each part separately
+      const segments = md.split(/(```[\\s\\S]*?```)/g);
+      return segments.map((seg, i) => {
+        if (seg.startsWith("```")) {
+          // Code block → styled TC card
+          const inner = seg.replace(/^```[^\\n]*\\n?/, "").replace(/\\n?```$/, "");
+          const firstLine = inner.split("\\n")[0] || "";
+          const isTcBlock = /^TC-\\d+:/i.test(firstLine.trim());
+          if (isTcBlock) {
+            const rest = inner.slice(firstLine.length).replace(/^\\n/, "");
+            return `<div class="tc-card"><span class="tc-card-title">${esc(firstLine.trim())}</span>${esc(rest)}</div>`;
+          }
+          return `<div class="tc-card">${esc(inner)}</div>`;
+        }
+        // Regular markdown text
+        return seg
+          .replace(/^#{1} (.+)$/gm, "<h2>$1</h2>")
+          .replace(/^#{2} (.+)$/gm, "<h3>$1</h3>")
+          .replace(/^#{3} (.+)$/gm, "<h4>$1</h4>")
+          .replace(/^---+$/gm, "<hr>")
+          .replace(/\\*\\*(.+?)\\*\\*/g, "<strong>$1</strong>")
+          .replace(/^- (.+)$/gm, "<li>$1</li>")
+          .replace(/\\n\\n/g, "<br><br>")
+          .replace(/\\n/g, "<br>");
+      }).join("");
+    }
 
     // ── Jira tickets tab ─────────────────────────────────────────────────
     let jiraProjectFilter = "";
