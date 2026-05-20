@@ -43,9 +43,12 @@ from app.schemas import (
     SlackReplyResponse,
     SlackMessageRequest,
     SlackMessageResponse,
+    TestCaseRequest,
+    TestCaseResponse,
 )
 from app.slack_client import SlackClient
 from app.slack_review_workflow import SlackReviewWorkflow
+from app.test_case_generator import TestCaseGenerator
 from app.ticket_analyzer import TicketAnalyzer
 
 log = logging.getLogger(__name__)
@@ -305,6 +308,60 @@ def analyze_ticket(request: AnalyzeTicketRequest) -> AnalyzeTicketResponse:
     except LLMConfigurationError as exc:
         log.error("LLM configuration error: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# ─── Test case generator ─────────────────────────────────────────────────────
+
+@app.post("/analyze-ticket/test-cases", response_model=TestCaseResponse)
+def generate_test_cases(request: TestCaseRequest) -> TestCaseResponse:
+    """
+    Generate test cases for a JIRA ticket using:
+      1. Semantic search over the codebase (via repograph /search/semantic)
+      2. Function call-graph context (via repograph /functions/{qn}/callers)
+      3. Recently changed files (via repograph /files/touched_recently)
+      4. Claude LLM to synthesise a Markdown test-case document
+
+    Prerequisites: run the Graph Admin trigger first to ingest the codebase and
+    build embeddings, and optionally run the AST ingest for richer call-graph data.
+    """
+    ticket_key = (
+        request.ticket_data.get("issueKey")
+        or request.ticket_data.get("key")
+        or request.ticket_data.get("issue_key")
+        or "unknown"
+    )
+    log.info(
+        "POST /analyze-ticket/test-cases key=%s repo=%s model=%s",
+        ticket_key, request.repo, request.embedding_model,
+    )
+    try:
+        llm_client = build_llm_client(settings)
+        generator = TestCaseGenerator(settings=settings, llm_client=llm_client)
+        result = generator.generate(
+            request.ticket_data,
+            repo=request.repo,
+            embedding_model=request.embedding_model,
+            top_k=request.top_k,
+        )
+    except LLMConfigurationError as exc:
+        log.error("LLM configuration error: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("Test case generation failed for ticket %s", ticket_key)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    log.info(
+        "Test cases generated for %s: semantic=%d functions=%d files=%d",
+        ticket_key, result["semantic_hits_count"],
+        result["functions_found"], result["files_touched_count"],
+    )
+    return TestCaseResponse(
+        ticket_key=ticket_key,
+        test_cases=result["test_cases"],
+        semantic_hits_count=result["semantic_hits_count"],
+        functions_found=result["functions_found"],
+        files_touched_count=result["files_touched_count"],
+    )
 
 
 # ─── Chat ────────────────────────────────────────────────────────────────────
