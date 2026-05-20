@@ -1,4 +1,5 @@
 neo4j
+anthropic>=0.103.0
 pygit2
 python-dotenv
 pydantic
@@ -14,9 +15,9 @@ sentence-transformers==4.1.0
 transformers==4.51.3
 huggingface-hub>=0.30.0,<1.0
 
-## Stage 2 (AST overlay) — install when starting Stage 2
-# tree-sitter==0.22.3
-# tree-sitter-languages==1.10.2
+## Stage 2 (AST overlay via CGC)
+codegraphcontext
+kuzu
 
 ## Stage 3 (optional LlamaIndex semantic layer) — install when starting GraphRAG
 # llama-index-core==0.10.55

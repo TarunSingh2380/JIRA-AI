@@ -33,12 +33,14 @@ from pydantic import BaseModel
 
 from config import settings
 from ingest.git_history import ingest_repo, make_driver
-from ingest.local_repos import discover_from_settings
+from ingest.local_repos import discover_from_settings, RepoInfo
+from stage2_ast.cgc_bridge import ingest_ast_for_repo
 from stage3_semantic.bge_m3_embeddings import (
     embedding_model_options,
     rebuild_embeddings as rebuild_semantic_embedding_documents,
     semantic_search as search_semantic_embeddings,
 )
+from stage3_semantic.jira_test_cases import analyze_jira_ticket
 
 log = logging.getLogger("uvicorn.error")
 
@@ -267,16 +269,83 @@ async def trigger_ingest(
     )
 
 
-# ─── Stage 2 stubs ─────────────────────────────────────────────────────
+# ─── Stage 2 — AST / call-graph endpoints ─────────────────────────────
+
+class AstIngestRequest(BaseModel):
+    only: Optional[list[str]] = None  # repo full_names to restrict; None = all
+
+
+class AstIngestResponse(BaseModel):
+    repos_found: int
+    repos_ingested: int
+    functions_total: int
+    classes_total: int
+    calls_total: int
+    extends_total: int
+    failures: list[str]
+
+
+@app.post("/ast/ingest", response_model=AstIngestResponse)
+async def ast_ingest(req: AstIngestRequest) -> AstIngestResponse:
+    """Run CGC tree-sitter AST ingest for local repos (Stage 2)."""
+    repos = discover_from_settings()
+    if req.only:
+        only_set = set(req.only)
+        repos = [r for r in repos if r.name in only_set or r.full_name in only_set]
+
+    if not repos:
+        return AstIngestResponse(
+            repos_found=0, repos_ingested=0, functions_total=0,
+            classes_total=0, calls_total=0, extends_total=0, failures=[],
+        )
+
+    log.info("Starting AST ingest for %d repos", len(repos))
+    sem = asyncio.Semaphore(settings.ingest_concurrency)
+    totals = {"functions": 0, "classes": 0, "calls": 0, "extends": 0}
+    failures: list[str] = []
+
+    async def _one(repo: RepoInfo) -> None:
+        async with sem:
+            try:
+                result = await ingest_ast_for_repo(settings, repo)
+                for k in totals:
+                    totals[k] += result.get(k, 0)
+            except Exception as exc:
+                log.exception("AST ingest failed for %s", repo.full_name)
+                failures.append(f"{repo.full_name}: {str(exc)[:200]}")
+
+    await asyncio.gather(*(_one(r) for r in repos))
+
+    return AstIngestResponse(
+        repos_found=len(repos),
+        repos_ingested=len(repos) - len(failures),
+        functions_total=totals["functions"],
+        classes_total=totals["classes"],
+        calls_total=totals["calls"],
+        extends_total=totals["extends"],
+        failures=failures,
+    )
+
 
 @app.get("/functions/{qualified_name:path}/callers")
-async def function_callers(qualified_name: str) -> dict:
-    """STUB. Implemented in Stage 2 once the tree-sitter overlay is in place.
-
-    Returns the call graph for a function — every Function node that has an
-    outgoing :CALLS edge to the target.
+async def function_callers(
+    qualified_name: str,
+    driver: AsyncDriver = Depends(get_driver),
+) -> dict:
+    """Return all callers of a function (requires Stage 2 AST ingest to have run)."""
+    q = """
+    MATCH (caller:Function)-[:CALLS]->(fn:Function {qualified_name: $qn})
+    RETURN caller.qualified_name AS qualified_name,
+           caller.name AS name,
+           caller.file_path AS file_path,
+           caller.repo_full_name AS repo,
+           caller.start_line AS start_line
+    ORDER BY caller.qualified_name
     """
-    raise HTTPException(501, "Stage 2 (tree-sitter overlay) not yet implemented")
+    async with driver.session(database=settings.neo4j_database) as s:
+        result = await s.run(q, qn=qualified_name)
+        callers = [r.data() async for r in result]
+    return {"qualified_name": qualified_name, "callers": callers}
 
 
 class ImpactRequest(BaseModel):
@@ -285,9 +354,24 @@ class ImpactRequest(BaseModel):
 
 
 @app.post("/pr/impact_analysis")
-async def pr_impact(req: ImpactRequest) -> dict:
-    """STUB. Stage 2: given changed files in a PR, compute reachable callers."""
-    raise HTTPException(501, "Stage 2 (tree-sitter overlay) not yet implemented")
+async def pr_impact(
+    req: ImpactRequest,
+    driver: AsyncDriver = Depends(get_driver),
+) -> dict:
+    """Return functions defined in changed files and their callers (Stage 2)."""
+    q = """
+    MATCH (fn:Function {repo_full_name: $repo})
+    WHERE fn.file_path IN $files
+    OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
+    RETURN fn.qualified_name AS function,
+           fn.file_path AS file,
+           collect(DISTINCT caller.qualified_name) AS callers
+    ORDER BY fn.file_path, fn.start_line
+    """
+    async with driver.session(database=settings.neo4j_database) as s:
+        result = await s.run(q, repo=req.repo, files=req.changed_files)
+        rows = [r.data() async for r in result]
+    return {"repo": req.repo, "changed_files": req.changed_files, "impact": rows}
 
 
 # ─── Stage 3 stubs ─────────────────────────────────────────────────────
@@ -366,3 +450,84 @@ class AskRequest(BaseModel):
 async def ask(req: AskRequest) -> dict:
     """STUB. Stage 3: GraphRAG over the Neo4j graph + Qdrant vectors via LlamaIndex."""
     raise HTTPException(501, "Stage 3 (GraphRAG) not yet implemented")
+
+
+# ─── JIRA → test-case generator ────────────────────────────────────────────────
+
+class JiraTicketIn(BaseModel):
+    issueKey: str
+    summary: str
+    description: str = ""
+    assignee: str = ""
+    dueDate: str = ""
+    priority: str = ""
+    issueType: str = ""
+    status: str = ""
+    reporter: str = ""
+
+
+class JiraAnalyzeRequest(BaseModel):
+    ticket: JiraTicketIn
+    repo: str                             # e.g. "agrimfincapindia/agrimfincapindia"
+    model_key: str = "bge-m3"            # embedding model for semantic search
+    top_k: int = 15                       # semantic hits to retrieve
+    anthropic_api_key: Optional[str] = None  # overrides ANTHROPIC_API_KEY in .env
+    claude_model: str = "claude-sonnet-4-6"
+    commit_history_days: int = 90
+
+
+class JiraAnalyzeResponse(BaseModel):
+    ticket_key: str
+    repo: str
+    semantic_hits_count: int
+    functions_found: int
+    classes_found: int
+    commits_found: int
+    test_cases: str                       # Markdown document
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@app.post("/jira/analyze", response_model=JiraAnalyzeResponse)
+async def jira_analyze(
+    req: JiraAnalyzeRequest,
+    driver: AsyncDriver = Depends(get_driver),
+) -> JiraAnalyzeResponse:
+    """
+    JIRA ticket → semantic search → graph context → Claude test cases.
+
+    Requires ANTHROPIC_API_KEY in .env (or passed in the request body).
+    Run Stage 1 ingest first (POST /ingest), and optionally Stage 2 AST
+    ingest (POST /ast/ingest) for richer call-graph context.
+    """
+    try:
+        result = await analyze_jira_ticket(
+            driver,
+            req.ticket.model_dump(by_alias=False),
+            req.repo,
+            model_key=req.model_key,
+            top_k=req.top_k,
+            api_key=req.anthropic_api_key,
+            claude_model=req.claude_model,
+            commit_history_days=req.commit_history_days,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        log.exception("JIRA analysis failed for %s", req.ticket.issueKey)
+        raise HTTPException(500, str(exc)) from exc
+
+    gc = result.graph_context
+    return JiraAnalyzeResponse(
+        ticket_key=result.ticket_key,
+        repo=result.repo,
+        semantic_hits_count=len(result.semantic_hits),
+        functions_found=len(gc.get("functions", [])),
+        classes_found=len(gc.get("classes", [])),
+        commits_found=len(gc.get("recent_commits", [])),
+        test_cases=result.test_cases,
+        model=result.model,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
