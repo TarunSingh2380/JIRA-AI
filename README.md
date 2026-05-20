@@ -142,7 +142,7 @@ Example request:
 
 The admin page triggers n8n graph jobs for every top-level Git repository already cloned under `REPOSITORY_SEARCH_ROOT`, excluding `JIRA-AI` by default. Each trigger sends n8n the local clone path, remote URL, current branch, current commit, Jira flags, and instructions to run `git pull --ff-only` before rebuilding graph context.
 
-The API also supports local graph jobs at `/graph-admin/jobs`. These run inside the API process, stream progress over the job WebSocket, ingest Git history into Neo4j, and optionally fetch Jira ticket history.
+The API also supports local graph jobs at `/graph-admin/jobs`. These run inside the API process, stream progress over the job WebSocket, persist repository metadata, run optional `git pull`, and optionally fetch Jira ticket history into Neo4j.
 Graph job state is persisted to Postgres when `DATABASE_URL` is configured, so refreshing `/graph-admin` restores the latest job status, logs, repository progress, and Jira ticket snapshot instead of resetting to an empty in-memory view.
 
 The repositories tab also supports downloadable code analysis reports. Select one or more repositories and click **Download Code Analysis** to generate a Markdown document from local clone inspection plus Neo4j graph context when available. The backing endpoint is `POST /graph-admin/code-analysis-report`.
@@ -164,9 +164,6 @@ GRAPH_JOB_REPO_TIMEOUT_SECONDS=900
 GRAPH_JOB_COMMIT_BATCH_SIZE=500
 GRAPH_JOB_LIMIT_JIRA_ISSUES=0
 GRAPH_JOB_BUILD_EMBEDDINGS=true
-SEMANTIC_EMBEDDING_DIMENSIONS=1024
-SEMANTIC_EMBED_BATCH_SIZE=32
-SEMANTIC_MAX_DOCS_PER_RUN=0
 ```
 
 Actions sent to n8n:
@@ -182,12 +179,10 @@ If `N8N_GRAPH_WEBHOOK_URL` is not configured, the UI returns a dry-run payload s
 
 n8n should treat the repository paths as existing local clones. It should not clone them again.
 
-When semantic embeddings are enabled, graph jobs create model-specific Neo4j
-`EmbeddingDocument` nodes with 1024-dimensional vectors and `:EMBEDS`
-relationships back to the source graph nodes. The admin UI supports BGE-M3,
-Qwen3-Embedding-0.6B, and mxbai-embed-large-v1. The repograph service exposes
-`POST /embeddings/rebuild` and `POST /search/semantic` for manual refreshes and
-semantic search.
+When embeddings are enabled, graph jobs create Jira ticket embeddings in
+Qdrant through the configured Ollama embedding model. Repository graph creation
+and Neo4j `EmbeddingDocument` rebuilds no longer use Repograph, because that
+path only covered Python repositories.
 
 ## Jira Review + Slack Follow-up Workflow
 
@@ -198,7 +193,7 @@ The workflow endpoints implement the loop in `Workflow.png`:
 3. If the ticket is good, the API comments on Jira and optionally transitions it with `JIRA_APPROVED_TRANSITION_NAME`.
 4. If the ticket needs updates, the API posts a Slack thread starter and stores the thread/ticket context in Postgres.
 5. Slack thread replies call `POST /workflow/slack-reply`.
-6. The API loads the stored ticket context, previous review, chat history, and repograph context, then replies in the same Slack thread.
+6. The API loads the stored ticket context, previous review, chat history, and optional codebase context, then replies in the same Slack thread.
 
 Required environment for the workflow:
 
@@ -207,7 +202,6 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/jira_ai
 SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
 SLACK_DEFAULT_CHANNEL_ID=C1234567890
 JIRA_APPROVED_TRANSITION_NAME=LLM APPROVED
-REPOGRAPH_BASE_URL=http://127.0.0.1:8088
 ```
 
 `SLACK_BOT_TOKEN` and Jira credentials can be omitted for dry runs. Postgres is required because Slack thread state is the source of truth for follow-up replies.

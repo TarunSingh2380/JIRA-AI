@@ -42,10 +42,13 @@ class Settings:
     neo4j_user: str = os.getenv("NEO4J_USER", "neo4j")
     neo4j_password: str = os.getenv("NEO4J_PASSWORD", "")
     neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
-    graph_job_repo_timeout_seconds: int = int(os.getenv("GRAPH_JOB_REPO_TIMEOUT_SECONDS", "900"))
+    graph_job_repo_timeout_seconds: int = int(os.getenv("GRAPH_JOB_REPO_TIMEOUT_SECONDS", "3600"))
     graph_job_commit_batch_size: int = int(os.getenv("GRAPH_JOB_COMMIT_BATCH_SIZE", "500"))
     graph_job_limit_jira_issues: int = int(os.getenv("GRAPH_JOB_LIMIT_JIRA_ISSUES", "0"))
     graph_job_build_embeddings: bool = os.getenv("GRAPH_JOB_BUILD_EMBEDDINGS", "true").lower() in {"1", "true", "yes", "on"}
+    graph_job_repo_concurrency: int = int(os.getenv("GRAPH_JOB_REPO_CONCURRENCY", "4"))
+    codegraphcontext_enabled: bool = os.getenv("CODEGRAPHCONTEXT_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    codegraphcontext_timeout_seconds: int = int(os.getenv("CODEGRAPHCONTEXT_TIMEOUT_SECONDS", "1800"))
 
     # Neo4j (for Jira ticket graph)
     neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -60,6 +63,11 @@ class Settings:
     # Ollama (local embedding model)
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
     ollama_embed_model: str = os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
+    ollama_embed_timeout_seconds: int = int(os.getenv("OLLAMA_EMBED_TIMEOUT_SECONDS", "600"))
+    ollama_embed_batch_size: int = int(os.getenv("OLLAMA_EMBED_BATCH_SIZE", "4"))
+    ollama_embed_concurrency: int = int(os.getenv("OLLAMA_EMBED_CONCURRENCY", "1"))
+    codebase_embed_max_chars: int = int(os.getenv("CODEBASE_EMBED_MAX_CHARS", "2000"))
+    codebase_embed_max_files_per_repo: int = int(os.getenv("CODEBASE_EMBED_MAX_FILES_PER_REPO", "1000"))
 
     # Jira ticket cache TTL in hours (0 = always re-fetch)
     jira_cache_ttl_hours: int = int(os.getenv("JIRA_CACHE_TTL_HOURS", "1"))

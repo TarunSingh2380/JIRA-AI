@@ -40,7 +40,7 @@ from stage3_semantic.bge_m3_embeddings import (
     semantic_search as search_semantic_embeddings,
 )
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("uvicorn.error")
 
 
 # ─── Lifecycle ─────────────────────────────────────────────────────────
@@ -106,8 +106,12 @@ class FileTouchOut(BaseModel):
 
 @app.get("/health")
 async def health(driver: AsyncDriver = Depends(get_driver)) -> dict:
-    async with driver.session(database=settings.neo4j_database) as s:
-        rec = await (await s.run("RETURN 1 AS ok")).single()
+    try:
+        async with driver.session(database=settings.neo4j_database) as s:
+            rec = await (await s.run("RETURN 1 AS ok")).single()
+    except Exception as exc:
+        log.warning("Neo4j health check failed: %s", exc)
+        raise HTTPException(503, f"neo4j health check failed: {exc}") from exc
     return {"status": "ok", "neo4j": rec["ok"] == 1}
 
 
@@ -219,6 +223,11 @@ async def trigger_ingest(
             repos_found=0, repos_ingested=0, commits_total=0, branches_total=0, failures=[]
         )
 
+    log.info(
+        "Starting graph ingest for %d repos (fetch_first=%s)",
+        len(repos),
+        req.fetch_first,
+    )
     sem = asyncio.Semaphore(settings.ingest_concurrency)
     total_commits = 0
     total_branches = 0
@@ -236,6 +245,18 @@ async def trigger_ingest(
                 failures.append(f"{repo.full_name}: {str(exc)[:200]}")
 
     await asyncio.gather(*(_one(r) for r in repos))
+
+    if failures:
+        log.warning(
+            "Graph ingest completed with %d repo failure(s): %s",
+            len(failures),
+            failures[:5],
+        )
+    else:
+        log.info(
+            "Graph ingest completed successfully for %d repos",
+            len(repos),
+        )
 
     return IngestResponse(
         repos_found=len(repos),
@@ -297,6 +318,12 @@ async def search_semantic(q: SemanticQuery, driver: AsyncDriver = Depends(get_dr
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        log.exception("Semantic search failed")
+        raise HTTPException(500, str(exc)) from exc
+    except Exception as exc:
+        log.exception("Semantic search failed")
+        raise HTTPException(500, str(exc)) from exc
     return {"query": q.query, "model_key": q.model_key, "results": results}
 
 
@@ -322,6 +349,12 @@ async def rebuild_semantic_embeddings(
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        log.exception("Semantic embedding rebuild failed")
+        raise HTTPException(500, str(exc)) from exc
+    except Exception as exc:
+        log.exception("Semantic embedding rebuild failed")
+        raise HTTPException(500, str(exc)) from exc
     return stats
 
 

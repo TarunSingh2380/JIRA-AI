@@ -123,13 +123,17 @@ def graph_admin_trigger(
     background_tasks: BackgroundTasks,
 ) -> GraphAdminTriggerResponse:
     log.info(
-        "POST /graph-admin/trigger action=%s pull_code=%s fetch_jira=%s include_jira=%s",
+        "POST /graph-admin/trigger action=%s pull_code=%s fetch_jira=%s include_jira=%s selected_repos=%d",
         request.action,
         request.pull_latest_code,
         request.fetch_latest_jira_tickets,
         request.include_jira_tickets,
+        len(request.repositories),
     )
     repositories = discover_graph_repositories(settings)
+    selected_repositories = _selected_repositories(repositories, request.repositories)
+    if request.action != "jira_tickets_only" and not selected_repositories:
+        raise HTTPException(status_code=400, detail="Select at least one repository")
 
     job = job_store.create(action=request.action)
     log.info("Enqueuing background job %s for action=%s", job.job_id, request.action)
@@ -142,13 +146,14 @@ def graph_admin_trigger(
         include_jira_in_graph=request.include_jira_tickets,
         build_embeddings=request.build_embeddings,
         embedding_model=request.embedding_model,
+        selected_repositories=[repo.get("name", "") for repo in selected_repositories],
     )
 
     return GraphAdminTriggerResponse(
         job_id=job.job_id,
         action=job.action,
         status=job.status,
-        repository_count=len(repositories),
+        repository_count=len(selected_repositories) if request.action != "jira_tickets_only" else 0,
         excluded_repositories=_excluded_repositories(),
     )
 
@@ -423,6 +428,19 @@ def _excluded_repositories() -> list[str]:
     ]
 
 
+def _selected_repositories(
+    repositories: list[dict[str, Any]],
+    selected_values: list[str],
+) -> list[dict[str, Any]]:
+    if not selected_values:
+        return repositories
+    selected = set(selected_values)
+    return [
+        repo for repo in repositories
+        if repo.get("name") in selected or repo.get("path") in selected
+    ]
+
+
 # ─── Graph admin HTML UI ─────────────────────────────────────────────────────
 
 GRAPH_ADMIN_HTML = """
@@ -590,8 +608,19 @@ GRAPH_ADMIN_HTML = """
     /* Progress bars */
     .progress-section { margin-bottom: 18px; }
     .progress-label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    .progress-meta { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
     .progress-track { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
     .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.4s; }
+    .progress-fill.indeterminate {
+      width: 18%;
+      background: linear-gradient(90deg, var(--accent), #8fb4ff, var(--accent));
+      background-size: 180% 100%;
+      animation: progressPulse 1.2s linear infinite;
+    }
+    @keyframes progressPulse {
+      from { background-position: 180% 0; }
+      to { background-position: -180% 0; }
+    }
 
     /* Repo table */
     table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
@@ -632,13 +661,13 @@ GRAPH_ADMIN_HTML = """
       <label><input id="pullLatestCode" type="checkbox" checked> Run git pull in local clones</label>
       <label><input id="fetchLatestJira" type="checkbox" checked> Fetch latest Jira tickets</label>
       <label><input id="includeJira" type="checkbox" checked> Include Jira tickets in graph</label>
-      <label><input id="buildEmbeddings" type="checkbox" checked> Build semantic embeddings</label>
+      <label><input id="buildEmbeddings" type="checkbox" checked> Build codebase embeddings</label>
       <label style="display:block;">
-        <span style="display:block;margin-bottom:6px;">Embedding model</span>
+        <span style="display:block;margin-bottom:6px;">Codebase embedding model</span>
         <select id="embeddingModel" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:9px 10px;font:inherit;background:#fff;">
-          <option value="bge-m3">BGE-M3 (568M)</option>
-          <option value="qwen3-embedding-0.6b">Qwen3-Embedding-0.6B</option>
-          <option value="mxbai-embed-large-v1">mxbai-embed-large-v1 (335M)</option>
+          <option value="codebase_bge_m3">codebase_bge_m3</option>
+          <option value="codebase_qwen3_0_6b">codebase_qwen3_0_6b</option>
+          <option value="codebase_mxbai_large">codebase_mxbai_large</option>
         </select>
       </label>
       <textarea id="notes" placeholder="Optional run note"></textarea>
@@ -681,14 +710,17 @@ GRAPH_ADMIN_HTML = """
         <div class="progress-section">
           <div class="progress-label">Repository progress</div>
           <div class="progress-track"><div class="progress-fill" id="repoProgress" style="width:0%"></div></div>
+          <div class="progress-meta" id="repoEta"></div>
         </div>
         <div class="progress-section">
           <div class="progress-label">Jira ticket progress</div>
           <div class="progress-track"><div class="progress-fill" id="jiraProgress" style="width:0%"></div></div>
+          <div class="progress-meta" id="jiraEta"></div>
         </div>
         <div class="progress-section" id="embeddingProgressSection" hidden>
           <div class="progress-label" id="embeddingProgressLabel">Semantic embedding progress</div>
           <div class="progress-track"><div class="progress-fill" id="embeddingProgress" style="width:0%"></div></div>
+          <div class="progress-meta" id="embeddingEta"></div>
         </div>
       </div>
 
@@ -892,11 +924,21 @@ GRAPH_ADMIN_HTML = """
 
     // ── Trigger ──────────────────────────────────────────────────────────
     async function trigger(action) {
+      const selected = [...selectedRepos];
+      if (action !== "jira_tickets_only" && selected.length === 0) {
+        setStatus("Select at least one repository", "error");
+        return;
+      }
       setBusy(true);
       resultEl.hidden = true;
       statsGrid.hidden = true;
       progressSection.hidden = true;
-      setStatus("Starting job...", "running");
+      setStatus(
+        action === "jira_tickets_only"
+          ? "Starting Jira-only job..."
+          : `Starting job for ${selected.length} selected repos...`,
+        "running",
+      );
 
       try {
         const res  = await fetch("/graph-admin/trigger", {
@@ -904,6 +946,7 @@ GRAPH_ADMIN_HTML = """
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({
             action,
+            repositories: selected,
             pull_latest_code:         document.querySelector("#pullLatestCode").checked,
             fetch_latest_jira_tickets: document.querySelector("#fetchLatestJira").checked,
             include_jira_tickets:      document.querySelector("#includeJira").checked,
@@ -915,7 +958,10 @@ GRAPH_ADMIN_HTML = """
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Trigger failed");
 
-        setStatus(`Job started (${data.job_id.slice(0, 8)}...)`, "running");
+        setStatus(
+          `Job started (${data.job_id.slice(0, 8)}...) for ${data.repository_count || selected.length} repos`,
+          "running",
+        );
         statsGrid.hidden = false;
         progressSection.hidden = false;
         updateStats(data);
@@ -973,39 +1019,101 @@ GRAPH_ADMIN_HTML = """
       const jiraD = progress.jira_tickets_done || 0;
       const embT  = totals.embedding_documents || 0;
       const embD  = progress.embedding_documents_done || 0;
+      const jiraEmbT = totals.jira_embedding_documents || 0;
+      const jiraEmbD = progress.jira_embedding_documents_done || 0;
+      const codeEmbT = totals.codebase_embedding_documents || 0;
+      const codeEmbD = progress.codebase_embedding_documents_done || 0;
+      const repoEta = progress.repositories_eta_seconds || 0;
+      const jiraEta = progress.jira_embedding_eta_seconds || 0;
+      const codeEta = progress.codebase_embedding_eta_seconds || 0;
+      const embEta = progress.embedding_eta_seconds || jiraEta || codeEta || 0;
       const embActive = embT > 0 || embD > 0;
+      let activeEmbD = embD;
+      let activeEmbT = embT;
+      let activeEmbEta = embEta;
+      let activeEmbKind = "";
+      if (jiraEmbT > 0 && jiraEmbD < jiraEmbT) {
+        activeEmbD = jiraEmbD;
+        activeEmbT = jiraEmbT;
+        activeEmbEta = jiraEta;
+        activeEmbKind = "Jira";
+      } else if (codeEmbT > 0 && codeEmbD < codeEmbT) {
+        activeEmbD = codeEmbD;
+        activeEmbT = codeEmbT;
+        activeEmbEta = codeEta;
+        activeEmbKind = "Codebase";
+      } else if (codeEmbT > 0) {
+        activeEmbD = codeEmbD;
+        activeEmbT = codeEmbT;
+        activeEmbEta = codeEta;
+        activeEmbKind = "Codebase";
+      } else if (jiraEmbT > 0) {
+        activeEmbD = jiraEmbD;
+        activeEmbT = jiraEmbT;
+        activeEmbEta = jiraEta;
+        activeEmbKind = "Jira";
+      }
       const inferEmbeddingActive =
         !embActive &&
         data.status === "running" &&
         document.querySelector("#buildEmbeddings").checked &&
         repoT > 0 &&
-        repoD >= repoT &&
-        (jiraT === 0 || jiraD >= jiraT);
+        repoD >= repoT;
 
       document.querySelector("#statRepos").textContent =
         repoT > 0 ? `${repoD}/${repoT}` : (data.repository_count != null ? `${data.repository_count}` : "0/0");
       document.querySelector("#statJira").textContent  =
         jiraT > 0 ? `${jiraD}/${jiraT}` : "0/0";
       document.querySelector("#statEmbeddings").textContent =
-        embActive ? `${embD}/${embT}` : (inferEmbeddingActive ? "running" : "—");
+        embActive
+          ? `${activeEmbD}/${activeEmbT}${activeEmbKind ? ` ${activeEmbKind}` : ""}`
+          : (inferEmbeddingActive ? "running" : "—");
 
       setProgressBar("repoProgress", repoD, repoT);
       setProgressBar("jiraProgress", jiraD, jiraT);
+      document.querySelector("#repoEta").textContent = formatEta(repoEta);
+      document.querySelector("#jiraEta").textContent = formatEta(jiraEta);
       document.querySelector("#embeddingProgressSection").hidden = !(embActive || inferEmbeddingActive);
-      document.querySelector("#embeddingProgressLabel").textContent =
-        (embActive && data.status === "running" && embD === 0) || inferEmbeddingActive
-          ? "Semantic embedding progress (model running)"
-          : "Semantic embedding progress";
-      if (inferEmbeddingActive) {
-        document.querySelector("#embeddingProgress").style.width = "15%";
-      } else {
-        setProgressBar("embeddingProgress", embD, embT);
+      let embeddingLabel = "Embedding progress";
+      if (activeEmbKind === "Jira") {
+        embeddingLabel = "Jira embedding progress";
+      } else if (activeEmbKind === "Codebase") {
+        embeddingLabel = "Codebase embedding progress";
       }
+      if ((embActive && data.status === "running" && activeEmbT > 0 && activeEmbD === 0) || inferEmbeddingActive) {
+        embeddingLabel += " (model running)";
+      }
+      document.querySelector("#embeddingProgressLabel").textContent = embeddingLabel;
+      const embeddingProgress = document.querySelector("#embeddingProgress");
+      const embeddingStarting = data.status === "running" && document.querySelector("#buildEmbeddings").checked && activeEmbT > 0 && activeEmbD === 0;
+      if (inferEmbeddingActive || embeddingStarting) {
+        embeddingProgress.classList.add("indeterminate");
+      } else {
+        embeddingProgress.classList.remove("indeterminate");
+        setProgressBar("embeddingProgress", activeEmbD, activeEmbT);
+      }
+      const aggregateSuffix = activeEmbKind && embT > activeEmbT
+        ? ` · Overall ${embD}/${embT}`
+        : "";
+      document.querySelector("#embeddingEta").textContent =
+        `${formatEta(activeEmbEta)}${aggregateSuffix}`;
     }
 
     function setProgressBar(id, done, total) {
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
       document.querySelector(`#${id}`).style.width = `${pct}%`;
+    }
+
+    function formatEta(seconds) {
+      seconds = Number(seconds || 0);
+      if (!Number.isFinite(seconds) || seconds <= 0) return "";
+      if (seconds < 60) return `ETA ${Math.round(seconds)}s`;
+      const minutes = Math.floor(seconds / 60);
+      const secs = Math.round(seconds % 60);
+      if (minutes < 60) return `ETA ${minutes}m ${secs}s`;
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `ETA ${hours}h ${mins}m`;
     }
 
     function runningStatusMessage(data) {
@@ -1015,12 +1123,18 @@ GRAPH_ADMIN_HTML = """
       const jiraDone = (totals.jira_tickets || 0) > 0 && progress.jira_tickets_done >= totals.jira_tickets;
       const embTotal = totals.embedding_documents || 0;
       const embDone = progress.embedding_documents_done || 0;
-      if (embTotal > 0 && embDone < embTotal) return "Building semantic embeddings...";
+      const jiraEmbTotal = totals.jira_embedding_documents || 0;
+      const jiraEmbDone = progress.jira_embedding_documents_done || 0;
+      const codeEmbTotal = totals.codebase_embedding_documents || 0;
+      const codeEmbDone = progress.codebase_embedding_documents_done || 0;
+      if (jiraEmbTotal > 0 && jiraEmbDone < jiraEmbTotal) return "Building Jira embeddings...";
+      if (codeEmbTotal > 0 && codeEmbDone < codeEmbTotal) return "Building codebase embeddings...";
+      if (embTotal > 0 && embDone < embTotal) return "Building embeddings...";
       if (
+        embTotal === 0 &&
         document.querySelector("#buildEmbeddings").checked &&
-        repoDone &&
-        (jiraDone || (totals.jira_tickets || 0) === 0)
-      ) return "Building semantic embeddings...";
+        repoDone
+      ) return "Building codebase embeddings...";
       if (repoDone && jiraDone) return "Finalizing graph job...";
       return "Graph job running...";
     }

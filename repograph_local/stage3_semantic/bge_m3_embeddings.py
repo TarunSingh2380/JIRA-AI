@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from neo4j import AsyncDriver
@@ -24,6 +26,16 @@ EMBEDDING_MODEL_OPTIONS = {
     "bge-m3": {
         "label": "BGE-M3 (568M)",
         "model_name": settings.bge_m3_model_name,
+        "revision": "main",
+        "model_kwargs": {"use_safetensors": False},
+        "snapshot_allow_patterns": [
+            "config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "special_tokens_map.json",
+            "sentencepiece.bpe.model",
+            "pytorch_model.bin",
+        ],
         "dimensions": 1024,
     },
     "qwen3-embedding-0.6b": {
@@ -50,22 +62,73 @@ class EmbeddingDocument:
     metadata: dict[str, Any]
 
 
+def _cached_snapshot_path(model_name: str, revision: str | None) -> Path | None:
+    cache_root = Path(os.getenv("TRANSFORMERS_CACHE") or os.getenv("HF_HOME") or "/cache/huggingface")
+    model_dir = cache_root / f"models--{model_name.replace('/', '--')}"
+    ref_path = model_dir / "refs" / (revision or "main")
+    if not ref_path.exists():
+        return None
+    snapshot_id = ref_path.read_text(encoding="utf-8").strip()
+    snapshot_path = model_dir / "snapshots" / snapshot_id
+    return snapshot_path if snapshot_path.exists() else None
+
+
 class SentenceTransformerEmbedder:
     def __init__(self, model_key: str | None = None) -> None:
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError as exc:
-            raise RuntimeError(
-                "sentence-transformers is required for semantic embeddings. "
-                "Install project dependencies first."
-            ) from exc
-
         self.profile = resolve_embedding_model(model_key)
         self.model_key = self.profile["key"]
         self.model_label = self.profile["label"]
         self.model_name = self.profile["model_name"]
+        self.revision = self.profile.get("revision")
+        self.model_kwargs = dict(self.profile.get("model_kwargs") or {})
+        self.model_load_path = self._resolve_model_load_path()
+        self.model_revision = None if Path(self.model_load_path).exists() else self.revision
         self.dimensions = int(self.profile["dimensions"])
-        self.model = SentenceTransformer(self.model_name)
+
+        try:
+            from sentence_transformers import SentenceTransformer
+        except Exception as exc:
+            raise RuntimeError(
+                "sentence-transformers failed to import. Check the Repograph "
+                f"Torch/Transformers dependency pins: {exc}"
+            ) from exc
+
+        try:
+            self.model = SentenceTransformer(
+                self.model_load_path,
+                revision=self.model_revision,
+                model_kwargs=self.model_kwargs or None,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to load embedding model {self.model_label} "
+                f"({self.model_name}): {exc}"
+            ) from exc
+
+    def _resolve_model_load_path(self) -> str:
+        allow_patterns = self.profile.get("snapshot_allow_patterns")
+        if not allow_patterns:
+            return self.model_name
+
+        try:
+            from huggingface_hub import snapshot_download
+        except Exception as exc:
+            raise RuntimeError(f"huggingface-hub failed to import: {exc}") from exc
+
+        try:
+            return snapshot_download(
+                repo_id=self.model_name,
+                revision=self.revision,
+                allow_patterns=list(allow_patterns),
+                cache_dir=os.getenv("TRANSFORMERS_CACHE") or os.getenv("HF_HOME"),
+            )
+        except Exception as exc:
+            cached_path = _cached_snapshot_path(self.model_name, self.revision)
+            if cached_path:
+                return str(cached_path)
+            raise RuntimeError(
+                f"Failed to resolve embedding model snapshot {self.model_name}: {exc}"
+            ) from exc
 
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         return await asyncio.to_thread(self._encode, texts)
@@ -215,14 +278,27 @@ async def fetch_embedding_documents(
     max_docs = limit if limit is not None else settings.semantic_max_docs_per_run
     docs: list[EmbeddingDocument] = []
     async with driver.session(database=settings.neo4j_database) as session:
+        remaining = max_docs if max_docs and max_docs > 0 else None
+
+        async def add_docs(kind: str, query: str) -> None:
+            nonlocal remaining
+            if kind not in wanted:
+                return
+            if remaining is not None and remaining <= 0:
+                return
+            kind_docs = await _fetch(session, query, limit=remaining)
+            docs.extend(kind_docs)
+            if remaining is not None:
+                remaining -= len(kind_docs)
+
         if "repo" in wanted:
-            docs.extend(await _fetch(session, _QUERY_REPO_DOCS))
+            await add_docs("repo", _QUERY_REPO_DOCS)
         if "commit" in wanted:
-            docs.extend(await _fetch(session, _QUERY_COMMIT_DOCS))
+            await add_docs("commit", _QUERY_COMMIT_DOCS)
         if "file" in wanted:
-            docs.extend(await _fetch(session, _QUERY_FILE_DOCS))
+            await add_docs("file", _QUERY_FILE_DOCS)
         if "jira_ticket" in wanted:
-            docs.extend(await _fetch(session, _QUERY_JIRA_DOCS))
+            await add_docs("jira_ticket", _QUERY_JIRA_DOCS)
 
     if max_docs and max_docs > 0:
         docs = docs[:max_docs]
@@ -243,8 +319,16 @@ async def upsert_embedding_documents(driver: AsyncDriver, rows: list[dict[str, A
             await session.run(_UPSERT_BY_KIND[kind], rows=kind_rows)
 
 
-async def _fetch(session: Any, query: str) -> list[EmbeddingDocument]:
-    result = await session.run(query)
+async def _fetch(
+    session: Any,
+    query: str,
+    *,
+    limit: int | None = None,
+) -> list[EmbeddingDocument]:
+    if limit is not None and limit > 0:
+        result = await session.run(f"{query}\nLIMIT $limit", limit=limit)
+    else:
+        result = await session.run(query)
     docs = []
     async for record in result:
         data = record.data()
@@ -279,13 +363,30 @@ def resolve_embedding_model(model_key: str | None = None) -> dict[str, Any]:
     requested = (model_key or DEFAULT_EMBEDDING_MODEL_KEY).strip()
     if not requested:
         requested = DEFAULT_EMBEDDING_MODEL_KEY
+    normalized = _normalize_model_key(requested)
 
     for key, profile in EMBEDDING_MODEL_OPTIONS.items():
-        if requested == key or requested == profile["model_name"] or requested == profile["label"]:
+        candidates = {
+            key,
+            profile["model_name"],
+            profile["label"],
+            profile["label"].split(" (", 1)[0],
+        }
+        if normalized in {_normalize_model_key(candidate) for candidate in candidates}:
             return {"key": key, **profile}
 
     allowed = ", ".join(EMBEDDING_MODEL_OPTIONS)
     raise ValueError(f"Unsupported embedding model '{requested}'. Expected one of: {allowed}")
+
+
+def _normalize_model_key(value: str) -> str:
+    return (
+        str(value)
+        .strip()
+        .lower()
+        .replace("_", "-")
+        .replace(" ", "")
+    )
 
 
 def embedding_model_options() -> list[dict[str, Any]]:
@@ -345,6 +446,23 @@ ORDER BY c.committed_at DESC
 _QUERY_FILE_DOCS = """
 MATCH (f:File)-[:IN_REPO]->(r:Repo)
 OPTIONAL MATCH (c:Commit)-[touch:TOUCHES]->(f)
+WHERE coalesce(f.current, true)
+  AND size(coalesce(f.path, '')) <= 240
+  AND (
+    coalesce(f.extension, '') IN [
+      'py', 'js', 'jsx', 'ts', 'tsx', 'java', 'kt', 'go', 'php', 'rb',
+      'cs', 'cpp', 'c', 'h', 'hpp', 'rs', 'swift', 'scala', 'sql',
+      'html', 'css', 'scss', 'vue', 'svelte', 'json', 'yaml', 'yml',
+      'xml', 'md', 'sh'
+    ]
+    OR f.path ENDS WITH 'Dockerfile'
+  )
+  AND NOT toLower(f.path) ENDS WITH '.min.js'
+  AND NONE(part IN split(toLower(f.path), '/') WHERE part IN [
+    'node_modules', 'vendor', 'dist', 'build', '.next', 'coverage',
+    'test-output', '__pycache__', '.git', 'qdrant_storage', 'storage',
+    'tmp', 'logs', 'old', 'google-auth'
+  ])
 WITH f, r, count(touch) AS touch_count, max(c.committed_at) AS last_touched
 RETURN
   'file:' + f.repo_full_name + ':' + f.path AS id,

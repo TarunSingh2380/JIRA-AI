@@ -22,6 +22,7 @@ class GraphJob:
     status: str  # "pending" | "running" | "completed" | "failed"
     totals: dict[str, int] = field(default_factory=lambda: {"repositories": 0, "jira_tickets": 0})
     progress: dict[str, int] = field(default_factory=lambda: {"repositories_done": 0, "jira_tickets_done": 0})
+    logs: list[dict[str, Any]] = field(default_factory=list)
     error: Optional[str] = None
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
@@ -33,6 +34,7 @@ class GraphJob:
             "status": self.status,
             "totals": dict(self.totals),
             "progress": dict(self.progress),
+            "logs": list(self.logs),
             "error": self.error,
             "started_at": self.started_at.isoformat(),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,

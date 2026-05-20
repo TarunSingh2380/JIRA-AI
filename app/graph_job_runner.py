@@ -17,18 +17,23 @@ import json
 import logging
 import subprocess
 import time
+from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
 import psycopg
-import requests
-
 from app.config import settings
+from app.codegraphcontext_runner import index_repository_with_codegraphcontext
+from app.codebase_graph import (
+    build_codebase_embedding_documents,
+    embed_codebase_documents,
+    ingest_codebase_graph,
+)
 from app.graph_job import GraphJob
 from app.jira_fetcher import fetch_all_tickets
 from app.jira_graph import _adf_to_text, make_neo4j_driver, upsert_jira_tickets
 from app.ollama_embedder import OllamaEmbedder
-from app.qdrant_store import upsert_commit_embeddings, upsert_jira_embeddings
+from app.qdrant_store import upsert_jira_embeddings
 from app.repository_discovery import discover_graph_repositories
 
 log = logging.getLogger(__name__)
@@ -74,8 +79,12 @@ def _persist_job_progress(job: GraphJob) -> None:
                 repos_done  = %s,
                 jira_total  = %s,
                 jira_done   = %s,
+                totals      = %s::jsonb,
+                progress    = %s::jsonb,
+                logs        = %s::jsonb,
                 error_msg   = %s,
-                completed_at = %s
+                completed_at = %s,
+                updated_at   = NOW()
             WHERE job_id = %s
             """,
             (
@@ -84,11 +93,72 @@ def _persist_job_progress(job: GraphJob) -> None:
                 job.progress.get("repositories_done", 0),
                 job.totals.get("jira_tickets", 0),
                 job.progress.get("jira_tickets_done", 0),
+                json.dumps(job.totals, ensure_ascii=False, default=str),
+                json.dumps(job.progress, ensure_ascii=False, default=str),
+                json.dumps(job.logs, ensure_ascii=False, default=str),
                 job.error,
                 job.completed_at,
                 UUID(job.job_id),
             ),
         )
+
+
+def _append_job_log(job: GraphJob, step: str, level: str, message: str) -> None:
+    log_method = getattr(log, level, log.info)
+    log_method("Graph job %s [%s] %s", job.job_id, step, message)
+    job.logs.append(
+        {
+            "step": step,
+            "level": level,
+            "message": message,
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
+def _sync_embedding_total(job: GraphJob) -> None:
+    job.totals["embedding_documents"] = (
+        job.totals.get("jira_embedding_documents", 0)
+        + job.totals.get("codebase_embedding_documents", 0)
+    )
+
+
+def _sync_embedding_progress(job: GraphJob) -> None:
+    job.progress["embedding_documents_done"] = (
+        job.progress.get("jira_embedding_documents_done", 0)
+        + job.progress.get("codebase_embedding_documents_done", 0)
+    )
+    job.progress["embedding_eta_seconds"] = (
+        job.progress.get("jira_embedding_eta_seconds", 0)
+        or job.progress.get("codebase_embedding_eta_seconds", 0)
+    )
+
+
+def _eta_seconds(done: int, total: int, started_at: float) -> int:
+    if done <= 0 or total <= 0 or done >= total:
+        return 0
+    elapsed = max(0.001, time.monotonic() - started_at)
+    # Early parallel batches often complete in bursts and produce wildly
+    # optimistic estimates. Wait for a small but meaningful sample.
+    if elapsed < 120 and done < max(100, int(total * 0.05)):
+        return 0
+    rate = done / elapsed
+    if rate <= 0:
+        return 0
+    return int(round((total - done) / rate))
+
+
+def _format_eta(done: int, total: int, started_at: float) -> str:
+    remaining_seconds = _eta_seconds(done, total, started_at)
+    if remaining_seconds <= 0:
+        return ""
+    if remaining_seconds < 60:
+        return f" ETA {remaining_seconds}s"
+    minutes, seconds = divmod(remaining_seconds, 60)
+    if minutes < 60:
+        return f" ETA {minutes}m {seconds}s"
+    hours, minutes = divmod(minutes, 60)
+    return f" ETA {hours}h {minutes}m"
 
 
 def _upsert_repo_row(conn: psycopg.Connection, repo: dict[str, Any]) -> None:
@@ -157,85 +227,6 @@ def _git_pull(repo: dict[str, Any]) -> tuple[bool, str]:
         return False, str(exc)
 
 
-# ─── Repograph service proxy ─────────────────────────────────────────────────
-
-def _trigger_repograph_ingest(fetch_first: bool = False) -> dict[str, Any]:
-    url = f"{settings.repograph_base_url}/ingest"
-    try:
-        resp = requests.post(
-            url,
-            json={"fetch_first": fetch_first},
-            timeout=settings.external_request_timeout_seconds * 20,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except requests.exceptions.ConnectionError:
-        log.warning("Repograph service not reachable at %s; skipping repo ingest", url)
-        return {"skipped": True, "reason": "repograph service not reachable"}
-    except Exception as exc:
-        log.warning("Repograph ingest call failed: %s", exc)
-        return {"skipped": True, "reason": str(exc)}
-
-
-def _trigger_repograph_embedding_rebuild(
-    kinds: list[str],
-    embedding_model: str,
-) -> dict[str, Any]:
-    url = f"{settings.repograph_base_url}/embeddings/rebuild"
-    payload = {"kinds": kinds, "model_key": embedding_model}
-    try:
-        resp = requests.post(
-            url,
-            json=payload,
-            timeout=settings.graph_job_repo_timeout_seconds,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except requests.exceptions.ConnectionError:
-        log.warning("Repograph service not reachable at %s; skipping semantic embedding rebuild", url)
-        return {"skipped": True, "reason": "repograph service not reachable"}
-    except Exception as exc:
-        log.warning("Repograph semantic embedding rebuild failed: %s", exc)
-        return {"skipped": True, "reason": str(exc)}
-
-
-# ─── Commit embeddings via Neo4j query ───────────────────────────────────────
-
-async def _embed_recent_commits(
-    embedder: OllamaEmbedder,
-    driver,
-    database: str,
-    limit: int = 500,
-) -> int:
-    if not settings.qdrant_url:
-        return 0
-    query = """
-    MATCH (c:Commit)-[:IN_REPO]->(r:Repo)
-    OPTIONAL MATCH (c)-[:AUTHORED_BY]->(a:Author)
-    WHERE c.committed_at > datetime() - duration({days: 90})
-    RETURN
-        c.sha AS sha,
-        c.summary AS summary,
-        r.full_name AS repo_full_name,
-        coalesce(a.email, '') AS author_email
-    ORDER BY c.committed_at DESC
-    LIMIT $limit
-    """
-    async with driver.session(database=database) as session:
-        result = await session.run(query, limit=limit)
-        commits = [dict(r) async for r in result]
-    if not commits:
-        return 0
-    texts = [f"{c.get('repo_full_name', '')}: {c.get('summary', '')}" for c in commits]
-    embeddings = await asyncio.to_thread(embedder.embed_batch, texts)
-    return upsert_commit_embeddings(
-        qdrant_url=settings.qdrant_url,
-        commits=commits,
-        embeddings=embeddings,
-        api_key=settings.qdrant_api_key or None,
-    )
-
-
 # ─── Main job runner ──────────────────────────────────────────────────────────
 
 async def run_graph_job(
@@ -244,7 +235,8 @@ async def run_graph_job(
     fetch_latest_jira: bool = True,
     include_jira_in_graph: bool = True,
     build_embeddings: bool = True,
-    embedding_model: str = "bge-m3",
+    embedding_model: str = "codebase_bge_m3",
+    selected_repositories: list[str] | None = None,
 ) -> None:
     """Execute a graph build job in the background; updates `job` and persists to DB."""
     job.status = "running"
@@ -252,6 +244,7 @@ async def run_graph_job(
     log.info("Graph job %s started (action=%s)", job.job_id, job.action)
 
     neo4j_driver = None
+    codebase_documents: list[dict[str, Any]] = []
 
     try:
         action = job.action
@@ -262,6 +255,12 @@ async def run_graph_job(
         # ── Step 1: GitHub repos ──────────────────────────────────────────
         if not jira_only:
             repos = discover_graph_repositories(settings)
+            if selected_repositories:
+                selected = set(selected_repositories)
+                repos = [
+                    repo for repo in repos
+                    if repo.get("name") in selected or repo.get("path") in selected
+                ]
             job.totals["repositories"] = len(repos)
             _persist_job_progress(job)
 
@@ -303,15 +302,132 @@ async def run_graph_job(
                         finally:
                             conn.close()
 
-            log.info("Triggering repograph ingest for %d repos ...", len(repos))
-            ingest_result = await asyncio.to_thread(
-                _trigger_repograph_ingest,
-                pull_latest_code,
+            if neo4j_driver is None:
+                neo4j_driver = make_neo4j_driver(
+                    settings.neo4j_uri,
+                    settings.neo4j_user,
+                    settings.neo4j_password,
+                )
+
+            codebase_files = 0
+            codebase_functions = 0
+            codebase_imports = 0
+            codebase_calls = 0
+            repo_concurrency = max(1, settings.graph_job_repo_concurrency)
+            repo_semaphore = asyncio.Semaphore(repo_concurrency)
+
+            _append_job_log(
+                job,
+                "repositories",
+                "info",
+                f"Indexing {len(repos)} repositories with concurrency {repo_concurrency}.",
             )
-            log.info("Repograph ingest result: %s", ingest_result)
+            _persist_job_progress(job)
+
+            async def _process_repo(repo: dict[str, Any]) -> tuple[dict[str, Any], dict[str, int], list[dict[str, Any]]]:
+                async with repo_semaphore:
+                    counts = await ingest_codebase_graph(
+                        driver=neo4j_driver,
+                        database=settings.neo4j_database,
+                        repo=repo,
+                        clear_first=clear_jira,
+                    )
+                    documents: list[dict[str, Any]] = []
+                    if build_embeddings:
+                        documents = await asyncio.to_thread(
+                            build_codebase_embedding_documents,
+                            repo,
+                            max_files=settings.codebase_embed_max_files_per_repo,
+                            max_chars=settings.codebase_embed_max_chars,
+                        )
+                    return repo, counts, documents
+
+            completed_repos = 0
+            repo_index_started_at = time.monotonic()
+            repo_tasks = [asyncio.create_task(_process_repo(repo)) for repo in repos]
+            for repo_task in asyncio.as_completed(repo_tasks):
+                repo, counts, documents = await repo_task
+                codebase_files += counts.get("files", 0)
+                codebase_functions += counts.get("functions", 0)
+                codebase_imports += counts.get("imports", 0)
+                codebase_calls += counts.get("calls", 0)
+                codebase_documents.extend(documents)
+                completed_repos += 1
+                job.progress["repositories_done"] = completed_repos
+                job.progress["repositories_eta_seconds"] = _eta_seconds(
+                    completed_repos,
+                    len(repos),
+                    repo_index_started_at,
+                )
+                _append_job_log(
+                    job,
+                    "graph_ingest",
+                    "info",
+                    (
+                        f"{repo.get('name', 'repository')}: indexed "
+                        f"{counts.get('files', 0)} files, "
+                        f"{counts.get('functions', 0)} functions, "
+                        f"{counts.get('imports', 0)} imports, "
+                        f"{counts.get('calls', 0)} calls. "
+                        f"Progress {completed_repos}/{len(repos)}."
+                        f"{_format_eta(completed_repos, len(repos), repo_index_started_at)}"
+                    ),
+                )
+                _persist_job_progress(job)
 
             job.progress["repositories_done"] = len(repos)
+            if build_embeddings:
+                job.totals["codebase_embedding_documents"] = len(codebase_documents)
+                job.progress["codebase_embedding_documents_done"] = 0
+                _sync_embedding_total(job)
+                _sync_embedding_progress(job)
+            _append_job_log(
+                job,
+                "repositories",
+                "info",
+                (
+                    "Codebase graph indexed "
+                    f"{codebase_files} files, {codebase_functions} functions, "
+                    f"{codebase_imports} imports, and {codebase_calls} calls."
+                ),
+            )
             _persist_job_progress(job)
+
+            if settings.codegraphcontext_enabled:
+                _append_job_log(
+                    job,
+                    "codegraphcontext",
+                    "info",
+                    f"Starting CodeGraphContext indexing for {len(repos)} selected repository/repositories.",
+                )
+                _persist_job_progress(job)
+                cgc_success = 0
+                for repo in repos:
+                    success, output = await index_repository_with_codegraphcontext(repo)
+                    repo_name = repo.get("name", "repository")
+                    if success:
+                        cgc_success += 1
+                        _append_job_log(
+                            job,
+                            "codegraphcontext",
+                            "info",
+                            f"{repo_name}: CodeGraphContext indexing completed.",
+                        )
+                    else:
+                        _append_job_log(
+                            job,
+                            "codegraphcontext",
+                            "warning",
+                            f"{repo_name}: CodeGraphContext indexing skipped/failed: {output}",
+                        )
+                    _persist_job_progress(job)
+                _append_job_log(
+                    job,
+                    "codegraphcontext",
+                    "info",
+                    f"CodeGraphContext indexed {cgc_success}/{len(repos)} repository/repositories.",
+                )
+                _persist_job_progress(job)
 
         # ── Step 2: Jira tickets ──────────────────────────────────────────
         if jira_only or (fetch_latest_jira and include_jira_in_graph):
@@ -326,16 +442,22 @@ async def run_graph_job(
             )
 
             job.totals["jira_tickets"] = len(tickets)
+            if build_embeddings and settings.qdrant_url:
+                job.totals["jira_embedding_documents"] = len(tickets)
+                job.progress["jira_embedding_documents_done"] = 0
+                _sync_embedding_total(job)
+                _sync_embedding_progress(job)
             _persist_job_progress(job)
 
             log.info("Got %d Jira tickets", len(tickets))
 
             if tickets and include_jira_in_graph:
-                neo4j_driver = make_neo4j_driver(
-                    settings.neo4j_uri,
-                    settings.neo4j_user,
-                    settings.neo4j_password,
-                )
+                if neo4j_driver is None:
+                    neo4j_driver = make_neo4j_driver(
+                        settings.neo4j_uri,
+                        settings.neo4j_user,
+                        settings.neo4j_password,
+                    )
 
                 written = await upsert_jira_tickets(
                     driver=neo4j_driver,
@@ -351,23 +473,65 @@ async def run_graph_job(
                 log.info("Wrote %d Jira tickets to Neo4j", written)
 
                 # ── Step 3: Jira embeddings ──────────────────────────────
-                if settings.qdrant_url:
+                if build_embeddings and settings.qdrant_url:
+                    _sync_embedding_total(job)
+                    _sync_embedding_progress(job)
+                    _persist_job_progress(job)
+
                     embedder = OllamaEmbedder(
                         settings.ollama_url,
                         settings.ollama_embed_model,
+                        timeout_seconds=settings.ollama_embed_timeout_seconds,
+                        batch_size=settings.ollama_embed_batch_size,
+                        concurrency=settings.ollama_embed_concurrency,
                     )
 
                     if embedder.is_available():
-                        log.info(
-                            "Generating BGE-M3 embeddings for %d Jira tickets ...",
-                            len(tickets),
+                        _append_job_log(
+                            job,
+                            "embeddings",
+                            "info",
+                            (
+                                f"Starting {len(tickets)} Jira ticket embeddings "
+                                f"with {settings.ollama_embed_model} in batches of {settings.ollama_embed_batch_size} "
+                                f"using {settings.ollama_embed_concurrency} parallel request(s)."
+                            ),
                         )
 
                         texts = _ticket_embed_texts(tickets)
 
+                        last_jira_logged_bucket = {"value": -1}
+                        jira_embedding_started_at = time.monotonic()
+
+                        def _jira_embedding_progress(done: int, total: int) -> None:
+                            job.progress["jira_embedding_documents_done"] = done
+                            job.progress["jira_embedding_eta_seconds"] = _eta_seconds(
+                                done,
+                                total,
+                                jira_embedding_started_at,
+                            )
+                            _sync_embedding_progress(job)
+                            bucket = done // max(settings.ollama_embed_batch_size, 1)
+                            should_log = done == 0 or done == total or bucket != last_jira_logged_bucket["value"]
+                            if should_log:
+                                last_jira_logged_bucket["value"] = bucket
+                                _append_job_log(
+                                    job,
+                                    "embeddings",
+                                    "info",
+                                    (
+                                        f"{'Generating' if done == 0 else 'Generated'} "
+                                        f"{done}/{total} Jira ticket embeddings."
+                                        f"{_format_eta(done, total, jira_embedding_started_at)}"
+                                    ),
+                                )
+                            _persist_job_progress(job)
+
                         embeddings = await asyncio.to_thread(
                             embedder.embed_batch,
                             texts,
+                            None,
+                            _jira_embedding_progress,
                         )
 
                         stored = upsert_jira_embeddings(
@@ -381,67 +545,90 @@ async def run_graph_job(
                             "Stored %d Jira embeddings in Qdrant",
                             stored,
                         )
+                        job.progress["jira_embedding_documents_done"] = stored
+                        job.progress["jira_embedding_eta_seconds"] = 0
+                        _sync_embedding_progress(job)
+                        _persist_job_progress(job)
                     else:
                         log.info(
                             "Ollama BGE-M3 not available; skipping Jira embeddings"
                         )
+                        _append_job_log(
+                            job,
+                            "embeddings",
+                            "warning",
+                            "Ollama embedding model unavailable; skipped Jira embeddings.",
+                        )
+                        _persist_job_progress(job)
 
-        # ── Step 4: Neo4j semantic embedding documents ───────────────────
-        if build_embeddings:
-            semantic_kinds = ["jira_ticket"] if jira_only else ["repo", "commit", "file"]
-            if include_jira_in_graph and (jira_only or fetch_latest_jira):
-                semantic_kinds.append("jira_ticket")
-            semantic_kinds = list(dict.fromkeys(semantic_kinds))
-
-            job.totals["embedding_documents"] = 1
-            job.progress["embedding_documents_done"] = 0
+        # ── Step 4: Codebase embeddings ──────────────────────────────────
+        if build_embeddings and settings.qdrant_url and codebase_documents:
+            job.totals["codebase_embedding_documents"] = len(codebase_documents)
+            job.progress.setdefault("codebase_embedding_documents_done", 0)
+            _sync_embedding_total(job)
+            _sync_embedding_progress(job)
+            _append_job_log(
+                job,
+                "embeddings",
+                "info",
+                (
+                    f"Starting {len(codebase_documents)} codebase embeddings "
+                    f"with {embedding_model} in batches of {settings.ollama_embed_batch_size} "
+                    f"using {settings.ollama_embed_concurrency} parallel request(s) "
+                    f"and {settings.codebase_embed_max_chars} chars per file."
+                ),
+            )
             _persist_job_progress(job)
 
-            log.info(
-                "Rebuilding Neo4j semantic embedding documents for kinds=%s model=%s ...",
-                semantic_kinds,
-                embedding_model,
-            )
-            semantic_result = await asyncio.to_thread(
-                _trigger_repograph_embedding_rebuild,
-                semantic_kinds,
-                embedding_model,
-            )
-            log.info("Repograph semantic embedding rebuild result: %s", semantic_result)
+            last_logged_bucket = {"value": -1}
+            codebase_embedding_started_at = time.monotonic()
 
-            documents = int(semantic_result.get("documents") or 0)
-            embedded = int(semantic_result.get("embedded") or 0)
-            job.totals["embedding_documents"] = documents
-            job.progress["embedding_documents_done"] = embedded
+            def _embedding_progress(done: int, total: int) -> None:
+                job.progress["codebase_embedding_documents_done"] = done
+                job.progress["codebase_embedding_eta_seconds"] = _eta_seconds(
+                    done,
+                    total,
+                    codebase_embedding_started_at,
+                )
+                _sync_embedding_progress(job)
+                bucket = done // max(settings.ollama_embed_batch_size, 1)
+                should_log = done == 0 or done == total or bucket != last_logged_bucket["value"]
+                if should_log:
+                    last_logged_bucket["value"] = bucket
+                    _append_job_log(
+                        job,
+                        "embeddings",
+                        "info",
+                        (
+                            f"{'Generating' if done == 0 else 'Generated'} "
+                            f"{done}/{total} codebase embeddings for {embedding_model}."
+                            f"{_format_eta(done, total, codebase_embedding_started_at)}"
+                        ),
+                    )
+                _persist_job_progress(job)
+
+            stored = await asyncio.to_thread(
+                embed_codebase_documents,
+                qdrant_url=settings.qdrant_url,
+                qdrant_api_key=settings.qdrant_api_key,
+                ollama_url=settings.ollama_url,
+                ollama_timeout_seconds=settings.ollama_embed_timeout_seconds,
+                ollama_batch_size=settings.ollama_embed_batch_size,
+                ollama_concurrency=settings.ollama_embed_concurrency,
+                embedding_model_key=embedding_model,
+                documents=codebase_documents,
+                progress_callback=_embedding_progress,
+            )
+            job.progress["codebase_embedding_documents_done"] = stored
+            job.progress["codebase_embedding_eta_seconds"] = 0
+            _sync_embedding_progress(job)
+            _append_job_log(
+                job,
+                "embeddings",
+                "info",
+                f"Stored {stored}/{len(codebase_documents)} codebase embeddings in {embedding_model}.",
+            )
             _persist_job_progress(job)
-
-        # ── Step 5: Commit embeddings in Qdrant ──────────────────────────
-        if not jira_only and settings.qdrant_url:
-            if neo4j_driver is None:
-                neo4j_driver = make_neo4j_driver(
-                    settings.neo4j_uri,
-                    settings.neo4j_user,
-                    settings.neo4j_password,
-                )
-
-            embedder = OllamaEmbedder(
-                settings.ollama_url,
-                settings.ollama_embed_model,
-            )
-
-            if embedder.is_available():
-                log.info("Generating BGE-M3 embeddings for recent commits ...")
-
-                stored = await _embed_recent_commits(
-                    embedder,
-                    neo4j_driver,
-                    settings.neo4j_database,
-                )
-
-                log.info(
-                    "Stored %d commit embeddings in Qdrant",
-                    stored,
-                )
 
         job.mark_done()
         _persist_job_progress(job)

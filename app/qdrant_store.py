@@ -1,8 +1,9 @@
 """Qdrant vector store operations for commit and Jira ticket embeddings.
 
 Collections managed:
-  github_commits  – BGE-M3 vectors for commit summaries
-  jira_tickets    – BGE-M3 vectors for ticket summaries + descriptions
+  github_commits       – vectors for commit summaries
+  jira_tickets         – vectors for ticket summaries + descriptions
+  codebase_*           – model-specific vectors for source files
 
 Gracefully skips upsert if qdrant-client is not installed or the server
 is unreachable — embedding generation is best-effort.
@@ -152,4 +153,65 @@ def upsert_commit_embeddings(
 
     except Exception as exc:
         log.warning("Qdrant commit upsert failed: %s", exc)
+        return 0
+
+
+# ─── Codebase files ──────────────────────────────────────────────────────────
+
+def upsert_codebase_embeddings(
+    qdrant_url: str,
+    collection_name: str,
+    documents: list[dict[str, Any]],
+    embeddings: list[Optional[list[float]]],
+    model_key: str,
+    model_name: str,
+    api_key: Optional[str] = None,
+) -> int:
+    """Store source-file embeddings in a model-specific Qdrant collection."""
+    try:
+        from qdrant_client.models import PointStruct
+    except ImportError:
+        log.warning("qdrant-client not installed; skipping codebase embedding storage")
+        return 0
+
+    try:
+        client = _get_client(qdrant_url, api_key)
+        _ensure_collection(client, collection_name, _infer_vector_size(embeddings))
+
+        points: list[PointStruct] = []
+        for doc, emb in zip(documents, embeddings):
+            if emb is None:
+                continue
+            seed = f"{collection_name}:{doc.get('id') or doc.get('path')}"
+            points.append(
+                PointStruct(
+                    id=_stable_id(seed),
+                    vector=emb,
+                    payload={
+                        "id": doc.get("id", ""),
+                        "repo": doc.get("repo", ""),
+                        "repo_name": doc.get("repo_name", ""),
+                        "path": doc.get("path", ""),
+                        "language": doc.get("language", ""),
+                        "extension": doc.get("extension", ""),
+                        "lines": doc.get("lines", 0),
+                        "model_key": model_key,
+                        "model_name": model_name,
+                        "text": (doc.get("text") or "")[:2000],
+                    },
+                )
+            )
+
+        if points:
+            client.upsert(collection_name=collection_name, points=points)
+            log.info(
+                "Stored %d codebase embeddings in Qdrant collection '%s'",
+                len(points),
+                collection_name,
+            )
+
+        return len(points)
+
+    except Exception as exc:
+        log.warning("Qdrant codebase upsert failed: %s", exc)
         return 0

@@ -6,7 +6,13 @@ pydantic-settings
 fastapi
 uvicorn[standard]
 rich
-sentence-transformers>=3.0.0
+
+# Qwen3 embedding models need transformers>=4.51.0, but transformers 5.x
+# registers custom Torch ops that are not compatible with the pinned CPU
+# torch 2.4 image used by Dockerfile.repograph.
+sentence-transformers==4.1.0
+transformers==4.51.3
+huggingface-hub>=0.30.0,<1.0
 
 ## Stage 2 (AST overlay) — install when starting Stage 2
 # tree-sitter==0.22.3

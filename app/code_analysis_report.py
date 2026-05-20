@@ -35,6 +35,7 @@ _SKIP_DIRS = {
     ".venv",
     "venv",
     "env",
+    "vendor",
     "qdrant_storage",
 }
 
@@ -125,6 +126,8 @@ _IMPORTANT_FILES = {
     "Pipfile",
     "go.mod",
     "Cargo.toml",
+    "composer.json",
+    "composer.lock",
     "pom.xml",
     "build.gradle",
     "Makefile",
@@ -145,6 +148,16 @@ _ENTRYPOINT_CANDIDATES = {
     "src/main.js",
     "src/main.ts",
     "cmd/main.go",
+    "artisan",
+    "public/index.php",
+    "index.php",
+}
+
+_MANIFEST_NAMES = {
+    "package.json",
+    "composer.json",
+    "requirements.txt",
+    "pyproject.toml",
 }
 
 _DOC_EXTENSIONS = {".md", ".rst", ".adoc"}
@@ -209,6 +222,9 @@ _COMPLEXITY_KEYWORDS = (
 )
 
 _EMBEDDING_MODEL_ALIASES = {
+    "codebase_bge_m3": ["codebase_bge_m3", "bge-m3", "BAAI/bge-m3", "BGE-M3 (568M)"],
+    "codebase_qwen3_0_6b": ["codebase_qwen3_0_6b", "qwen3:0.6b", "Qwen/Qwen3-Embedding-0.6B"],
+    "codebase_mxbai_large": ["codebase_mxbai_large", "mxbai-embed-large", "mixedbread-ai/mxbai-embed-large-v1"],
     "bge-m3": ["bge-m3", "BAAI/bge-m3", "BGE-M3 (568M)"],
     "qwen3-embedding-0.6b": [
         "qwen3-embedding-0.6b",
@@ -228,7 +244,7 @@ async def build_code_analysis_report(
     settings: Settings,
     selected_repositories: list[dict[str, Any]],
     include_graph_context: bool = True,
-    embedding_model: str = "bge-m3",
+    embedding_model: str = "codebase_bge_m3",
 ) -> tuple[str, str]:
     """Build a Markdown report and return (filename, markdown)."""
     graph_context = {}
@@ -238,6 +254,13 @@ async def build_code_analysis_report(
             graph_context = await _load_graph_context(
                 settings,
                 [repo["name"] for repo in selected_repositories],
+                embedding_model,
+            )
+            await _merge_codegraphcontext_context(settings, graph_context, selected_repositories)
+            _merge_qdrant_codebase_context(
+                settings,
+                graph_context,
+                selected_repositories,
                 embedding_model,
             )
             if "__graph_errors__" in graph_context:
@@ -321,7 +344,8 @@ async def _load_graph_context(
 
     base_query = """
     MATCH (r:Repo)
-    WHERE r.name IN $repo_names OR r.full_name IN $repo_names
+    WHERE r.full_name IN $repo_names
+       OR (r.name IN $repo_names AND NOT coalesce(r.full_name, '') CONTAINS '/')
     CALL {
         WITH r
         OPTIONAL MATCH (r)<-[:IN_REPO]-(c:Commit)
@@ -330,7 +354,7 @@ async def _load_graph_context(
                sum(coalesce(c.additions, 0)) AS total_additions,
                sum(coalesce(c.deletions, 0)) AS total_deletions
     }
-    CALL {
+    CALL {  
         WITH r
         OPTIONAL MATCH (r)<-[:IN_REPO]-(f:File)
         RETURN count(f) AS graph_files,
@@ -370,7 +394,7 @@ async def _load_graph_context(
         ORDER BY c.committed_at DESC
         LIMIT 12
         RETURN collect({
-            sha: c.short_sha,
+            sha: coalesce(c.short_sha, substring(c.sha, 0, 12)),
             summary: c.summary,
             committed_at: toString(c.committed_at)
         }) AS recent_commits
@@ -395,7 +419,8 @@ async def _load_graph_context(
     """
     ast_query = """
     MATCH (r:Repo)
-    WHERE r.name IN $repo_names OR r.full_name IN $repo_names
+    WHERE r.full_name IN $repo_names
+       OR (r.name IN $repo_names AND NOT coalesce(r.full_name, '') CONTAINS '/')
     CALL {
         WITH r
         OPTIONAL MATCH (fn:Function)
@@ -412,7 +437,11 @@ async def _load_graph_context(
         WITH r
         OPTIONAL MATCH (m:Module)
         WHERE m.repo_full_name = r.full_name
-        RETURN count(m) AS modules
+        WITH r, count(m) AS module_nodes
+        OPTIONAL MATCH (f:File)
+        WHERE f.repo_full_name = r.full_name
+        WITH module_nodes, count(f) AS file_nodes
+        RETURN CASE WHEN module_nodes > 0 THEN module_nodes ELSE file_nodes END AS modules
     }
     CALL {
         WITH r
@@ -424,24 +453,29 @@ async def _load_graph_context(
         WITH r
         OPTIONAL MATCH (source:Module)-[rel:IMPORTS]->(target:Module)
         WHERE source.repo_full_name = r.full_name AND target.repo_full_name = r.full_name
-        RETURN count(rel) AS import_edges
+        WITH r, count(rel) AS module_import_edges
+        OPTIONAL MATCH (source_file:File)-[file_rel:IMPORTS]->(target_file:File)
+        WHERE source_file.repo_full_name = r.full_name AND target_file.repo_full_name = r.full_name
+        WITH module_import_edges, count(file_rel) AS file_import_edges
+        RETURN module_import_edges + file_import_edges AS import_edges
     }
     CALL {
         WITH r
-        MATCH (m:Module)
+        MATCH (m:File)
         WHERE m.repo_full_name = r.full_name
-        OPTIONAL MATCH (m)-[:IMPORTS]->(dep:Module)
+        OPTIONAL MATCH (m)-[:IMPORTS]->(dep:File)
         WHERE dep.repo_full_name = r.full_name
-        WITH m, count(DISTINCT dep) AS out_degree
-        OPTIONAL MATCH (parent:Module)-[:IMPORTS]->(m)
+        WITH r, m, count(DISTINCT dep) AS out_degree
+        OPTIONAL MATCH (parent:File)-[:IMPORTS]->(m)
         WHERE parent.repo_full_name = r.full_name
         WITH m, out_degree, count(DISTINCT parent) AS in_degree
         WITH m, in_degree, out_degree, in_degree + out_degree AS degree
+        WHERE degree > 0
         ORDER BY degree DESC
         LIMIT 12
         RETURN collect({
-            name: m.qualified_name,
-            file_path: m.file_path,
+            name: m.path,
+            file_path: m.path,
             in_degree: in_degree,
             out_degree: out_degree,
             degree: degree
@@ -453,7 +487,7 @@ async def _load_graph_context(
         WHERE fn.repo_full_name = r.full_name
         OPTIONAL MATCH (fn)-[:CALLS]->(callee:Function)
         WHERE callee.repo_full_name = r.full_name
-        WITH fn, count(DISTINCT callee) AS out_degree
+        WITH r, fn, count(DISTINCT callee) AS out_degree
         OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
         WHERE caller.repo_full_name = r.full_name
         WITH fn, out_degree, count(DISTINCT caller) AS in_degree
@@ -511,7 +545,8 @@ async def _load_graph_context(
     """
     embedding_query = """
     MATCH (r:Repo)
-    WHERE r.name IN $repo_names OR r.full_name IN $repo_names
+    WHERE r.full_name IN $repo_names
+       OR (r.name IN $repo_names AND NOT coalesce(r.full_name, '') CONTAINS '/')
     CALL {
         WITH r
         OPTIONAL MATCH (all_docs:EmbeddingDocument)
@@ -563,7 +598,7 @@ async def _load_graph_context(
         if not key:
             return
         target = context.setdefault(key, {})
-        target.update(row)
+        _merge_graph_row(target, row)
         full_name = row.get("full_name")
         if full_name:
             context[full_name] = target
@@ -596,6 +631,287 @@ async def _load_graph_context(
     if query_errors and not context:
         context["__graph_errors__"] = {"graph_query_errors": query_errors}
     return context
+
+
+def _merge_qdrant_codebase_context(
+    settings: Settings,
+    graph_context: dict[str, dict[str, Any]],
+    repositories: list[dict[str, Any]],
+    embedding_model: str,
+) -> None:
+    if not settings.qdrant_url or not embedding_model.startswith("codebase_"):
+        return
+    try:
+        from qdrant_client import QdrantClient
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+    except ImportError:
+        return
+
+    try:
+        client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
+        existing = {collection.name for collection in client.get_collections().collections}
+        if embedding_model not in existing:
+            return
+        for repo in repositories:
+            repo_name = repo.get("name") or ""
+            points, _ = client.scroll(
+                collection_name=embedding_model,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(key="repo_name", match=MatchValue(value=repo_name)),
+                    ]
+                ),
+                limit=250,
+                with_payload=True,
+                with_vectors=True,
+            )
+            docs = []
+            for point in points:
+                payload = point.payload or {}
+                docs.append(
+                    {
+                        "id": payload.get("id") or str(point.id),
+                        "kind": "file",
+                        "source_key": payload.get("path"),
+                        "title": payload.get("path"),
+                        "text": payload.get("text"),
+                        "metadata": payload,
+                        "embedding_model_key": embedding_model,
+                        "embedding_model": payload.get("model_name") or embedding_model,
+                        "embedding_model_label": embedding_model,
+                        "dimensions": len(point.vector or []),
+                        "embedding": point.vector or [],
+                    }
+                )
+            if docs:
+                graph = graph_context.setdefault(repo_name, {})
+                graph["embedding_docs"] = docs
+                graph["embedding_documents"] = len(docs)
+                available = graph.setdefault("available_embedding_models", [])
+                available.append({"model": embedding_model, "documents": len(docs)})
+                _summarize_embedding_docs(graph)
+    except Exception as exc:
+        errors = graph_context.setdefault("__graph_errors__", {}).setdefault("graph_query_errors", [])
+        errors.append(f"qdrant codebase embeddings: {exc}")
+
+
+async def _merge_codegraphcontext_context(
+    settings: Settings,
+    graph_context: dict[str, dict[str, Any]],
+    repositories: list[dict[str, Any]],
+) -> None:
+    """Merge graph data written by CodeGraphContext's Neo4j backend."""
+    from neo4j import AsyncGraphDatabase
+
+    repo_path_to_name: dict[str, str] = {}
+    for repo in repositories:
+        name = repo.get("name") or ""
+        for value in (repo.get("container_path"), repo.get("path")):
+            if value:
+                repo_path_to_name[str(Path(value).resolve())] = name
+    if not repo_path_to_name:
+        return
+
+    query = """
+    MATCH (r:Repository)
+    WHERE r.path IN $repo_paths
+    CALL {
+        WITH r
+        MATCH (f:File)
+        WHERE f.path STARTS WITH r.path
+        RETURN count(f) AS cgc_files
+    }
+    CALL {
+        WITH r
+        MATCH (fn:Function)
+        WHERE fn.path STARTS WITH r.path
+        RETURN count(fn) AS cgc_functions
+    }
+    CALL {
+        WITH r
+        MATCH (cl:Class)
+        WHERE cl.path STARTS WITH r.path
+        RETURN count(cl) AS cgc_classes
+    }
+    CALL {
+        WITH r
+        MATCH (file:File)-[imp:IMPORTS]->(m:Module)
+        WHERE file.path STARTS WITH r.path
+        RETURN count(DISTINCT m) AS cgc_modules,
+               count(imp) AS cgc_import_edges
+    }
+    CALL {
+        WITH r
+        MATCH (caller:Function)-[rel:CALLS]->(callee:Function)
+        WHERE caller.path STARTS WITH r.path AND callee.path STARTS WITH r.path
+        RETURN count(rel) AS cgc_call_edges
+    }
+    CALL {
+        WITH r
+        MATCH (fn:Function)
+        WHERE fn.path STARTS WITH r.path
+        OPTIONAL MATCH (fn)-[:CALLS]->(callee:Function)
+        WHERE callee.path STARTS WITH r.path
+        WITH r, fn, count(DISTINCT callee) AS out_degree
+        OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
+        WHERE caller.path STARTS WITH r.path
+        WITH fn, out_degree, count(DISTINCT caller) AS in_degree
+        WITH fn, in_degree, out_degree, in_degree + out_degree AS degree
+        WHERE degree > 0
+        ORDER BY degree DESC
+        LIMIT 12
+        RETURN collect({
+            name: fn.name,
+            file_path: fn.path,
+            in_degree: in_degree,
+            out_degree: out_degree,
+            degree: degree
+        }) AS cgc_function_centrality
+    }
+    CALL {
+        WITH r
+        MATCH (caller:Function)-[:CALLS]->(callee:Function)
+        WHERE caller.path STARTS WITH r.path AND callee.path STARTS WITH r.path
+        RETURN collect({
+            caller: caller.name,
+            callee: callee.name,
+            caller_file: caller.path,
+            callee_file: callee.path
+        })[..20] AS cgc_function_edges
+    }
+    CALL {
+        WITH r
+        MATCH (file:File)-[imp:IMPORTS]->(module:Module)
+        WHERE file.path STARTS WITH r.path
+        WITH module, count(imp) AS refs
+        ORDER BY refs DESC
+        LIMIT 12
+        RETURN collect({
+            name: module.name,
+            file_path: module.name,
+            in_degree: refs,
+            out_degree: 0,
+            degree: refs
+        }) AS cgc_module_centrality
+    }
+    RETURN r.path AS repo_path,
+           cgc_files,
+           cgc_functions,
+           cgc_classes,
+           cgc_modules,
+           cgc_import_edges,
+           cgc_call_edges,
+           cgc_function_centrality,
+           cgc_function_edges,
+           cgc_module_centrality
+    """
+    driver = AsyncGraphDatabase.driver(
+        settings.neo4j_uri,
+        auth=(settings.neo4j_user, settings.neo4j_password),
+    )
+    try:
+        async with driver.session(database=settings.neo4j_database) as session:
+            result = await session.run(query, repo_paths=list(repo_path_to_name))
+            async for row in result:
+                data = dict(row)
+                repo_path = data.get("repo_path")
+                name = repo_path_to_name.get(repo_path)
+                if not name:
+                    continue
+                graph = graph_context.setdefault(name, {})
+                graph["codegraphcontext_available"] = True
+                graph["graph_files"] = max(int(graph.get("graph_files") or 0), int(data.get("cgc_files") or 0))
+                graph["functions"] = max(int(graph.get("functions") or 0), int(data.get("cgc_functions") or 0))
+                graph["classes"] = max(int(graph.get("classes") or 0), int(data.get("cgc_classes") or 0))
+                graph["modules"] = max(int(graph.get("modules") or 0), int(data.get("cgc_modules") or 0))
+                graph["import_edges"] = max(int(graph.get("import_edges") or 0), int(data.get("cgc_import_edges") or 0))
+                graph["call_edges"] = max(int(graph.get("call_edges") or 0), int(data.get("cgc_call_edges") or 0))
+                graph["function_centrality"] = _merge_unique_list(
+                    graph.get("function_centrality") or [],
+                    _relativize_cgc_rows(data.get("cgc_function_centrality") or [], repo_path),
+                )
+                graph["function_edges"] = _merge_unique_list(
+                    graph.get("function_edges") or [],
+                    _relativize_cgc_rows(data.get("cgc_function_edges") or [], repo_path),
+                )
+                graph["module_centrality"] = _merge_unique_list(
+                    graph.get("module_centrality") or [],
+                    data.get("cgc_module_centrality") or [],
+                )
+    except Exception as exc:
+        errors = graph_context.setdefault("__graph_errors__", {}).setdefault("graph_query_errors", [])
+        errors.append(f"CodeGraphContext graph: {exc}")
+    finally:
+        await driver.close()
+
+
+def _relativize_cgc_rows(rows: list[dict[str, Any]], repo_path: str) -> list[dict[str, Any]]:
+    normalized = []
+    for row in rows:
+        item = dict(row)
+        for key in ("file_path", "caller_file", "callee_file"):
+            if item.get(key):
+                item[key] = _relative_to_repo_path(str(item[key]), repo_path)
+        normalized.append(item)
+    return normalized
+
+
+def _relative_to_repo_path(path: str, repo_path: str) -> str:
+    try:
+        return str(Path(path).resolve().relative_to(Path(repo_path).resolve()))
+    except Exception:
+        return path
+
+
+def _merge_graph_row(target: dict[str, Any], row: dict[str, Any]) -> None:
+    """Merge duplicate Repo rows without letting sparse legacy nodes win."""
+    max_numeric_fields = {
+        "total_commits",
+        "total_additions",
+        "total_deletions",
+        "graph_files",
+        "current_files",
+        "functions",
+        "classes",
+        "modules",
+        "call_edges",
+        "import_edges",
+        "embedding_documents",
+    }
+    list_fields = {
+        "authors",
+        "hot_files",
+        "graph_extension_mix",
+        "recent_commits",
+        "available_embedding_models",
+        "module_centrality",
+        "function_centrality",
+        "function_edges",
+        "circular_dependencies",
+        "inheritance_depth",
+        "embedding_docs",
+    }
+    for key, value in row.items():
+        if value in (None, "", [], {}):
+            continue
+        if key in max_numeric_fields:
+            target[key] = max(int(target.get(key) or 0), int(value or 0))
+        elif key in list_fields and isinstance(value, list):
+            target[key] = _merge_unique_list(target.get(key) or [], value)
+        elif key not in target or target.get(key) in (None, "", [], {}):
+            target[key] = value
+
+
+def _merge_unique_list(existing: list[Any], incoming: list[Any]) -> list[Any]:
+    seen = set()
+    merged = []
+    for item in [*existing, *incoming]:
+        marker = json.dumps(item, sort_keys=True, default=str) if isinstance(item, (dict, list)) else str(item)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        merged.append(item)
+    return merged
 
 
 def _inspect_local_repository(repo: dict[str, Any]) -> dict[str, Any]:
@@ -641,6 +957,8 @@ def _inspect_local_repository(repo: dict[str, Any]) -> dict[str, Any]:
                 if language:
                     languages[language] += 1
                 if filename in _IMPORTANT_FILES or rel_str in _IMPORTANT_FILES:
+                    important_files.append(rel_str)
+                if filename in _MANIFEST_NAMES and _manifest_depth(rel_path) <= 4:
                     important_files.append(rel_str)
                 if filename in _ENTRYPOINT_CANDIDATES or rel_str in _ENTRYPOINT_CANDIDATES:
                     entry_points.append(rel_str)
@@ -715,6 +1033,7 @@ def _inspect_local_repository(repo: dict[str, Any]) -> dict[str, Any]:
             if len(paths) > 1 and name not in {"index.js", "index.ts", "__init__.py"}
         ][:12],
         "package_data": package_data,
+        "framework_hints": _framework_hints(root, source_files, package_data),
         "readme_summary": readme_summary,
         "git_recent": _git_recent_commits(root),
         "git_branch": _git(root, "rev-parse", "--abbrev-ref", "HEAD") or repo.get("branch") or "",
@@ -746,6 +1065,7 @@ def _repository_section(repo: dict[str, Any], stats: dict[str, Any], graph: dict
                 ["Purpose of repo", purpose],
                 ["Domain/problem solved", domain],
                 ["Main technologies", ", ".join(technologies) or "-"],
+                ["Framework/platform hints", ", ".join(stats.get("framework_hints", [])) or "-"],
                 ["Architecture shape", application_shape],
                 ["Monolith vs microservice", _monolith_microservice_assessment(stats, architecture)],
                 ["Main entry points", "<br>".join(stats["entry_points"]) or "-"],
@@ -767,6 +1087,7 @@ def _repository_section(repo: dict[str, Any], stats: dict[str, Any], graph: dict
                 f"Layering signal: {_layering_summary(stats)}",
                 f"Feature grouping signal: {_feature_grouping_summary(stats)}",
                 f"Key project/config files: {', '.join(stats['important_files'][:8]) or 'none detected'}",
+                f"Detected manifests: {', '.join(stats.get('package_data', {}).get('manifests', [])[:8]) or 'none detected'}",
             ]
         ),
         "",
@@ -907,6 +1228,7 @@ def _main_technologies(stats: dict[str, Any], graph: dict[str, Any]) -> list[str
     for language, _ in stats.get("languages", [])[:5]:
         technologies.append(language)
     technologies.extend(stats.get("package_data", {}).get("technologies", []))
+    technologies.extend(stats.get("framework_hints", []))
     graph_language = graph.get("language")
     if graph_language:
         technologies.append(graph_language)
@@ -958,24 +1280,28 @@ def _infer_domain(repo: dict[str, Any], stats: dict[str, Any], graph: dict[str, 
 
 def _detect_architecture(stats: dict[str, Any], graph: dict[str, Any]) -> list[list[str]]:
     dirs = {name.lower() for name in stats.get("all_directories", Counter()).keys()}
-    files = " ".join(item["path"].lower() for item in stats.get("source_files", [])[:500])
+    source_paths = [item["path"].lower() for item in stats.get("source_files", [])]
+    files = " ".join(source_paths[:1000])
     rows: list[list[str]] = []
 
     def add(pattern: str, evidence: list[str], confidence: str) -> None:
         rows.append([pattern, "; ".join(evidence), confidence])
 
-    if dirs & {"controllers", "controller"} and dirs & {"models", "model"}:
-        evidence = ["controller/model directories detected"]
-        if dirs & {"views", "templates"}:
+    has_controllers = bool(dirs & {"controllers", "controller"}) or any("/controllers/" in path for path in source_paths)
+    has_models = bool(dirs & {"models", "model"}) or any("/models/" in path for path in source_paths)
+    has_views = bool(dirs & {"views", "templates"}) or any("/views/" in path or path.endswith(".blade.php") for path in source_paths)
+    if has_controllers and has_models:
+        evidence = ["controller/model paths detected"]
+        if has_views:
             evidence.append("view/template layer present")
         add("MVC", evidence, "medium" if "view/template layer present" in evidence else "low")
 
     layer_hits = []
-    if dirs & {"api", "routes", "routers", "controllers"}:
+    if dirs & {"api", "routes", "routers", "controllers"} or any(part in files for part in ("/routes/", "/controllers/", "/api/")):
         layer_hits.append("interface/API layer")
-    if dirs & {"core", "domain", "services", "service", "business"}:
+    if dirs & {"core", "domain", "services", "service", "business"} or any(part in files for part in ("/services/", "/jobs/")):
         layer_hits.append("business/domain layer")
-    if dirs & {"db", "database", "repositories", "repository", "models", "dao", "persistence"}:
+    if dirs & {"db", "database", "repositories", "repository", "models", "dao", "persistence"} or any(part in files for part in ("/models/", "/database/", "/migrations/")):
         layer_hits.append("persistence layer")
     if len(layer_hits) >= 2:
         add("Layered architecture", layer_hits, "high" if len(layer_hits) >= 3 else "medium")
@@ -1024,6 +1350,8 @@ def _monolith_microservice_assessment(stats: dict[str, Any], architecture: list[
         return "Potential monorepo or multi-service workspace"
     if stats.get("total_files", 0) > 5000 or len(dirs) > 40:
         return "Likely monolith or broad platform repository"
+    if stats.get("total_files", 0) > 1000 and len(dirs) >= 5:
+        return "Likely monolith or broad platform repository"
     if stats.get("entry_points") and ("Event-driven system" in {row[0] for row in architecture} or stats.get("api_files")):
         return "Likely microservice or focused backend service"
     if stats.get("package_data", {}).get("is_library"):
@@ -1063,9 +1391,17 @@ def _role_for_directory(directory: str) -> str:
 
 def _layering_summary(stats: dict[str, Any]) -> str:
     roles = [_role_for_directory(name) for name, _ in stats.get("directories", [])]
-    if any("External interface" in role for role in roles) and any("Persistence" in role for role in roles):
+    paths = [item["path"].lower() for item in stats.get("source_files", [])]
+    has_interface = any("External interface" in role for role in roles) or any(
+        marker in path for path in paths for marker in ("/routes/", "/controllers/", "/api/")
+    )
+    has_persistence = any("Persistence" in role for role in roles) or any(
+        marker in path for path in paths for marker in ("/models/", "/database/", "/migrations/")
+    )
+    has_business = any(marker in path for path in paths for marker in ("/services/", "/jobs/", "/app/"))
+    if has_interface and has_persistence and has_business:
         return "interface, business, and persistence boundaries are visible"
-    if any("External interface" in role for role in roles):
+    if has_interface:
         return "interface layer is visible; persistence/domain boundaries are less explicit"
     return "layering is not obvious from top-level directories"
 
@@ -1662,6 +1998,8 @@ def _analyze_source_file(path: Path, rel_path: str) -> dict[str, Any]:
         complex_units = _python_complexity_units(text, rel_path)
     elif path.suffix.lower() in {".js", ".jsx", ".ts", ".tsx"}:
         complex_units = _simple_function_units(text, rel_path)
+    elif path.suffix.lower() == ".php":
+        complex_units = _php_complexity_units(text, rel_path)
     if file_complexity >= 25:
         complex_units.append(
             {
@@ -1782,6 +2120,40 @@ def _simple_function_units(text: str, rel_path: str) -> list[dict[str, Any]]:
     return units[:25]
 
 
+def _php_complexity_units(text: str, rel_path: str) -> list[dict[str, Any]]:
+    units = []
+    lines = text.splitlines()
+    patterns = [
+        re.compile(r"\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
+        re.compile(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\b"),
+    ]
+    for idx, line in enumerate(lines, start=1):
+        name = None
+        kind = "function"
+        for pattern in patterns:
+            match = pattern.search(line)
+            if match:
+                name = match.group(1)
+                if pattern.pattern.startswith("\\bclass"):
+                    kind = "class"
+                break
+        if not name:
+            continue
+        window = "\n".join(lines[idx - 1: min(len(lines), idx + 120)])
+        complexity = _estimate_complexity(window)
+        if complexity >= 8:
+            units.append(
+                {
+                    "kind": kind,
+                    "name": name,
+                    "path": rel_path,
+                    "lines": min(120, max(1, len(lines) - idx + 1)),
+                    "complexity": complexity,
+                }
+            )
+    return units[:25]
+
+
 def _extract_imports(text: str, extension: str) -> list[str]:
     imports = []
     if extension == ".py":
@@ -1799,7 +2171,44 @@ def _extract_imports(text: str, extension: str) -> list[str]:
             if value.startswith("."):
                 continue
             imports.append(value.split("/")[0] if not value.startswith("@") else "/".join(value.split("/")[:2]))
+    elif extension == ".php":
+        for match in re.finditer(r"^\s*use\s+([^;]+);", text, flags=re.MULTILINE):
+            value = match.group(1).strip().lstrip("\\")
+            if value:
+                imports.append(value.split("\\")[0])
+        for match in re.finditer(r"\b(?:include|include_once|require|require_once)\s*(?:\(|\s)\s*['\"]([^'\"]+)['\"]", text):
+            value = match.group(1)
+            if not value.startswith("."):
+                imports.append(value.split("/")[0])
     return [item for item in imports if item and item not in {"__future__"}]
+
+
+def _framework_hints(
+    root: Path,
+    source_files: list[dict[str, Any]],
+    package_data: dict[str, Any],
+) -> list[str]:
+    hints = []
+    paths = {item.get("path", "").replace("\\", "/") for item in source_files}
+    technologies = set(package_data.get("technologies", []))
+    if "Laravel" in technologies or {
+        "artisan",
+        "app/Http/Kernel.php",
+        "bootstrap/app.php",
+        "config/app.php",
+    } & paths:
+        hints.append("Laravel")
+    if any(path.endswith(".blade.php") or "/resources/views/" in path for path in paths):
+        hints.append("Blade templates")
+    if any("/routes/" in path or path.startswith("routes/") for path in paths):
+        hints.append("Route-driven web/API layer")
+    if any("/app/Jobs/" in path or "/jobs/" in path.lower() for path in paths):
+        hints.append("Background jobs/queues")
+    if any("/app/Models/" in path or "/models/" in path.lower() for path in paths):
+        hints.append("ORM/model layer")
+    if (root / ".github" / "workflows").exists():
+        hints.append("GitHub Actions")
+    return _dedupe(hints)
 
 
 def _read_package_data(root: Path) -> dict[str, Any]:
@@ -1808,12 +2217,14 @@ def _read_package_data(root: Path) -> dict[str, Any]:
         "entry_points": [],
         "external_integrations": [],
         "is_library": False,
+        "manifests": [],
     }
     if not root.exists():
         return data
 
-    package_json = root / "package.json"
-    if package_json.exists():
+    for package_json in _find_manifests(root, "package.json"):
+        rel = str(package_json.relative_to(root))
+        data["manifests"].append(rel)
         try:
             package = json.loads(package_json.read_text(encoding="utf-8", errors="ignore"))
         except (OSError, json.JSONDecodeError):
@@ -1826,11 +2237,31 @@ def _read_package_data(root: Path) -> dict[str, Any]:
         data["external_integrations"].extend(_integration_from_dependencies(dependencies.keys()))
         scripts = package.get("scripts") or {}
         for name, command in list(scripts.items())[:8]:
-            data["entry_points"].append(f"package.json script `{name}`: {command}")
-        data["is_library"] = bool(package.get("main") or package.get("exports"))
+            data["entry_points"].append(f"{rel} script `{name}`: {command}")
+        data["is_library"] = data["is_library"] or bool(package.get("main") or package.get("exports"))
 
-    requirements = root / "requirements.txt"
-    if requirements.exists():
+    for composer_json in _find_manifests(root, "composer.json"):
+        rel = str(composer_json.relative_to(root))
+        data["manifests"].append(rel)
+        try:
+            composer = json.loads(composer_json.read_text(encoding="utf-8", errors="ignore"))
+        except (OSError, json.JSONDecodeError):
+            composer = {}
+        dependencies = {
+            **(composer.get("require") or {}),
+            **(composer.get("require-dev") or {}),
+        }
+        data["technologies"].extend(_technology_from_dependencies(dependencies.keys()))
+        data["external_integrations"].extend(_integration_from_dependencies(dependencies.keys()))
+        data["is_library"] = data["is_library"] or bool(composer.get("type") == "library")
+        scripts = composer.get("scripts") or {}
+        if isinstance(scripts, dict):
+            for name in list(scripts.keys())[:8]:
+                data["entry_points"].append(f"{rel} script `{name}`")
+
+    for requirements in _find_manifests(root, "requirements.txt"):
+        rel = str(requirements.relative_to(root))
+        data["manifests"].append(rel)
         packages = []
         for line in requirements.read_text(encoding="utf-8", errors="ignore").splitlines():
             clean = line.strip()
@@ -1839,8 +2270,9 @@ def _read_package_data(root: Path) -> dict[str, Any]:
         data["technologies"].extend(_technology_from_dependencies(packages))
         data["external_integrations"].extend(_integration_from_dependencies(packages))
 
-    pyproject = root / "pyproject.toml"
-    if pyproject.exists():
+    for pyproject in _find_manifests(root, "pyproject.toml"):
+        rel = str(pyproject.relative_to(root))
+        data["manifests"].append(rel)
         text = pyproject.read_text(encoding="utf-8", errors="ignore").lower()
         data["is_library"] = data["is_library"] or "[project]" in text or "[tool.poetry]" in text
         data["technologies"].extend(_technology_from_dependencies(re.findall(r"[a-z0-9_.-]+", text)))
@@ -1853,7 +2285,27 @@ def _read_package_data(root: Path) -> dict[str, Any]:
     data["technologies"] = _dedupe(data["technologies"])
     data["entry_points"] = _dedupe(data["entry_points"])
     data["external_integrations"] = _dedupe(data["external_integrations"])
+    data["manifests"] = _dedupe(data["manifests"])
     return data
+
+
+def _find_manifests(root: Path, filename: str, max_depth: int = 4) -> list[Path]:
+    manifests = []
+    for path in root.rglob(filename):
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            continue
+        if any(part in _SKIP_DIRS for part in rel.parts):
+            continue
+        if _manifest_depth(rel) > max_depth:
+            continue
+        manifests.append(path)
+    return sorted(manifests, key=lambda item: (len(item.relative_to(root).parts), str(item)))[:20]
+
+
+def _manifest_depth(path: Path) -> int:
+    return max(0, len(path.parts) - 1)
 
 
 def _technology_from_dependencies(dependencies: Any) -> list[str]:
@@ -1881,6 +2333,14 @@ def _technology_from_dependencies(dependencies: Any) -> list[str]:
         "prisma": "Prisma",
         "openai": "OpenAI",
         "anthropic": "Anthropic",
+        "php": "PHP",
+        "laravel/framework": "Laravel",
+        "illuminate/": "Laravel",
+        "guzzlehttp": "Guzzle",
+        "aws/aws-sdk-php": "AWS SDK for PHP",
+        "firebase/php-jwt": "JWT",
+        "predis": "Redis",
+        "phpoffice": "Office document tooling",
     }
     found = []
     for dep in dependencies:
@@ -1907,6 +2367,11 @@ def _integration_from_dependencies(dependencies: Any) -> list[str]:
         "kafka": "Kafka",
         "redis": "Redis",
         "sentry": "Sentry",
+        "guzzlehttp": "HTTP APIs",
+        "aws/aws-sdk-php": "AWS",
+        "firebase": "Firebase",
+        "predis": "Redis",
+        "mysql": "MySQL",
     }
     found = []
     for dep in dependencies:
@@ -2053,7 +2518,7 @@ def _escape_inline(value: str) -> str:
     return value.replace("\r", " ").strip()
 
 
-def _report_filename(repositories: list[dict[str, Any]], embedding_model: str = "bge-m3") -> str:
+def _report_filename(repositories: list[dict[str, Any]], embedding_model: str = "codebase_bge_m3") -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     if len(repositories) == 1:
         slug = _slug(repositories[0]["name"])

@@ -79,11 +79,12 @@ class SlackReplyResponse(BaseModel):
 
 class GraphAdminTriggerRequest(BaseModel):
     action: Literal["update", "regenerate", "create_new", "jira_tickets_only"]
+    repositories: List[str] = []
     pull_latest_code: bool = True
     fetch_latest_jira_tickets: bool = True
     include_jira_tickets: bool = True
     build_embeddings: bool = True
-    embedding_model: Literal["bge-m3", "qwen3-embedding-0.6b", "mxbai-embed-large-v1"] = "bge-m3"
+    embedding_model: Literal["codebase_bge_m3", "codebase_qwen3_0_6b", "codebase_mxbai_large"] = "codebase_bge_m3"
     notes: str | None = None
 
 
@@ -101,6 +102,7 @@ class GraphJobResponse(BaseModel):
     status: str
     totals: Dict[str, int]
     progress: Dict[str, int]
+    logs: List[Dict[str, Any]] = []
     error: str | None = None
     started_at: str
     completed_at: str | None = None
@@ -109,4 +111,4 @@ class GraphJobResponse(BaseModel):
 class CodeAnalysisReportRequest(BaseModel):
     repositories: List[str]
     include_graph_context: bool = True
-    embedding_model: Literal["bge-m3", "qwen3-embedding-0.6b", "mxbai-embed-large-v1"] = "bge-m3"
+    embedding_model: Literal["codebase_bge_m3", "codebase_qwen3_0_6b", "codebase_mxbai_large"] = "codebase_bge_m3"
