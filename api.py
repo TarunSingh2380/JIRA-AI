@@ -11,10 +11,13 @@ import json
 import logging
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncIterator
 from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from app.code_analysis_report import build_code_analysis_report
 from app.config import settings
@@ -68,7 +71,24 @@ app = FastAPI(
     version="0.2.0",
     description="Jira ticket analysis, Slack review workflow, and graph DB administration.",
     lifespan=lifespan,
+    docs_url=None,
 )
+
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).resolve().parent / "app" / "static"),
+    name="static",
+)
+
+
+@app.get("/docs", include_in_schema=False)
+def swagger_ui_html() -> HTMLResponse:
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - Swagger UI",
+        swagger_js_url="/static/swagger-ui/swagger-ui-bundle.js",
+        swagger_css_url="/static/swagger-ui/swagger-ui.css",
+    )
 
 prompt_store = PromptStore(settings.prompt_dir)
 
