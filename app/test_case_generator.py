@@ -1,37 +1,28 @@
-"""Test case generator: JIRA ticket + Graph DB + Embeddings → Claude test cases.
+"""Test case generator: JIRA ticket + Qdrant semantic search + CGC Neo4j graph → Claude.
 
 Pipeline
 --------
-1. Semantic search  — POST repograph /search/semantic with ticket text
-2. Graph context    — GET  repograph /functions/{qn}/callers for each hit function
-                       GET  repograph /files/touched_recently for ticket keywords
-3. LLM generation   — Claude receives assembled context and generates test cases
+1. Semantic search  — embed ticket text with Ollama, search the Qdrant
+                      codebase collection (e.g. "codebase_bge_m3")
+2. Graph context    — query Neo4j directly using CGC's schema
+                      (:Function, :File, :Class with absolute paths)
+                      for functions in the matched files + their call edges
+3. LLM generation   — Claude receives assembled context → Markdown test cases
+
+No repograph HTTP service required.
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
 
-import requests
-
+from app.codebase_graph import CODEBASE_EMBEDDING_MODELS
 from app.config import Settings
 from app.llm_client import LLMClient
+from app.ollama_embedder import OllamaEmbedder
 
 log = logging.getLogger(__name__)
-
-# Map the embedding model names used by the graph-admin UI
-# to the model_key values accepted by repograph /search/semantic.
-_MODEL_KEY_MAP: Dict[str, str] = {
-    "codebase_bge_m3": "bge-m3",
-    "codebase_qwen3_0_6b": "qwen3-embedding-0.6b",
-    "codebase_mxbai_large": "mxbai-embed-large-v1",
-    # pass-through if already in repograph format
-    "bge-m3": "bge-m3",
-    "qwen3-embedding-0.6b": "qwen3-embedding-0.6b",
-    "mxbai-embed-large-v1": "mxbai-embed-large-v1",
-}
 
 _STOP_WORDS = {
     "about", "after", "again", "before", "description",
@@ -40,14 +31,15 @@ _STOP_WORDS = {
 }
 
 _GRAPH_SCHEMA_SUMMARY = """
-Neo4j graph schema:
-  (:Repo)   (:File)   (:Commit)-[:AUTHORED_BY]->(:Author)
-  (:Function {qualified_name, name, file_path, repo_full_name, start_line, end_line, language})
-  (:Class    {qualified_name, name, file_path, repo_full_name, start_line})
+Neo4j graph schema (CodeGraphContext):
+  (:Repository {path, name})
+  (:File       {path})                 ← absolute paths
+  (:Function   {name, path, line_number})
+  (:Class      {name, path, line_number})
   (:Function)-[:CALLS]->(:Function)
   (:Function)-[:METHOD_OF]->(:Class)
   (:Class)-[:EXTENDS]->(:Class)
-  (:Commit)-[:TOUCHES {change_type}]->(:File)
+  (:File)-[:CONTAINS]->(:Function | :Class)
 """.strip()
 
 _SYSTEM_PROMPT = """\
@@ -81,7 +73,7 @@ _USER_TEMPLATE = """\
 
 ---
 
-## Code Context (semantic search + graph traversal)
+## Code Context (semantic search + CGC graph traversal)
 {context}
 
 ---
@@ -93,7 +85,6 @@ TC-<N>: <Title>
   Preconditions: ...
   Steps:
     1. ...
-    2. ...
   Expected: ...
 ```
 
@@ -102,13 +93,11 @@ Finish with a **Summary** section: what is being tested and why.
 
 
 class TestCaseGenerator:
-    """Orchestrates semantic search, graph context fetch, and LLM test-case generation."""
+    """Orchestrates Qdrant semantic search, CGC Neo4j graph context, and LLM generation."""
 
     def __init__(self, settings: Settings, llm_client: LLMClient) -> None:
         self.settings = settings
         self.llm_client = llm_client
-        self._base = settings.repograph_base_url
-        self._timeout = settings.external_request_timeout_seconds
 
     # ── public entry point ────────────────────────────────────────────────────
 
@@ -123,7 +112,7 @@ class TestCaseGenerator:
         """
         Full pipeline → dict with keys:
           test_cases, semantic_hits_count, functions_found,
-          files_touched_count, context_summary
+          files_touched_count, context_chars
         """
         ticket_key = (
             ticket_data.get("issueKey")
@@ -131,180 +120,247 @@ class TestCaseGenerator:
             or ticket_data.get("issue_key")
             or "unknown"
         )
-        log.info("TestCaseGenerator.generate ticket=%s repo=%s model=%s", ticket_key, repo, embedding_model)
+        log.info(
+            "TestCaseGenerator.generate ticket=%s repo=%s model=%s",
+            ticket_key, repo, embedding_model,
+        )
 
         query = self._build_query(ticket_data)
-        model_key = _MODEL_KEY_MAP.get(embedding_model, "bge-m3")
 
-        # 1. Semantic search
-        semantic_hits = self._semantic_search(query, repo=repo, model_key=model_key, top_k=top_k)
+        # 1. Semantic search via Qdrant + Ollama
+        semantic_hits = self._semantic_search_qdrant(
+            query, collection=embedding_model, repo=repo, top_k=top_k
+        )
         log.info("Semantic hits: %d", len(semantic_hits))
 
-        # 2. Function call-graph context from semantic hits
-        function_context = self._function_context_from_hits(semantic_hits)
-
-        # 3. Files touched recently (keyword fallback / supplement)
+        # 2. CGC graph context from Neo4j
+        file_paths = self._extract_file_paths(semantic_hits)
         keywords = self._keywords(query)[:6]
-        touched = self._files_touched_recently(keywords)
+        graph_functions, graph_classes = self._graph_context_cgc(
+            file_paths=file_paths,
+            keywords=keywords,
+            repo=repo,
+        )
 
-        # 4. Assemble context block
-        context_block = self._build_context_block(semantic_hits, function_context, touched)
+        # 3. Assemble context block
+        context_block = self._build_context_block(semantic_hits, graph_functions, graph_classes)
 
-        # 5. LLM call
-        ticket_text = self._ticket_as_text(ticket_data)
+        # 4. LLM call
         user_message = _USER_TEMPLATE.format(
             schema=_GRAPH_SCHEMA_SUMMARY,
-            ticket=ticket_text,
-            context=context_block or "(no code context retrieved — answer from ticket alone)",
+            ticket=self._ticket_as_text(ticket_data),
+            context=context_block or "(no code context retrieved — answering from ticket alone)",
         )
-        log.info("Calling LLM for test case generation (context_chars=%d)", len(context_block))
+        log.info("Calling LLM (context_chars=%d)", len(context_block))
         test_cases_md = self.llm_client.complete(_SYSTEM_PROMPT, user_message)
 
         return {
             "test_cases": test_cases_md,
             "semantic_hits_count": len(semantic_hits),
-            "functions_found": len(function_context),
-            "files_touched_count": len(touched),
+            "functions_found": len(graph_functions),
+            "files_touched_count": len(file_paths),
             "context_chars": len(context_block),
         }
 
-    # ── repograph callers ─────────────────────────────────────────────────────
+    # ── semantic search via Qdrant ────────────────────────────────────────────
 
-    def _semantic_search(
+    def _semantic_search_qdrant(
         self,
         query: str,
         *,
+        collection: str,
         repo: Optional[str],
-        model_key: str,
         top_k: int,
     ) -> List[Dict[str, Any]]:
-        try:
-            resp = requests.post(
-                f"{self._base}/search/semantic",
-                json={
-                    "query": query,
-                    "repos": [repo] if repo else None,
-                    "top_k": top_k,
-                    "model_key": model_key,
-                },
-                timeout=self._timeout,
-            )
-            if resp.status_code in {404, 501}:
-                log.debug("repograph /search/semantic not available (%d)", resp.status_code)
-                return []
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("results", []) if isinstance(data, dict) else []
-        except requests.RequestException as exc:
-            log.warning("Semantic search failed: %s", exc)
+        model_cfg = CODEBASE_EMBEDDING_MODELS.get(
+            collection, CODEBASE_EMBEDDING_MODELS["codebase_bge_m3"]
+        )
+        embedder = OllamaEmbedder(
+            base_url=self.settings.ollama_url,
+            model=model_cfg["ollama_model"],
+            timeout_seconds=self.settings.ollama_embed_timeout_seconds,
+        )
+        if not embedder.is_available():
+            log.warning("Ollama model %s unavailable; skipping semantic search", model_cfg["ollama_model"])
             return []
 
-    def _callers_for_function(self, qualified_name: str) -> List[Dict[str, Any]]:
-        try:
-            resp = requests.get(
-                f"{self._base}/functions/{qualified_name}/callers",
-                timeout=self._timeout,
-            )
-            if resp.status_code in {404, 501}:
-                return []
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("callers", []) if isinstance(data, dict) else []
-        except requests.RequestException as exc:
-            log.debug("Callers fetch failed for %s: %s", qualified_name, exc)
+        query_vector = embedder.embed(query)
+        if not query_vector:
+            log.warning("Ollama returned empty embedding for query")
             return []
 
-    def _files_touched_recently(self, keywords: List[str]) -> List[Dict[str, Any]]:
-        results: List[Dict[str, Any]] = []
-        for kw in keywords:
-            try:
-                resp = requests.get(
-                    f"{self._base}/files/touched_recently",
-                    params={"keyword": kw, "days": 180, "limit": 10},
-                    timeout=self._timeout,
+        try:
+            from qdrant_client import QdrantClient
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+        except ImportError:
+            log.warning("qdrant-client not installed; skipping semantic search")
+            return []
+
+        try:
+            client = QdrantClient(
+                url=self.settings.qdrant_url,
+                api_key=self.settings.qdrant_api_key or None,
+            )
+            search_filter = None
+            if repo:
+                search_filter = Filter(
+                    must=[FieldCondition(key="repo", match=MatchValue(value=repo))]
                 )
-                if resp.status_code in {404, 501}:
-                    continue
-                resp.raise_for_status()
-                data = resp.json()
-                if isinstance(data, list):
-                    for item in data[:5]:
-                        item["keyword"] = kw
-                        results.append(item)
-            except requests.RequestException:
-                pass
-        return results
+            results = client.search(
+                collection_name=collection,
+                query_vector=query_vector,
+                limit=top_k,
+                query_filter=search_filter,
+                with_payload=True,
+            )
+            return [
+                {
+                    "score": r.score,
+                    "path": r.payload.get("path", ""),
+                    "repo": r.payload.get("repo", ""),
+                    "repo_name": r.payload.get("repo_name", ""),
+                    "language": r.payload.get("language", ""),
+                    "text": (r.payload.get("text") or "")[:500],
+                }
+                for r in results
+            ]
+        except Exception as exc:
+            log.warning("Qdrant search failed: %s", exc)
+            return []
+
+    # ── CGC graph context from Neo4j ──────────────────────────────────────────
+
+    def _graph_context_cgc(
+        self,
+        *,
+        file_paths: List[str],
+        keywords: List[str],
+        repo: Optional[str],
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Query CGC's Neo4j schema for functions and classes relevant to the ticket."""
+        try:
+            from neo4j import GraphDatabase
+        except ImportError:
+            log.warning("neo4j package not installed; skipping graph context")
+            return [], []
+
+        functions: List[Dict[str, Any]] = []
+        classes: List[Dict[str, Any]] = []
+
+        try:
+            driver = GraphDatabase.driver(
+                self.settings.neo4j_uri,
+                auth=(self.settings.neo4j_user, self.settings.neo4j_password),
+            )
+            with driver.session(database=self.settings.neo4j_database) as session:
+                # Functions in matched files (using ENDS WITH for relative→absolute path match)
+                if file_paths:
+                    result = session.run(
+                        """
+                        MATCH (fn:Function)
+                        WHERE ANY(p IN $paths WHERE fn.path ENDS WITH p)
+                        OPTIONAL MATCH (fn)-[:CALLS]->(callee:Function)
+                        OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
+                        RETURN fn.name AS name,
+                               fn.path AS path,
+                               fn.line_number AS line_number,
+                               collect(DISTINCT callee.name)[..8] AS calls,
+                               collect(DISTINCT caller.name)[..8] AS called_by
+                        LIMIT 30
+                        """,
+                        paths=file_paths,
+                    )
+                    functions = [dict(r) for r in result]
+
+                # Classes in matched files
+                if file_paths:
+                    result = session.run(
+                        """
+                        MATCH (cl:Class)
+                        WHERE ANY(p IN $paths WHERE cl.path ENDS WITH p)
+                        RETURN cl.name AS name, cl.path AS path,
+                               cl.line_number AS line_number
+                        LIMIT 15
+                        """,
+                        paths=file_paths,
+                    )
+                    classes = [dict(r) for r in result]
+
+                # Keyword fallback: search function names if no file hits
+                if not functions and keywords:
+                    conditions = " OR ".join(
+                        f"toLower(fn.name) CONTAINS toLower('{kw.replace(chr(39), '')}')"
+                        for kw in keywords[:5]
+                    )
+                    result = session.run(
+                        f"""
+                        MATCH (fn:Function)
+                        WHERE {conditions}
+                        OPTIONAL MATCH (fn)-[:CALLS]->(callee:Function)
+                        OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
+                        RETURN fn.name AS name,
+                               fn.path AS path,
+                               fn.line_number AS line_number,
+                               collect(DISTINCT callee.name)[..8] AS calls,
+                               collect(DISTINCT caller.name)[..8] AS called_by
+                        LIMIT 20
+                        """
+                    )
+                    functions = [dict(r) for r in result]
+
+            driver.close()
+        except Exception as exc:
+            log.warning("Neo4j CGC graph query failed: %s", exc)
+
+        log.info(
+            "CGC graph context: %d functions, %d classes from %d file paths + %d keywords",
+            len(functions), len(classes), len(file_paths), len(keywords),
+        )
+        return functions, classes
 
     # ── context assembly ──────────────────────────────────────────────────────
-
-    def _function_context_from_hits(
-        self, hits: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
-        """For every Function-kind hit, fetch its callers from the graph."""
-        fn_context: List[Dict[str, Any]] = []
-        seen_qn: set[str] = set()
-
-        for hit in hits:
-            if hit.get("kind") != "function":
-                continue
-            qn = hit.get("source_key") or ""
-            if not qn or qn in seen_qn:
-                continue
-            seen_qn.add(qn)
-            callers = self._callers_for_function(qn)
-            fn_context.append({
-                "qualified_name": qn,
-                "title": hit.get("title", ""),
-                "score": hit.get("score", 0),
-                "text": (hit.get("text") or "")[:400],
-                "callers": [c.get("name", "") for c in callers[:5]],
-            })
-
-        return fn_context
 
     def _build_context_block(
         self,
         hits: List[Dict[str, Any]],
-        fn_context: List[Dict[str, Any]],
-        touched: List[Dict[str, Any]],
+        functions: List[Dict[str, Any]],
+        classes: List[Dict[str, Any]],
     ) -> str:
         parts: List[str] = []
 
         if hits:
-            parts.append("### Semantically Similar Code")
+            parts.append("### Semantically Similar Code Files")
             for h in hits[:12]:
                 score = h.get("score", 0)
-                kind = h.get("kind", "?")
-                title = h.get("title", "")
-                text = (h.get("text") or "")[:500]
-                parts.append(f"\n**[{kind}] {title}** (score={score:.3f})")
+                path = h.get("path", "")
+                lang = h.get("language", "")
+                text = h.get("text", "")
+                parts.append(f"\n**{path}** ({lang}, score={score:.3f})")
                 if text:
-                    parts.append(f"```\n{text}\n```")
+                    parts.append(f"```{lang.lower()}\n{text[:400]}\n```")
 
-        if fn_context:
-            parts.append("\n### Function Call Graph")
-            for fn in fn_context:
-                callers_str = ", ".join(fn["callers"]) if fn["callers"] else "none"
-                parts.append(
-                    f"- **{fn['title']}** (score={fn['score']:.3f})\n"
-                    f"  called_by: {callers_str}\n"
-                    + (f"  snippet: {fn['text'][:200]}" if fn["text"] else "")
-                )
+        if functions:
+            parts.append("\n### Functions (from CGC call graph)")
+            for fn in functions[:20]:
+                name = fn.get("name", "")
+                path = fn.get("path", "")
+                line = fn.get("line_number", "?")
+                calls_str = ", ".join(fn.get("calls") or [])
+                callers_str = ", ".join(fn.get("called_by") or [])
+                entry = f"- **{name}** ({_short_path(path)}:{line})"
+                if calls_str:
+                    entry += f"\n  calls: {calls_str}"
+                if callers_str:
+                    entry += f"\n  called_by: {callers_str}"
+                parts.append(entry)
 
-        if touched:
-            parts.append("\n### Recently Changed Files (keyword match)")
-            seen_paths: set[str] = set()
-            for f in touched[:15]:
-                path = f.get("path", "")
-                if path in seen_paths:
-                    continue
-                seen_paths.add(path)
-                parts.append(
-                    f"- `{path}` (repo={f.get('repo','?')}, "
-                    f"touches={f.get('touch_count_180d','?')}, "
-                    f"last={f.get('last_touched_at','?')[:10]}, "
-                    f"keyword={f.get('keyword','')})"
-                )
+        if classes:
+            parts.append("\n### Classes (from CGC graph)")
+            for cls in classes[:10]:
+                name = cls.get("name", "")
+                path = cls.get("path", "")
+                line = cls.get("line_number", "?")
+                parts.append(f"- **{name}** ({_short_path(path)}:{line})")
 
         return "\n".join(parts)
 
@@ -318,6 +374,17 @@ class TestCaseGenerator:
             if val:
                 parts.append(str(val)[:500])
         return " ".join(parts)
+
+    @staticmethod
+    def _extract_file_paths(hits: List[Dict[str, Any]]) -> List[str]:
+        seen: set[str] = set()
+        paths: List[str] = []
+        for h in hits:
+            p = h.get("path", "")
+            if p and p not in seen:
+                seen.add(p)
+                paths.append(p)
+        return paths
 
     @staticmethod
     def _keywords(text: str) -> List[str]:
@@ -349,3 +416,9 @@ class TestCaseGenerator:
             f"Assignee   : {ticket_data.get('assignee', '')}\n"
             f"Due        : {ticket_data.get('dueDate') or ticket_data.get('due_date', 'not set')}"
         )
+
+
+def _short_path(abs_path: str, max_parts: int = 4) -> str:
+    """Return last N components of a path to keep context blocks readable."""
+    parts = abs_path.replace("\\", "/").split("/")
+    return "/".join(parts[-max_parts:]) if len(parts) > max_parts else abs_path
