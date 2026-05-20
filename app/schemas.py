@@ -134,3 +134,37 @@ class TestCaseResponse(BaseModel):
     semantic_hits_count: int
     functions_found: int
     files_touched_count: int
+
+
+class SimilarTicketRequest(BaseModel):
+    summary: str = Field(..., description="Summary of the new ticket.")
+    description: str | None = Field(default=None, description="Full ticket description.")
+    project_key: str | None = Field(default=None, description="Restrict search to a project key.")
+    top_k: int = Field(default=10, ge=1, le=50, description="Max number of similar tickets to return.")
+    statuses: list[str] = Field(
+        default=["Done", "Closed", "Resolved"],
+        description="Only return tickets whose status is in this list.",
+    )
+
+
+class SimilarTicketResult(BaseModel):
+    ticket_key: str
+    project_key: str
+    summary: str
+    description: str | None = None
+    status: str
+    issue_type: str | None = None
+    priority: str | None = None
+    assignee_name: str | None = None
+    reporter_name: str | None = None
+    labels: list[str] = []
+    created_at: str | None = None
+    updated_at: str | None = None
+    similarity_score: float = 0.0
+
+
+class SimilarTicketsResponse(BaseModel):
+    query_summary: str
+    total_found: int
+    search_method: str = Field(..., description="'semantic' or 'keyword_fallback' or 'none'")
+    tickets: list[SimilarTicketResult]

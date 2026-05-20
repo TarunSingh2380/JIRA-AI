@@ -46,9 +46,13 @@ from app.schemas import (
     SlackReplyResponse,
     SlackMessageRequest,
     SlackMessageResponse,
+    SimilarTicketRequest,
+    SimilarTicketResult,
+    SimilarTicketsResponse,
     TestCaseRequest,
     TestCaseResponse,
 )
+from app.similar_ticket_finder import SimilarTicketFinder
 from app.slack_client import SlackClient
 from app.slack_review_workflow import SlackReviewWorkflow
 from app.test_case_generator import TestCaseGenerator
@@ -384,6 +388,69 @@ def generate_test_cases(request: TestCaseRequest) -> TestCaseResponse:
     )
 
 
+# ─── Similar ticket finder ────────────────────────────────────────────────────
+
+@app.post("/analyze-ticket/similar", response_model=SimilarTicketsResponse)
+def find_similar_tickets(request: SimilarTicketRequest) -> SimilarTicketsResponse:
+    """
+    Find historically similar closed Jira tickets for a new incoming ticket.
+
+    Search strategy (in order):
+      1. Semantic – embed (summary + description) with Ollama, search Qdrant
+         `jira_tickets` collection filtered by status, enrich hits from PostgreSQL.
+      2. Keyword fallback – ILIKE search in PostgreSQL `jira_ticket_cache` when
+         Ollama / Qdrant is unavailable.
+
+    Only tickets whose `status` appears in `statuses` (default: Done / Closed /
+    Resolved) are returned. Results are ordered by cosine similarity score.
+    """
+    log.info(
+        "POST /analyze-ticket/similar summary=%r project=%s statuses=%s top_k=%d",
+        request.summary[:60], request.project_key, request.statuses, request.top_k,
+    )
+    try:
+        finder = SimilarTicketFinder(settings=settings)
+        result = finder.find_similar(
+            request.summary,
+            request.description,
+            project_key=request.project_key,
+            top_k=request.top_k,
+            statuses=request.statuses,
+        )
+    except Exception as exc:
+        log.exception("Similar ticket search failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    tickets = [
+        SimilarTicketResult(
+            ticket_key=t.get("ticket_key", ""),
+            project_key=t.get("project_key", ""),
+            summary=t.get("summary", ""),
+            description=t.get("description"),
+            status=t.get("status", ""),
+            issue_type=t.get("issue_type"),
+            priority=t.get("priority"),
+            assignee_name=t.get("assignee_name"),
+            reporter_name=t.get("reporter_name"),
+            labels=t.get("labels") or [],
+            created_at=t.get("created_at"),
+            updated_at=t.get("updated_at"),
+            similarity_score=t.get("similarity_score", 0.0),
+        )
+        for t in result["tickets"]
+    ]
+    log.info(
+        "Similar tickets: method=%s found=%d",
+        result["search_method"], len(tickets),
+    )
+    return SimilarTicketsResponse(
+        query_summary=result["query_summary"],
+        total_found=result["total_found"],
+        search_method=result["search_method"],
+        tickets=tickets,
+    )
+
+
 # ─── Chat ────────────────────────────────────────────────────────────────────
 
 @app.post("/chat", response_model=SlackMessageResponse)
@@ -661,6 +728,115 @@ GRAPH_ADMIN_HTML = """
     @media (max-width: 900px) {
       .tc-layout { grid-template-columns: 1fr; }
     }
+
+    /* ── Similar Tickets tab ── */
+    .sim-status-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      cursor: pointer;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 4px 11px;
+      user-select: none;
+    }
+    .sim-status-label input { accent-color: var(--accent); width: 14px; height: 14px; }
+    .sim-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 12px;
+      transition: box-shadow .15s;
+    }
+    .sim-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+    .sim-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .sim-card-key {
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .sim-card-summary {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      flex: 1;
+    }
+    .sim-score {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .sim-score.high   { background: #dcfce7; color: var(--ok); }
+    .sim-score.medium { background: #fef9c3; color: #854d0e; }
+    .sim-score.low    { background: #f1f5f9; color: var(--muted); }
+    .sim-score.kw     { background: #f1f5f9; color: var(--muted); }
+    .sim-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .sim-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .sim-chip.status-done     { background: #dcfce7; color: var(--ok);     border-color: #a7f3d0; }
+    .sim-chip.status-closed   { background: #f1f5f9; color: var(--muted);  border-color: var(--line); }
+    .sim-chip.status-resolved { background: #ede9fe; color: #6d28d9;       border-color: #c4b5fd; }
+    .sim-chip.type-bug        { background: #fee2e2; color: var(--danger);  border-color: #fca5a5; }
+    .sim-chip.type-story      { background: #dbeafe; color: var(--accent);  border-color: #93c5fd; }
+    .sim-chip.type-task       { background: #fef9c3; color: #854d0e;        border-color: #fde68a; }
+    .sim-description {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-top: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .sim-description.expanded { -webkit-line-clamp: unset; }
+    .sim-expand-btn {
+      font-size: 12px;
+      color: var(--accent);
+      background: none;
+      border: none;
+      padding: 2px 0;
+      cursor: pointer;
+      width: auto;
+      min-height: unset;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .sim-footer {
+      display: flex;
+      gap: 16px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
   </style>
   <!-- original styles below -->
   <style>
@@ -898,6 +1074,7 @@ GRAPH_ADMIN_HTML = """
         <button class="tab-btn" data-tab="jira">Jira Tickets</button>
         <button class="tab-btn" data-tab="logs">Logs</button>
         <button class="tab-btn" data-tab="testcases">Test Cases</button>
+        <button class="tab-btn" data-tab="similar">Similar Tickets</button>
       </nav>
 
       <!-- Tab: Repositories -->
@@ -1064,6 +1241,69 @@ GRAPH_ADMIN_HTML = """
                 onclick="copyTestCases()">Copy Markdown</button>
             </div>
             <div id="tc-output" class="tc-output" hidden></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Similar Tickets -->
+      <div class="tab-panel" id="tab-similar">
+        <div class="tc-layout">
+
+          <!-- ── Form ── -->
+          <div class="tc-form-col">
+            <p class="tc-section-label">New ticket details</p>
+            <div class="tc-field">
+              <label class="tc-label">Summary <span class="tc-required">*</span></label>
+              <input id="sim-summary" type="text" class="tc-input" placeholder="Short description of the new ticket">
+            </div>
+            <div class="tc-field">
+              <label class="tc-label">Description <span class="tc-optional">(optional but improves results)</span></label>
+              <textarea id="sim-description" class="tc-textarea" rows="6" placeholder="Full ticket description…"></textarea>
+            </div>
+
+            <p class="tc-section-label" style="margin-top:18px;">Search filters</p>
+            <div class="tc-field-row">
+              <div class="tc-field">
+                <label class="tc-label">Project key <span class="tc-optional">(optional)</span></label>
+                <input id="sim-projectKey" type="text" class="tc-input" placeholder="e.g. RFC">
+              </div>
+              <div class="tc-field">
+                <label class="tc-label">Top K results</label>
+                <select id="sim-topK" class="tc-select">
+                  <option value="5">5</option>
+                  <option value="10" selected>10</option>
+                  <option value="20">20</option>
+                  <option value="30">30</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+            </div>
+            <div class="tc-field">
+              <label class="tc-label">Match tickets with status</label>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="Done" checked> Done</label>
+                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="Closed" checked> Closed</label>
+                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="Resolved" checked> Resolved</label>
+                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="In Progress"> In Progress</label>
+                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="Open"> Open</label>
+              </div>
+            </div>
+            <button id="sim-searchBtn" style="margin-top:18px;" onclick="searchSimilarTickets()">Find Similar Tickets</button>
+            <div id="sim-status" class="status-bar" style="margin-top:10px;"></div>
+          </div>
+
+          <!-- ── Results ── -->
+          <div class="tc-result-col">
+            <div id="sim-placeholder" class="tc-placeholder">
+              Fill in a ticket summary and click <strong>Find Similar Tickets</strong>.
+            </div>
+
+            <div id="sim-stats" hidden style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+              <span class="tc-stat"><span id="sim-stat-total">0</span> tickets found</span>
+              <span class="tc-stat" id="sim-stat-method-badge">—</span>
+            </div>
+
+            <div id="sim-results" hidden></div>
           </div>
         </div>
       </div>
@@ -1521,6 +1761,127 @@ GRAPH_ADMIN_HTML = """
           .replace(/\\n\\n/g, "<br><br>")
           .replace(/\\n/g, "<br>");
       }).join("");
+    }
+
+    // ── Similar Tickets tab ──────────────────────────────────────────────
+    async function searchSimilarTickets() {
+      const summary = document.querySelector("#sim-summary").value.trim();
+      if (!summary) {
+        simSetStatus("Summary is required", "error");
+        return;
+      }
+      const statuses = [...document.querySelectorAll(".sim-status-cb:checked")].map(cb => cb.value);
+      if (!statuses.length) {
+        simSetStatus("Select at least one status to match", "error");
+        return;
+      }
+
+      const btn = document.querySelector("#sim-searchBtn");
+      btn.disabled = true;
+      simSetStatus("Searching for similar tickets…", "running");
+      document.querySelector("#sim-placeholder").hidden = false;
+      document.querySelector("#sim-stats").hidden = true;
+      document.querySelector("#sim-results").hidden = true;
+
+      const body = {
+        summary,
+        description: document.querySelector("#sim-description").value.trim() || null,
+        project_key: document.querySelector("#sim-projectKey").value.trim() || null,
+        top_k: parseInt(document.querySelector("#sim-topK").value, 10),
+        statuses,
+      };
+
+      try {
+        const res  = await fetch("/analyze-ticket/similar", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Search failed");
+
+        document.querySelector("#sim-stat-total").textContent = data.total_found;
+        const methodBadge = document.querySelector("#sim-stat-method-badge");
+        methodBadge.textContent = data.search_method === "semantic" ? "Semantic search" : "Keyword fallback";
+        methodBadge.style.color = data.search_method === "semantic" ? "var(--ok)" : "var(--warn)";
+
+        const statsEl = document.querySelector("#sim-stats");
+        statsEl.hidden = false;
+        statsEl.style.display = "flex";
+
+        document.querySelector("#sim-placeholder").hidden = true;
+
+        const resultsEl = document.querySelector("#sim-results");
+        if (!data.tickets || !data.tickets.length) {
+          resultsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;">No similar tickets found. Try broadening the status filter or removing the project key.</p>';
+        } else {
+          resultsEl.innerHTML = data.tickets.map(renderSimCard).join("");
+        }
+        resultsEl.hidden = false;
+        simSetStatus(data.total_found ? `Found ${data.total_found} similar ticket${data.total_found !== 1 ? "s" : ""}` : "No matches found", data.total_found ? "ok" : "");
+      } catch (err) {
+        simSetStatus(err.message, "error");
+        document.querySelector("#sim-placeholder").hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderSimCard(t) {
+      const score = t.similarity_score || 0;
+      const scoreLabel = score === 0 ? "keyword" : `${Math.round(score * 100)}% match`;
+      const scoreClass = score === 0 ? "kw" : score >= 0.75 ? "high" : score >= 0.5 ? "medium" : "low";
+
+      const statusKey = (t.status || "").toLowerCase().replace(/\\s+/g, "-");
+      const typeKey   = (t.issue_type || "").toLowerCase();
+
+      const chips = [
+        t.status    ? `<span class="sim-chip status-${statusKey}">${esc(t.status)}</span>` : "",
+        t.issue_type ? `<span class="sim-chip type-${typeKey}">${esc(t.issue_type)}</span>` : "",
+        t.priority  ? `<span class="sim-chip">${esc(t.priority)}</span>` : "",
+      ].filter(Boolean).join("");
+
+      const desc = (t.description || "").trim();
+      const descId = `sim-desc-${esc(t.ticket_key)}`;
+      const descHtml = desc
+        ? `<div class="sim-description" id="${descId}">${esc(desc)}</div>
+           <button class="sim-expand-btn" onclick="toggleSimDesc('${descId}', this)">Show more</button>`
+        : "";
+
+      const footer = [
+        t.assignee_name  ? `Assignee: <b>${esc(t.assignee_name)}</b>` : "",
+        t.reporter_name  ? `Reporter: <b>${esc(t.reporter_name)}</b>` : "",
+        t.updated_at     ? `Updated: ${esc(fmtDate(t.updated_at))}` : "",
+        t.created_at     ? `Created: ${esc(fmtDate(t.created_at))}` : "",
+      ].filter(Boolean).map(s => `<span>${s}</span>`).join("");
+
+      const labels = (t.labels || []).map(l => `<span class="sim-chip">${esc(l)}</span>`).join("");
+
+      return `
+        <div class="sim-card">
+          <div class="sim-card-header">
+            <div>
+              <span class="sim-card-key">${esc(t.ticket_key)}</span>
+              <div class="sim-card-summary">${esc(t.summary || "")}</div>
+            </div>
+            <span class="sim-score ${scoreClass}">${scoreLabel}</span>
+          </div>
+          <div class="sim-card-meta">${chips}${labels}</div>
+          ${descHtml}
+          ${footer ? `<div class="sim-footer">${footer}</div>` : ""}
+        </div>`;
+    }
+
+    function toggleSimDesc(id, btn) {
+      const el = document.querySelector("#" + id);
+      const expanded = el.classList.toggle("expanded");
+      btn.textContent = expanded ? "Show less" : "Show more";
+    }
+
+    function simSetStatus(msg, cls = "") {
+      const el = document.querySelector("#sim-status");
+      el.textContent = msg;
+      el.className = `status-bar ${cls}`;
     }
 
     // ── Jira tickets tab ─────────────────────────────────────────────────
