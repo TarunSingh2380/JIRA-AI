@@ -46,7 +46,7 @@ _SYSTEM_PROMPT = """\
 You are a senior software engineer and QA expert specialising in test-driven development.
 
 You receive:
-  - A JIRA ticket (key, type, priority, summary, description)
+  - A JIRA ticket (key, type, summary, description)
   - Code context retrieved via semantic search and graph traversal of the actual codebase
 
 Your task: produce a concise Markdown test-case document with EXACTLY 5 test cases — no more, no fewer.
@@ -419,13 +419,8 @@ class TestCaseGenerator:
         return (
             f"Issue Key  : {key}\n"
             f"Type       : {ticket_data.get('issueType') or ticket_data.get('issue_type') or '?'}\n"
-            f"Priority   : {ticket_data.get('priority', '?')}\n"
-            f"Status     : {ticket_data.get('status', '?')}\n"
             f"Summary    : {ticket_data.get('summary') or ticket_data.get('title', '')}\n"
-            f"Description: {ticket_data.get('description') or ticket_data.get('description_text') or '(none)'}\n"
-            f"Reporter   : {ticket_data.get('reporter', '')}\n"
-            f"Assignee   : {ticket_data.get('assignee', '')}\n"
-            f"Due        : {ticket_data.get('dueDate') or ticket_data.get('due_date', 'not set')}"
+            f"Description: {ticket_data.get('description') or ticket_data.get('description_text') or '(none)'}"
         )
 
 

@@ -1040,30 +1040,6 @@ GRAPH_ADMIN_HTML = """
                 </select>
               </div>
             </div>
-            <div class="tc-field-row">
-              <div class="tc-field">
-                <label class="tc-label">Priority</label>
-                <select id="tc-priority" class="tc-select">
-                  <option value="Highest">Highest</option>
-                  <option value="High">High</option>
-                  <option value="Medium" selected>Medium</option>
-                  <option value="Low">Low</option>
-                  <option value="Lowest">Lowest</option>
-                </select>
-              </div>
-              <div class="tc-field">
-                <label class="tc-label">Status</label>
-                <select id="tc-status" class="tc-select">
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="In Review">In Review</option>
-                  <option value="To Do">To Do</option>
-                  <option value="Done">Done</option>
-                  <option value="Closed">Closed</option>
-                  <option value="Resolved">Resolved</option>
-                </select>
-              </div>
-            </div>
             <div class="tc-field">
               <label class="tc-label">Summary <span class="tc-required">*</span></label>
               <input id="tc-summary" type="text" class="tc-input" placeholder="Short description of the ticket">
@@ -1071,20 +1047,6 @@ GRAPH_ADMIN_HTML = """
             <div class="tc-field">
               <label class="tc-label">Description</label>
               <textarea id="tc-description" class="tc-textarea" rows="5" placeholder="Full ticket description…"></textarea>
-            </div>
-            <div class="tc-field-row">
-              <div class="tc-field">
-                <label class="tc-label">Reporter</label>
-                <input id="tc-reporter" type="text" class="tc-input" placeholder="Reporter name">
-              </div>
-              <div class="tc-field">
-                <label class="tc-label">Assignee</label>
-                <input id="tc-assignee" type="text" class="tc-input" placeholder="Assignee name">
-              </div>
-            </div>
-            <div class="tc-field">
-              <label class="tc-label">Due date</label>
-              <input id="tc-dueDate" type="date" class="tc-input">
             </div>
             <button id="tc-generateBtn" style="margin-top:18px;" onclick="generateTestCases()">Generate Test Cases</button>
             <div id="tc-status" class="status-bar" style="margin-top:10px;"></div>
@@ -1477,13 +1439,8 @@ GRAPH_ADMIN_HTML = """
       const ticket = {
         issueKey:     issueKey,
         issueType:    document.querySelector("#tc-issueType").value,
-        priority:     document.querySelector("#tc-priority").value,
-        status:       document.querySelector("#tc-status").value,
         summary:      summary,
         description:  document.querySelector("#tc-description").value.trim() || null,
-        reporter:     document.querySelector("#tc-reporter").value.trim() || null,
-        assignee:     document.querySelector("#tc-assignee").value.trim() || null,
-        dueDate:      document.querySelector("#tc-dueDate").value || null,
       };
 
       const repoVal = document.querySelector("#tc-repo").value.trim();
