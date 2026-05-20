@@ -206,23 +206,36 @@ class TestCaseGenerator:
                 search_filter = Filter(
                     must=[FieldCondition(key="repo", match=MatchValue(value=repo))]
                 )
-            results = client.search(
-                collection_name=collection,
-                query_vector=query_vector,
-                limit=top_k,
-                query_filter=search_filter,
-                with_payload=True,
-            )
+
+            # qdrant-client ≥ 1.9 uses query_points(); older versions use search()
+            try:
+                response = client.query_points(
+                    collection_name=collection,
+                    query=query_vector,
+                    limit=top_k,
+                    query_filter=search_filter,
+                    with_payload=True,
+                )
+                scored_points = response.points
+            except AttributeError:
+                scored_points = client.search(
+                    collection_name=collection,
+                    query_vector=query_vector,
+                    limit=top_k,
+                    query_filter=search_filter,
+                    with_payload=True,
+                )
+
             return [
                 {
                     "score": r.score,
-                    "path": r.payload.get("path", ""),
-                    "repo": r.payload.get("repo", ""),
-                    "repo_name": r.payload.get("repo_name", ""),
-                    "language": r.payload.get("language", ""),
-                    "text": (r.payload.get("text") or "")[:500],
+                    "path": (r.payload or {}).get("path", ""),
+                    "repo": (r.payload or {}).get("repo", ""),
+                    "repo_name": (r.payload or {}).get("repo_name", ""),
+                    "language": (r.payload or {}).get("language", ""),
+                    "text": ((r.payload or {}).get("text") or "")[:500],
                 }
-                for r in results
+                for r in scored_points
             ]
         except Exception as exc:
             log.warning("Qdrant search failed: %s", exc)
@@ -263,7 +276,6 @@ class TestCaseGenerator:
                         OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
                         RETURN fn.name AS name,
                                fn.path AS path,
-                               fn.line_number AS line_number,
                                collect(DISTINCT callee.name)[..8] AS calls,
                                collect(DISTINCT caller.name)[..8] AS called_by
                         LIMIT 30
@@ -278,8 +290,7 @@ class TestCaseGenerator:
                         """
                         MATCH (cl:Class)
                         WHERE ANY(p IN $paths WHERE cl.path ENDS WITH p)
-                        RETURN cl.name AS name, cl.path AS path,
-                               cl.line_number AS line_number
+                        RETURN cl.name AS name, cl.path AS path
                         LIMIT 15
                         """,
                         paths=file_paths,
@@ -300,7 +311,6 @@ class TestCaseGenerator:
                         OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
                         RETURN fn.name AS name,
                                fn.path AS path,
-                               fn.line_number AS line_number,
                                collect(DISTINCT callee.name)[..8] AS calls,
                                collect(DISTINCT caller.name)[..8] AS called_by
                         LIMIT 20
@@ -343,11 +353,10 @@ class TestCaseGenerator:
             parts.append("\n### Functions (from CGC call graph)")
             for fn in functions[:20]:
                 name = fn.get("name", "")
-                path = fn.get("path", "")
-                line = fn.get("line_number", "?")
+                path = fn.get("path") or ""
                 calls_str = ", ".join(fn.get("calls") or [])
                 callers_str = ", ".join(fn.get("called_by") or [])
-                entry = f"- **{name}** ({_short_path(path)}:{line})"
+                entry = f"- **{name}** ({_short_path(path)})"
                 if calls_str:
                     entry += f"\n  calls: {calls_str}"
                 if callers_str:
@@ -358,9 +367,8 @@ class TestCaseGenerator:
             parts.append("\n### Classes (from CGC graph)")
             for cls in classes[:10]:
                 name = cls.get("name", "")
-                path = cls.get("path", "")
-                line = cls.get("line_number", "?")
-                parts.append(f"- **{name}** ({_short_path(path)}:{line})")
+                path = cls.get("path") or ""
+                parts.append(f"- **{name}** ({_short_path(path)})")
 
         return "\n".join(parts)
 
@@ -418,7 +426,9 @@ class TestCaseGenerator:
         )
 
 
-def _short_path(abs_path: str, max_parts: int = 4) -> str:
+def _short_path(abs_path: Optional[str], max_parts: int = 4) -> str:
     """Return last N components of a path to keep context blocks readable."""
+    if not abs_path:
+        return ""
     parts = abs_path.replace("\\", "/").split("/")
     return "/".join(parts[-max_parts:]) if len(parts) > max_parts else abs_path
