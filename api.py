@@ -10,6 +10,12 @@ import asyncio
 import json
 import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:%(name)s: %(message)s",
+    force=True,
+)
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator
