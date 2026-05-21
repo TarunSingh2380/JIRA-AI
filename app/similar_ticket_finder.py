@@ -112,15 +112,6 @@ class SimilarTicketFinder:
             hits = self._enrich_from_db(hits)
 
         hits = hits[:top_k]
-
-        # RRF scores are rank-fusion values (not cosine similarity), so they look
-        # deceptively low. Normalize against the top hit so the best match = 1.0.
-        if method == "hybrid_rrf" and hits:
-            max_score = max(h["similarity_score"] for h in hits)
-            if max_score > 0:
-                for h in hits:
-                    h["similarity_score"] = round(h["similarity_score"] / max_score, 4)
-
         log.info("SimilarTicketFinder method=%s found=%d project=%s statuses=%s",
                  method, len(hits), project_key, statuses)
         return {"query_summary": summary, "total_found": len(hits),
@@ -191,11 +182,33 @@ class SimilarTicketFinder:
                 with_payload=True,
             )
 
+            # Re-score with dense cosine similarity so the displayed score is
+            # interpretable (0–1) instead of the raw RRF rank-fusion value.
+            # RRF is used only for retrieval; cosine tells us actual closeness.
+            try:
+                dense_resp = client.query_points(
+                    collection_name=JIRA_HYBRID_COLLECTION,
+                    query=encoded["dense"],
+                    using="dense",
+                    limit=top_k,
+                    query_filter=search_filter,
+                    with_payload=False,
+                )
+                dense_scores = {str(r.id): r.score for r in dense_resp.points}
+            except Exception:
+                dense_scores = {}
+
             results = []
             for r in response.points:
                 hit = _point_to_hit(r, status_filter_applied, statuses)
                 if hit:
+                    cosine = dense_scores.get(str(r.id))
+                    if cosine is not None:
+                        hit["similarity_score"] = round(cosine, 4)
                     results.append(hit)
+
+            # Sort by cosine similarity (best first); ties keep RRF order
+            results.sort(key=lambda h: h["similarity_score"], reverse=True)
 
             log.info("Hybrid RRF search returned %d hits", len(results))
             return results, "hybrid_rrf"
