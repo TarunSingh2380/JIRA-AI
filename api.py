@@ -1808,8 +1808,20 @@ GRAPH_ADMIN_HTML = """
 
         document.querySelector("#sim-stat-total").textContent = data.total_found;
         const methodBadge = document.querySelector("#sim-stat-method-badge");
-        methodBadge.textContent = data.search_method === "semantic" ? "Semantic search" : "Keyword fallback";
-        methodBadge.style.color = data.search_method === "semantic" ? "var(--ok)" : "var(--warn)";
+        const methodLabels = {
+          "hybrid_rrf": "Hybrid semantic (RRF)",
+          "semantic":   "Dense semantic",
+          "keyword_fallback": "Keyword fallback",
+          "none":       "No results",
+        };
+        const methodColors = {
+          "hybrid_rrf": "var(--ok)",
+          "semantic":   "var(--ok)",
+          "keyword_fallback": "var(--warn)",
+          "none":       "var(--warn)",
+        };
+        methodBadge.textContent = methodLabels[data.search_method] ?? data.search_method;
+        methodBadge.style.color  = methodColors[data.search_method]  ?? "var(--warn)";
 
         const statsEl = document.querySelector("#sim-stats");
         statsEl.hidden = false;
