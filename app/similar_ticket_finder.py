@@ -112,6 +112,15 @@ class SimilarTicketFinder:
             hits = self._enrich_from_db(hits)
 
         hits = hits[:top_k]
+
+        # RRF scores are rank-fusion values (not cosine similarity), so they look
+        # deceptively low. Normalize against the top hit so the best match = 1.0.
+        if method == "hybrid_rrf" and hits:
+            max_score = max(h["similarity_score"] for h in hits)
+            if max_score > 0:
+                for h in hits:
+                    h["similarity_score"] = round(h["similarity_score"] / max_score, 4)
+
         log.info("SimilarTicketFinder method=%s found=%d project=%s statuses=%s",
                  method, len(hits), project_key, statuses)
         return {"query_summary": summary, "total_found": len(hits),
