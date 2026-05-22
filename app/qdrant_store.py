@@ -203,15 +203,18 @@ def upsert_codebase_embeddings(
                 )
             )
 
-        if points:
-            client.upsert(collection_name=collection_name, points=points)
+        stored = 0
+        batch_size = 500  # ~4MB per batch well under Qdrant's 32MB limit
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
+            client.upsert(collection_name=collection_name, points=batch)
+            stored += len(batch)
             log.info(
-                "Stored %d codebase embeddings in Qdrant collection '%s'",
-                len(points),
-                collection_name,
+                "Stored %d/%d codebase embeddings in Qdrant collection '%s'",
+                stored, len(points), collection_name,
             )
 
-        return len(points)
+        return stored
 
     except Exception as exc:
         log.warning("Qdrant codebase upsert failed: %s", exc)
