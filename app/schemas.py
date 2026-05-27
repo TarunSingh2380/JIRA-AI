@@ -125,6 +125,10 @@ class TestCaseRequest(BaseModel):
         default="codebase_bge_m3",
         description="Embedding model used for semantic search.",
     )
+    style: Literal["gherkin", "pytest", "junit", "plain"] = Field(
+        default="plain",
+        description="Output format requested from RepoTree.",
+    )
     top_k: int = Field(default=15, ge=1, le=50, description="Number of semantic hits to retrieve.")
 
 
@@ -134,17 +138,16 @@ class TestCaseResponse(BaseModel):
     semantic_hits_count: int
     functions_found: int
     files_touched_count: int
+    grounded_repos: list[str] = []
+    style: str = "plain"
+    architecture_context_chars: int = 0
+    repomix_context_chars: int = 0
 
 
 class SimilarTicketRequest(BaseModel):
     summary: str = Field(..., description="Summary of the new ticket.")
     description: str | None = Field(default=None, description="Full ticket description.")
     project_key: str | None = Field(default=None, description="Restrict search to a project key.")
-    top_k: int = Field(default=10, ge=1, le=50, description="Max number of similar tickets to return.")
-    statuses: list[str] = Field(
-        default=["Done", "Closed", "Resolved"],
-        description="Only return tickets whose status is in this list.",
-    )
 
 
 class SimilarTicketResult(BaseModel):
@@ -166,5 +169,5 @@ class SimilarTicketResult(BaseModel):
 class SimilarTicketsResponse(BaseModel):
     query_summary: str
     total_found: int
-    search_method: str = Field(..., description="'semantic' or 'keyword_fallback' or 'none'")
+    search_method: str = Field(..., description="'hybrid_rrf', 'semantic', 'keyword_fallback', or 'none'")
     tickets: list[SimilarTicketResult]

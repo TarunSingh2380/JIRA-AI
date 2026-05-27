@@ -33,6 +33,11 @@ class Settings:
     jira_project_keys: str = os.getenv("JIRA_PROJECT_KEYS", "")
     jira_approved_transition_name: str = os.getenv("JIRA_APPROVED_TRANSITION_NAME", "")
     repograph_base_url: str = os.getenv("REPOGRAPH_BASE_URL", "http://127.0.0.1:8088").rstrip("/")
+    repo_tree_base_url: str = os.getenv(
+        "REPO_TREE_BASE_URL",
+        os.getenv("REPOTREE_BASE_URL", "http://13.207.36.226:8001"),
+    ).rstrip("/")
+    repo_tree_timeout_seconds: int = int(os.getenv("REPO_TREE_TIMEOUT_SECONDS", "300"))
     external_request_timeout_seconds: int = int(os.getenv("EXTERNAL_REQUEST_TIMEOUT_SECONDS", "15"))
     n8n_graph_webhook_url: str = os.getenv("N8N_GRAPH_WEBHOOK_URL", "")
     n8n_api_key: str = os.getenv("N8N_API_KEY", "")

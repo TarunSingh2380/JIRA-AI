@@ -121,6 +121,7 @@ docker compose down
 - `WS /graph-admin/jobs/{job_id}/ws`
 - `POST /chat`
 - `POST /analyze-ticket`
+- `POST /analyze-ticket/test-cases`
 - `POST /workflow/jira-review`
 - `POST /workflow/slack-reply`
 - `POST /workflow/slack-events`
@@ -164,6 +165,8 @@ GRAPH_JOB_REPO_TIMEOUT_SECONDS=900
 GRAPH_JOB_COMMIT_BATCH_SIZE=500
 GRAPH_JOB_LIMIT_JIRA_ISSUES=0
 GRAPH_JOB_BUILD_EMBEDDINGS=true
+REPO_TREE_BASE_URL=http://13.207.36.226:8001
+REPO_TREE_TIMEOUT_SECONDS=300
 ```
 
 Actions sent to n8n:
@@ -183,6 +186,10 @@ When embeddings are enabled, graph jobs create Jira ticket embeddings in
 Qdrant through the configured Ollama embedding model. Repository graph creation
 and Neo4j `EmbeddingDocument` rebuilds no longer use Repograph, because that
 path only covered Python repositories.
+
+Test-case generation now calls RepoTree at `REPO_TREE_BASE_URL`. RepoTree uses
+the existing Qdrant codebase collections plus its Repomix maps, so this flow no
+longer depends on Neo4j graph traversal.
 
 ## Jira Review + Slack Follow-up Workflow
 

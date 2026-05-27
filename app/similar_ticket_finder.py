@@ -30,6 +30,10 @@ _STOP_WORDS = {
     "where", "which", "with",
 }
 
+_MIN_TOP_MATCH_SCORE = 0.55
+_MAX_RETURNED_TICKETS = 1
+_SEARCH_DEPTH = 10
+
 # ── shared Qdrant helpers ─────────────────────────────────────────────────────
 
 def _qdrant_client(url: str, api_key: Optional[str] = None):
@@ -37,27 +41,19 @@ def _qdrant_client(url: str, api_key: Optional[str] = None):
     return QdrantClient(url=url, api_key=api_key or None)
 
 
-def _build_filter(statuses: List[str], project_key: Optional[str]) -> Any:
-    """Return a Qdrant Filter (or None) for status + project_key."""
+def _build_filter(project_key: Optional[str]) -> Any:
+    """Return a Qdrant Filter (or None) for project_key."""
     from qdrant_client.models import Filter, FieldCondition, MatchValue
     must = []
     if project_key:
         must.append(FieldCondition(key="project_key", match=MatchValue(value=project_key)))
-    if statuses:
-        try:
-            from qdrant_client.models import MatchAny
-            must.append(FieldCondition(key="status", match=MatchAny(any=statuses)))
-        except ImportError:
-            pass  # older client — caller must post-filter
     return Filter(must=must) if must else None
 
 
-def _point_to_hit(r: Any, status_filter_applied: bool, statuses: List[str]) -> Optional[Dict[str, Any]]:
-    """Convert a Qdrant scored point to a hit dict, or None if filtered out."""
+def _point_to_hit(r: Any) -> Dict[str, Any]:
+    """Convert a Qdrant scored point to a hit dict."""
     payload = r.payload or {}
     status = payload.get("status", "")
-    if not status_filter_applied and statuses and status not in statuses:
-        return None
     return {
         "ticket_key":  payload.get("key", ""),
         "project_key": payload.get("project_key", ""),
@@ -86,34 +82,31 @@ class SimilarTicketFinder:
         description: Optional[str] = None,
         *,
         project_key: Optional[str] = None,
-        top_k: int = 10,
-        statuses: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        if statuses is None:
-            statuses = ["Done", "Closed", "Resolved"]
-
         # Match the text format used at ingest time (graph_job_runner._ticket_embed_texts)
         query = f"{summary[:200]}\n{(description or '')[:500]}".strip()
 
         # Tier 1 — hybrid (BGE-M3 dense + sparse, RRF)
         hits, method = self._hybrid_search(query, project_key=project_key,
-                                            top_k=top_k * 2, statuses=statuses)
+                                            top_k=_SEARCH_DEPTH * 2)
 
         # Tier 2 — dense-only cosine (Ollama)
         if not hits:
             hits, method = self._dense_search(query, project_key=project_key,
-                                               top_k=top_k * 2, statuses=statuses)
+                                               top_k=_SEARCH_DEPTH * 2)
 
         # Tier 3 — PostgreSQL keyword ILIKE
         if not hits:
             hits, method = self._keyword_search(query, project_key=project_key,
-                                                 top_k=top_k, statuses=statuses)
+                                                 top_k=_SEARCH_DEPTH)
         else:
             hits = self._enrich_from_db(hits)
 
-        hits = hits[:top_k]
-        log.info("SimilarTicketFinder method=%s found=%d project=%s statuses=%s",
-                 method, len(hits), project_key, statuses)
+        hits = self._top_match_above_threshold(hits)
+        log.info(
+            "SimilarTicketFinder method=%s returned=%d threshold>%s project=%s",
+            method, len(hits), _MIN_TOP_MATCH_SCORE, project_key,
+        )
         return {"query_summary": summary, "total_found": len(hits),
                 "search_method": method, "tickets": hits}
 
@@ -125,7 +118,6 @@ class SimilarTicketFinder:
         *,
         project_key: Optional[str],
         top_k: int,
-        statuses: List[str],
     ) -> tuple[List[Dict[str, Any]], str]:
         flag = BGEM3Embedder()
         if not flag.is_available():
@@ -162,8 +154,7 @@ class SimilarTicketFinder:
                 log.info("Hybrid collection empty — run graph job to populate")
                 return [], "dense_fallback"
 
-            search_filter = _build_filter(statuses, project_key)
-            status_filter_applied = bool(statuses)  # MatchAny applied in _build_filter
+            search_filter = _build_filter(project_key)
 
             sparse_vec = SparseVector(
                 indices=encoded.get("sparse_indices", []),
@@ -200,12 +191,11 @@ class SimilarTicketFinder:
 
             results = []
             for r in response.points:
-                hit = _point_to_hit(r, status_filter_applied, statuses)
-                if hit:
-                    cosine = dense_scores.get(str(r.id))
-                    if cosine is not None:
-                        hit["similarity_score"] = round(cosine, 4)
-                    results.append(hit)
+                hit = _point_to_hit(r)
+                cosine = dense_scores.get(str(r.id))
+                if cosine is not None:
+                    hit["similarity_score"] = round(cosine, 4)
+                results.append(hit)
 
             # Sort by cosine similarity (best first); ties keep RRF order
             results.sort(key=lambda h: h["similarity_score"], reverse=True)
@@ -225,7 +215,6 @@ class SimilarTicketFinder:
         *,
         project_key: Optional[str],
         top_k: int,
-        statuses: List[str],
     ) -> tuple[List[Dict[str, Any]], str]:
         embedder = OllamaEmbedder(
             base_url=self.settings.ollama_url,
@@ -242,8 +231,7 @@ class SimilarTicketFinder:
 
         try:
             client = _qdrant_client(self.settings.qdrant_url, self.settings.qdrant_api_key)
-            search_filter = _build_filter(statuses, project_key)
-            status_filter_applied = bool(statuses)
+            search_filter = _build_filter(project_key)
 
             try:
                 response = client.query_points(
@@ -263,10 +251,7 @@ class SimilarTicketFinder:
                     with_payload=True,
                 )
 
-            results = [
-                hit for r in scored
-                if (hit := _point_to_hit(r, status_filter_applied, statuses)) is not None
-            ]
+            results = [_point_to_hit(r) for r in scored]
             log.info("Dense cosine search returned %d hits", len(results))
             return results, "semantic"
 
@@ -282,7 +267,6 @@ class SimilarTicketFinder:
         *,
         project_key: Optional[str],
         top_k: int,
-        statuses: List[str],
     ) -> tuple[List[Dict[str, Any]], str]:
         if not self.settings.database_url:
             return [], "none"
@@ -295,8 +279,8 @@ class SimilarTicketFinder:
             import psycopg
             from psycopg.rows import dict_row
 
-            where_parts = ["status = ANY(%s)"]
-            params: list[Any] = [statuses]
+            where_parts = []
+            params: list[Any] = []
 
             if project_key:
                 where_parts.append("project_key = %s")
@@ -404,6 +388,20 @@ class SimilarTicketFinder:
                 seen.add(w)
                 out.append(w)
         return out
+
+    @staticmethod
+    def _top_match_above_threshold(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        best = max(hits, key=SimilarTicketFinder._similarity_score, default=None)
+        if best is None or SimilarTicketFinder._similarity_score(best) <= _MIN_TOP_MATCH_SCORE:
+            return []
+        return [best][:_MAX_RETURNED_TICKETS]
+
+    @staticmethod
+    def _similarity_score(hit: Dict[str, Any]) -> float:
+        try:
+            return float(hit.get("similarity_score") or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
 
 
 def _fmt_dt(val: Any) -> Optional[str]:

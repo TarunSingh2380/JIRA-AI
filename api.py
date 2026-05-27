@@ -346,13 +346,12 @@ def analyze_ticket(request: AnalyzeTicketRequest) -> AnalyzeTicketResponse:
 def generate_test_cases(request: TestCaseRequest) -> TestCaseResponse:
     """
     Generate test cases for a JIRA ticket using:
-      1. Semantic search over the codebase (via repograph /search/semantic)
-      2. Function call-graph context (via repograph /functions/{qn}/callers)
-      3. Recently changed files (via repograph /files/touched_recently)
-      4. Claude LLM to synthesise a Markdown test-case document
+      1. RepoTree's Repomix-derived repository context
+      2. Qdrant semantic code hits fetched by RepoTree
+      3. Claude LLM in RepoTree to synthesise a Markdown test-case document
 
-    Prerequisites: run the Graph Admin trigger first to ingest the codebase and
-    build embeddings, and optionally run the AST ingest for richer call-graph data.
+    Prerequisites: run the Graph Admin trigger first to build Qdrant embeddings,
+    and run RepoTree's scan so its Repomix maps are available.
     """
     ticket_key = (
         request.ticket_data.get("issueKey")
@@ -361,17 +360,17 @@ def generate_test_cases(request: TestCaseRequest) -> TestCaseResponse:
         or "unknown"
     )
     log.info(
-        "POST /analyze-ticket/test-cases key=%s repo=%s model=%s",
-        ticket_key, request.repo, request.embedding_model,
+        "POST /analyze-ticket/test-cases key=%s repo=%s model=%s style=%s",
+        ticket_key, request.repo, request.embedding_model, request.style,
     )
     try:
-        llm_client = build_llm_client(settings, timeout_override=settings.llm_test_case_timeout_seconds)
-        generator = TestCaseGenerator(settings=settings, llm_client=llm_client)
+        generator = TestCaseGenerator(settings=settings)
         result = generator.generate(
             request.ticket_data,
             repo=request.repo,
             embedding_model=request.embedding_model,
             top_k=request.top_k,
+            style=request.style,
         )
     except LLMConfigurationError as exc:
         log.error("LLM configuration error: %s", exc)
@@ -381,7 +380,7 @@ def generate_test_cases(request: TestCaseRequest) -> TestCaseResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     log.info(
-        "Test cases generated for %s: semantic=%d functions=%d files=%d",
+        "Test cases generated for %s: semantic=%d repos=%d files=%d",
         ticket_key, result["semantic_hits_count"],
         result["functions_found"], result["files_touched_count"],
     )
@@ -391,6 +390,10 @@ def generate_test_cases(request: TestCaseRequest) -> TestCaseResponse:
         semantic_hits_count=result["semantic_hits_count"],
         functions_found=result["functions_found"],
         files_touched_count=result["files_touched_count"],
+        grounded_repos=result.get("grounded_repos") or [],
+        style=result.get("style") or request.style,
+        architecture_context_chars=result.get("architecture_context_chars") or 0,
+        repomix_context_chars=result.get("repomix_context_chars") or 0,
     )
 
 
@@ -399,20 +402,20 @@ def generate_test_cases(request: TestCaseRequest) -> TestCaseResponse:
 @app.post("/analyze-ticket/similar", response_model=SimilarTicketsResponse)
 def find_similar_tickets(request: SimilarTicketRequest) -> SimilarTicketsResponse:
     """
-    Find historically similar closed Jira tickets for a new incoming ticket.
+    Find historically similar Jira tickets for a new incoming ticket.
 
     Search strategy (in order):
       1. Semantic – embed (summary + description) with Ollama, search Qdrant
-         `jira_tickets` collection filtered by status, enrich hits from PostgreSQL.
+         `jira_tickets` collection and enrich hits from PostgreSQL.
       2. Keyword fallback – ILIKE search in PostgreSQL `jira_ticket_cache` when
          Ollama / Qdrant is unavailable.
 
-    Only tickets whose `status` appears in `statuses` (default: Done / Closed /
-    Resolved) are returned. Results are ordered by cosine similarity score.
+    All ticket statuses are considered. The response returns only the single best
+    ticket when its similarity score is greater than 55%; otherwise it returns empty.
     """
     log.info(
-        "POST /analyze-ticket/similar summary=%r project=%s statuses=%s top_k=%d",
-        request.summary[:60], request.project_key, request.statuses, request.top_k,
+        "POST /analyze-ticket/similar summary=%r project=%s",
+        request.summary[:60], request.project_key,
     )
     try:
         finder = SimilarTicketFinder(settings=settings)
@@ -420,8 +423,6 @@ def find_similar_tickets(request: SimilarTicketRequest) -> SimilarTicketsRespons
             request.summary,
             request.description,
             project_key=request.project_key,
-            top_k=request.top_k,
-            statuses=request.statuses,
         )
     except Exception as exc:
         log.exception("Similar ticket search failed")
@@ -706,9 +707,107 @@ GRAPH_ADMIN_HTML = """
       color: var(--muted);
     }
     .tc-stat span { color: var(--accent); font-weight: 700; }
-    .tc-output { line-height: 1.65; font-size: 14px; }
-    .tc-output h2 { font-size: 16px; margin: 0 0 6px; }
-    .tc-output h3 { font-size: 14px; margin: 16px 0 6px; }
+    .tc-output { line-height: 1.55; font-size: 14px; color: var(--ink); }
+    .tc-doc { display: flex; flex-direction: column; gap: 14px; }
+    .tc-overview {
+      border-bottom: 1px solid var(--line);
+      padding: 0 0 14px;
+      color: #1f2937;
+    }
+    .tc-overview h3, .tc-gap h3 {
+      font-size: 15px;
+      margin: 0 0 8px;
+      color: var(--ink);
+    }
+    .tc-overview p, .tc-gap p { margin: 7px 0; }
+    .tc-case {
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    }
+    .tc-case-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+    }
+    .tc-case-title {
+      font-size: 15px;
+      line-height: 1.35;
+      margin: 0;
+      color: var(--ink);
+      overflow-wrap: anywhere;
+    }
+    .tc-chip-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .tc-chip {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .tc-chip.p0 { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .tc-chip.p1 { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+    .tc-chip.p2 { background: #ecfdf5; color: #166534; border-color: #bbf7d0; }
+    .tc-case-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 14px;
+    }
+    .tc-case-section {
+      min-width: 0;
+      border-top: 1px solid #eef2f7;
+      padding-top: 9px;
+    }
+    .tc-case-section.full { grid-column: 1 / -1; }
+    .tc-section-title {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 11px;
+      line-height: 1.2;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .tc-section-body {
+      color: #111827;
+      overflow-wrap: anywhere;
+    }
+    .tc-section-body p { margin: 5px 0; }
+    .tc-section-body ul, .tc-section-body ol {
+      margin: 5px 0 0 18px;
+      padding: 0;
+    }
+    .tc-section-body li { margin: 3px 0; }
+    .tc-section-body code, .tc-overview code, .tc-gap code {
+      font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+      font-size: 12px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 5px;
+      padding: 1px 4px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .tc-gap {
+      border: 1px solid #fed7aa;
+      border-left: 4px solid #f97316;
+      border-radius: 8px;
+      background: #fffaf0;
+      padding: 14px 16px;
+      margin-top: 4px;
+      color: #1f2937;
+    }
     .tc-output hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
     .tc-output strong { font-weight: 700; }
     .tc-card {
@@ -733,24 +832,12 @@ GRAPH_ADMIN_HTML = """
     }
     @media (max-width: 900px) {
       .tc-layout { grid-template-columns: 1fr; }
+      .tc-case-head { flex-direction: column; }
+      .tc-chip-row { justify-content: flex-start; }
+      .tc-case-grid { grid-template-columns: 1fr; }
     }
 
     /* ── Similar Tickets tab ── */
-    .sim-status-label {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--ink);
-      cursor: pointer;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      padding: 4px 11px;
-      user-select: none;
-    }
-    .sim-status-label input { accent-color: var(--accent); width: 14px; height: 14px; }
     .sim-card {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -1179,6 +1266,15 @@ GRAPH_ADMIN_HTML = """
             <p class="tc-section-label">Search settings</p>
             <div class="tc-field-row">
               <div class="tc-field">
+                <label class="tc-label">Style</label>
+                <select id="tc-style" class="tc-select">
+                  <option value="plain" selected>Plain Test Cases</option>
+                  <option value="gherkin">Gherkin</option>
+                  <option value="pytest">pytest</option>
+                  <option value="junit">JUnit 5</option>
+                </select>
+              </div>
+              <div class="tc-field">
                 <label class="tc-label">Embedding model</label>
                 <select id="tc-embeddingModel" class="tc-select">
                   <option value="codebase_bge_m3">codebase_bge_m3</option>
@@ -1186,6 +1282,8 @@ GRAPH_ADMIN_HTML = """
                   <option value="codebase_mxbai_large">codebase_mxbai_large</option>
                 </select>
               </div>
+            </div>
+            <div class="tc-field-row">
               <div class="tc-field">
                 <label class="tc-label">Top K hits</label>
                 <select id="tc-topK" class="tc-select">
@@ -1240,7 +1338,7 @@ GRAPH_ADMIN_HTML = """
             </div>
             <div id="tc-stats" class="tc-stats" hidden>
               <span class="tc-stat"><span id="tc-stat-hits">0</span> semantic hits</span>
-              <span class="tc-stat"><span id="tc-stat-funcs">0</span> functions</span>
+              <span class="tc-stat"><span id="tc-stat-funcs">0</span> Repomix repos</span>
               <span class="tc-stat"><span id="tc-stat-files">0</span> files</span>
               <button class="secondary" id="tc-copyBtn"
                 style="width:auto;min-height:32px;padding:5px 14px;font-size:13px;margin-left:auto;"
@@ -1272,26 +1370,6 @@ GRAPH_ADMIN_HTML = """
               <div class="tc-field">
                 <label class="tc-label">Project key <span class="tc-optional">(optional)</span></label>
                 <input id="sim-projectKey" type="text" class="tc-input" placeholder="e.g. RFC">
-              </div>
-              <div class="tc-field">
-                <label class="tc-label">Top K results</label>
-                <select id="sim-topK" class="tc-select">
-                  <option value="5">5</option>
-                  <option value="10" selected>10</option>
-                  <option value="20">20</option>
-                  <option value="30">30</option>
-                  <option value="50">50</option>
-                </select>
-              </div>
-            </div>
-            <div class="tc-field">
-              <label class="tc-label">Match tickets with status</label>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
-                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="Done" checked> Done</label>
-                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="Closed" checked> Closed</label>
-                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="Resolved" checked> Resolved</label>
-                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="In Progress"> In Progress</label>
-                <label class="sim-status-label"><input type="checkbox" class="sim-status-cb" value="Open"> Open</label>
               </div>
             </div>
             <button id="sim-searchBtn" style="margin-top:18px;" onclick="searchSimilarTickets()">Find Similar Tickets</button>
@@ -1675,7 +1753,7 @@ GRAPH_ADMIN_HTML = """
 
       const btn = document.querySelector("#tc-generateBtn");
       btn.disabled = true;
-      tcSetStatus("Generating test cases… this may take 20–40 seconds", "running");
+      tcSetStatus("Generating test cases with RepoTree… this may take 20–40 seconds", "running");
       document.querySelector("#tc-placeholder").hidden = false;
       document.querySelector("#tc-stats").hidden = true;
       document.querySelector("#tc-output").hidden = true;
@@ -1692,6 +1770,7 @@ GRAPH_ADMIN_HTML = """
         ticket_data:     ticket,
         repo:            repoVal || null,
         embedding_model: document.querySelector("#tc-embeddingModel").value,
+        style:           document.querySelector("#tc-style").value,
         top_k:           parseInt(document.querySelector("#tc-topK").value, 10),
       };
 
@@ -1707,7 +1786,7 @@ GRAPH_ADMIN_HTML = """
         lastTestCaseMarkdown = data.test_cases || "";
 
         document.querySelector("#tc-stat-hits").textContent  = data.semantic_hits_count ?? 0;
-        document.querySelector("#tc-stat-funcs").textContent = data.functions_found ?? 0;
+        document.querySelector("#tc-stat-funcs").textContent = (data.grounded_repos || []).length || data.functions_found || 0;
         document.querySelector("#tc-stat-files").textContent = data.files_touched_count ?? 0;
         document.querySelector("#tc-stats").hidden  = false;
         document.querySelector("#tc-placeholder").hidden = true;
@@ -1742,31 +1821,197 @@ GRAPH_ADMIN_HTML = """
     }
 
     function renderMarkdown(md) {
-      // Split on fenced code blocks, render each part separately
-      const segments = md.split(/(```[\\s\\S]*?```)/g);
-      return segments.map((seg, i) => {
-        if (seg.startsWith("```")) {
-          // Code block → styled TC card
-          const inner = seg.replace(/^```[^\\n]*\\n?/, "").replace(/\\n?```$/, "");
-          const firstLine = inner.split("\\n")[0] || "";
-          const isTcBlock = /^TC-\\d+:/i.test(firstLine.trim());
-          if (isTcBlock) {
-            const rest = inner.slice(firstLine.length).replace(/^\\n/, "");
-            return `<div class="tc-card"><span class="tc-card-title">${esc(firstLine.trim())}</span>${esc(rest)}</div>`;
-          }
-          return `<div class="tc-card">${esc(inner)}</div>`;
+      const normalized = String(md || "").replace(/\\r\\n/g, "\\n").replace(/\\r/g, "\\n").trim();
+      if (/^(?:#{1,6}\\s*)?TC-\\d+[:\\-]/im.test(normalized)) {
+        return renderStructuredTestCases(normalized);
+      }
+      return `<div class="tc-doc">${renderBasicMarkdown(normalized)}</div>`;
+    }
+
+    const TC_FIELD_LABELS = [
+      "Type", "Priority", "API / Layer", "Source references", "DB fixtures",
+      "Auth fixtures", "Preconditions", "Test data", "Steps", "Expected result",
+      "Assertions", "Automation notes", "Ticket reference"
+    ];
+
+    function renderStructuredTestCases(md) {
+      const firstTc = md.search(/^(?:#{1,6}\\s*)?TC-\\d+[:\\-]/im);
+      const overview = firstTc > 0 ? md.slice(0, firstTc).trim() : "";
+      const rest = firstTc >= 0 ? md.slice(firstTc).trim() : md;
+      const gapIndex = rest.search(/^(?:#{1,6}\\s*)?(Gaps|Open Questions)\\b/im);
+      const casesText = gapIndex >= 0 ? rest.slice(0, gapIndex).trim() : rest;
+      const gapText = gapIndex >= 0 ? rest.slice(gapIndex).trim() : "";
+      const blocks = casesText
+        .split(/(?=^(?:#{1,6}\\s*)?TC-\\d+[:\\-])/gim)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const html = [];
+      if (overview) html.push(`<section class="tc-overview">${renderBasicMarkdown(overview, "Summary")}</section>`);
+      blocks.forEach(block => html.push(renderTestCaseCard(block)));
+      if (gapText) html.push(`<section class="tc-gap">${renderBasicMarkdown(gapText)}</section>`);
+      return `<div class="tc-doc">${html.join("")}</div>`;
+    }
+
+    function renderTestCaseCard(block) {
+      const lines = block.split("\\n");
+      const title = (lines.shift() || "")
+        .replace(/^#{1,6}\\s*/, "")
+        .trim();
+      const parsed = parseTestCaseFields(lines);
+      const type = firstFieldLine(parsed.fields["Type"]);
+      const priority = firstFieldLine(parsed.fields["Priority"]);
+
+      const sections = [
+        "API / Layer", "Source references", "DB fixtures", "Auth fixtures",
+        "Preconditions", "Test data", "Steps", "Expected result", "Assertions",
+        "Automation notes", "Ticket reference"
+      ];
+
+      const body = [];
+      if (parsed.intro.length) {
+        body.push(renderCaseSection("Notes", parsed.intro, true));
+      }
+      sections.forEach(label => {
+        const lines = parsed.fields[label];
+        if (!lines || !lines.length) return;
+        const full = ["Source references", "DB fixtures", "Auth fixtures", "Steps", "Assertions"].includes(label);
+        body.push(renderCaseSection(label, lines, full));
+      });
+
+      return `
+        <article class="tc-case">
+          <div class="tc-case-head">
+            <h3 class="tc-case-title">${inlineFormat(title)}</h3>
+            <div class="tc-chip-row">
+              ${type ? `<span class="tc-chip">${inlineFormat(type)}</span>` : ""}
+              ${priority ? `<span class="tc-chip ${priority.toLowerCase()}">${inlineFormat(priority)}</span>` : ""}
+            </div>
+          </div>
+          <div class="tc-case-grid">${body.join("")}</div>
+        </article>
+      `;
+    }
+
+    function parseTestCaseFields(lines) {
+      const fields = {};
+      const intro = [];
+      let current = null;
+
+      lines.forEach(line => {
+        const field = getFieldLine(line);
+        if (field) {
+          current = field.label;
+          fields[current] = fields[current] || [];
+          if (field.value) fields[current].push(field.value);
+          return;
         }
-        // Regular markdown text
-        return seg
-          .replace(/^#{1} (.+)$/gm, "<h2>$1</h2>")
-          .replace(/^#{2} (.+)$/gm, "<h3>$1</h3>")
-          .replace(/^#{3} (.+)$/gm, "<h4>$1</h4>")
-          .replace(/^---+$/gm, "<hr>")
-          .replace(/\\*\\*(.+?)\\*\\*/g, "<strong>$1</strong>")
-          .replace(/^- (.+)$/gm, "<li>$1</li>")
-          .replace(/\\n\\n/g, "<br><br>")
-          .replace(/\\n/g, "<br>");
-      }).join("");
+        if (current) fields[current].push(line);
+        else intro.push(line);
+      });
+
+      return {fields, intro: trimBlankLines(intro)};
+    }
+
+    function getFieldLine(line) {
+      const stripped = line.trim().replace(/^[-*]\\s*/, "");
+      for (const label of TC_FIELD_LABELS) {
+        if (stripped.toLowerCase().startsWith(`${label.toLowerCase()}:`)) {
+          return {
+            label,
+            value: stripped.slice(label.length + 1).trim(),
+          };
+        }
+      }
+      return null;
+    }
+
+    function renderCaseSection(label, lines, full = false) {
+      const cleaned = trimBlankLines(lines);
+      if (!cleaned.length) return "";
+      return `
+        <section class="tc-case-section ${full ? "full" : ""}">
+          <span class="tc-section-title">${esc(label)}</span>
+          <div class="tc-section-body">${renderLines(cleaned)}</div>
+        </section>
+      `;
+    }
+
+    function renderBasicMarkdown(text, fallbackTitle = "") {
+      const lines = String(text || "").split("\\n");
+      const html = [];
+      let bodyLines = lines;
+      const first = (lines[0] || "").trim();
+
+      if (/^#{1,6}\\s+/.test(first)) {
+        html.push(`<h3>${inlineFormat(first.replace(/^#{1,6}\\s+/, ""))}</h3>`);
+        bodyLines = lines.slice(1);
+      } else if (fallbackTitle) {
+        html.push(`<h3>${esc(fallbackTitle)}</h3>`);
+      }
+
+      html.push(renderLines(bodyLines));
+      return html.join("");
+    }
+
+    function renderLines(lines) {
+      const html = [];
+      let list = null;
+
+      const closeList = () => {
+        if (!list) return;
+        html.push(`</${list}>`);
+        list = null;
+      };
+      const openList = tag => {
+        if (list === tag) return;
+        closeList();
+        list = tag;
+        html.push(`<${tag}>`);
+      };
+
+      trimBlankLines(lines).forEach(raw => {
+        const line = raw.trim();
+        if (!line) {
+          closeList();
+          return;
+        }
+        const bullet = line.match(/^[-*]\\s+(.+)$/);
+        if (bullet) {
+          openList("ul");
+          html.push(`<li>${inlineFormat(bullet[1])}</li>`);
+          return;
+        }
+        const numbered = line.match(/^\\d+[.)]\\s+(.+)$/);
+        if (numbered) {
+          openList("ol");
+          html.push(`<li>${inlineFormat(numbered[1])}</li>`);
+          return;
+        }
+        closeList();
+        if (/^---+$/.test(line)) html.push("<hr>");
+        else html.push(`<p>${inlineFormat(line)}</p>`);
+      });
+      closeList();
+      return html.join("");
+    }
+
+    function firstFieldLine(lines) {
+      return (trimBlankLines(lines || [])[0] || "").trim();
+    }
+
+    function trimBlankLines(lines) {
+      const copy = [...(lines || [])];
+      while (copy.length && !copy[0].trim()) copy.shift();
+      while (copy.length && !copy[copy.length - 1].trim()) copy.pop();
+      return copy;
+    }
+
+    function inlineFormat(text) {
+      return esc(text)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\\*\\*([^*]+)\\*\\*/g, "<strong>$1</strong>")
+        .replace(/\\*([^*]+)\\*/g, "<em>$1</em>");
     }
 
     // ── Similar Tickets tab ──────────────────────────────────────────────
@@ -1776,12 +2021,6 @@ GRAPH_ADMIN_HTML = """
         simSetStatus("Summary is required", "error");
         return;
       }
-      const statuses = [...document.querySelectorAll(".sim-status-cb:checked")].map(cb => cb.value);
-      if (!statuses.length) {
-        simSetStatus("Select at least one status to match", "error");
-        return;
-      }
-
       const btn = document.querySelector("#sim-searchBtn");
       btn.disabled = true;
       simSetStatus("Searching for similar tickets…", "running");
@@ -1793,8 +2032,6 @@ GRAPH_ADMIN_HTML = """
         summary,
         description: document.querySelector("#sim-description").value.trim() || null,
         project_key: document.querySelector("#sim-projectKey").value.trim() || null,
-        top_k: parseInt(document.querySelector("#sim-topK").value, 10),
-        statuses,
       };
 
       try {
@@ -1831,7 +2068,7 @@ GRAPH_ADMIN_HTML = """
 
         const resultsEl = document.querySelector("#sim-results");
         if (!data.tickets || !data.tickets.length) {
-          resultsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;">No similar tickets found. Try broadening the status filter or removing the project key.</p>';
+          resultsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;">No ticket above 65% match found. Try removing the project key.</p>';
         } else {
           resultsEl.innerHTML = data.tickets.map(renderSimCard).join("");
         }

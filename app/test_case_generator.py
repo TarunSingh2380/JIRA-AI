@@ -1,104 +1,28 @@
-"""Test case generator: JIRA ticket + Qdrant semantic search + CGC Neo4j graph → Claude.
+"""Test case generator client backed by the RepoTree service.
 
-Pipeline
---------
-1. Semantic search  — embed ticket text with Ollama, search the Qdrant
-                      codebase collection (e.g. "codebase_bge_m3")
-2. Graph context    — query Neo4j directly using CGC's schema
-                      (:Function, :File, :Class with absolute paths)
-                      for functions in the matched files + their call edges
-3. LLM generation   — Claude receives assembled context → Markdown test cases
-
-No repograph HTTP service required.
+This replaces the old Neo4j/CGC graph traversal in the test-case path. Qdrant
+is still used by RepoTree for semantic code hits, then combined with its
+Repomix-derived repository context.
 """
 from __future__ import annotations
 
+import json
 import logging
-import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from app.codebase_graph import CODEBASE_EMBEDDING_MODELS
+import requests
+
 from app.config import Settings
-from app.llm_client import LLMClient
-from app.ollama_embedder import OllamaEmbedder
 
 log = logging.getLogger(__name__)
 
-_STOP_WORDS = {
-    "about", "after", "again", "before", "description",
-    "have", "jira", "missing", "please",
-    "reply", "should", "there", "ticket", "update", "with",
-}
-
-_GRAPH_SCHEMA_SUMMARY = """
-Neo4j graph schema (CodeGraphContext):
-  (:Repository {path, name})
-  (:File       {path})                 ← absolute paths
-  (:Function   {name, path, line_number})
-  (:Class      {name, path, line_number})
-  (:Function)-[:CALLS]->(:Function)
-  (:Function)-[:METHOD_OF]->(:Class)
-  (:Class)-[:EXTENDS]->(:Class)
-  (:File)-[:CONTAINS]->(:Function | :Class)
-""".strip()
-
-_SYSTEM_PROMPT = """\
-You are a senior software engineer and QA expert specialising in test-driven development.
-
-You receive:
-  - A JIRA ticket (key, type, summary, description)
-  - Code context retrieved via semantic search and graph traversal of the actual codebase
-
-Your task: produce a concise Markdown test-case document with EXACTLY 5 test cases — no more, no fewer.
-
-Rules:
-1. Write concrete test cases — not generic templates.
-2. For each test case include: ID, title, preconditions, numbered steps, expected result.
-3. Include at least one negative/edge-case test.
-4. If the ticket is a bug, one test case must be a regression test.
-5. Reference function names / file paths from the code context when relevant.
-6. Do NOT invent file contents not shown in the context.
-7. Keep each test case brief — 3-5 steps maximum.
-"""
-
-_USER_TEMPLATE = """\
-## Graph DB Schema (for context)
-{schema}
-
----
-
-## JIRA Ticket
-{ticket}
-
----
-
-## Code Context (semantic search + CGC graph traversal)
-{context}
-
----
-
-Generate EXACTLY 5 test cases (no more, no fewer). Format each test case as:
-
-```
-TC-<N>: <Title>
-  Preconditions: ...
-  Steps:
-    1. ...
-  Expected: ...
-```
-
-After TC-5, add one short **Summary** sentence (max 2 lines).
-"""
-
 
 class TestCaseGenerator:
-    """Orchestrates Qdrant semantic search, CGC Neo4j graph context, and LLM generation."""
+    """Proxy JIRA ticket testcase generation to RepoTree."""
 
-    def __init__(self, settings: Settings, llm_client: LLMClient) -> None:
+    def __init__(self, settings: Settings, llm_client: Any | None = None) -> None:
         self.settings = settings
         self.llm_client = llm_client
-
-    # ── public entry point ────────────────────────────────────────────────────
 
     def generate(
         self,
@@ -107,326 +31,135 @@ class TestCaseGenerator:
         repo: Optional[str] = None,
         embedding_model: str = "codebase_bge_m3",
         top_k: int = 15,
+        style: str = "plain",
     ) -> Dict[str, Any]:
-        """
-        Full pipeline → dict with keys:
-          test_cases, semantic_hits_count, functions_found,
-          files_touched_count, context_chars
-        """
         ticket_key = (
             ticket_data.get("issueKey")
             or ticket_data.get("key")
             or ticket_data.get("issue_key")
             or "unknown"
         )
-        log.info(
-            "TestCaseGenerator.generate ticket=%s repo=%s model=%s",
-            ticket_key, repo, embedding_model,
-        )
-
-        query = self._build_query(ticket_data)
-
-        # 1. Semantic search via Qdrant + Ollama
-        semantic_hits = self._semantic_search_qdrant(
-            query, collection=embedding_model, repo=repo, top_k=top_k
-        )
-        log.info("Semantic hits: %d", len(semantic_hits))
-
-        # 2. CGC graph context from Neo4j
-        file_paths = self._extract_file_paths(semantic_hits)
-        keywords = self._keywords(query)[:6]
-        graph_functions, graph_classes = self._graph_context_cgc(
-            file_paths=file_paths,
-            keywords=keywords,
-            repo=repo,
-        )
-
-        # 3. Assemble context block
-        context_block = self._build_context_block(semantic_hits, graph_functions, graph_classes)
-
-        # 4. LLM call
-        user_message = _USER_TEMPLATE.format(
-            schema=_GRAPH_SCHEMA_SUMMARY,
-            ticket=self._ticket_as_text(ticket_data),
-            context=context_block or "(no code context retrieved — answering from ticket alone)",
-        )
-        log.info("Calling LLM (context_chars=%d)", len(context_block))
-        test_cases_md = self.llm_client.complete(_SYSTEM_PROMPT, user_message, max_tokens=1500)
-
-        return {
-            "test_cases": test_cases_md,
-            "semantic_hits_count": len(semantic_hits),
-            "functions_found": len(graph_functions),
-            "files_touched_count": len(file_paths),
-            "context_chars": len(context_block),
+        repos = [repo] if repo else None
+        payload = {
+            "ticket": _ticket_payload(ticket_data),
+            "style": style,
+            "repos": repos,
+            "embedding_model": embedding_model,
+            "top_k": top_k,
+            "include_semantic_context": True,
         }
 
-    # ── semantic search via Qdrant ────────────────────────────────────────────
-
-    def _semantic_search_qdrant(
-        self,
-        query: str,
-        *,
-        collection: str,
-        repo: Optional[str],
-        top_k: int,
-    ) -> List[Dict[str, Any]]:
-        model_cfg = CODEBASE_EMBEDDING_MODELS.get(
-            collection, CODEBASE_EMBEDDING_MODELS["codebase_bge_m3"]
-        )
-        embedder = OllamaEmbedder(
-            base_url=self.settings.ollama_url,
-            model=model_cfg["ollama_model"],
-            timeout_seconds=self.settings.ollama_embed_timeout_seconds,
-        )
-        if not embedder.is_available():
-            log.warning("Ollama model %s unavailable; skipping semantic search", model_cfg["ollama_model"])
-            return []
-
-        query_vector = embedder.embed(query)
-        if not query_vector:
-            log.warning("Ollama returned empty embedding for query")
-            return []
-
-        try:
-            from qdrant_client import QdrantClient
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-        except ImportError:
-            log.warning("qdrant-client not installed; skipping semantic search")
-            return []
-
-        try:
-            client = QdrantClient(
-                url=self.settings.qdrant_url,
-                api_key=self.settings.qdrant_api_key or None,
-            )
-            search_filter = None
-            if repo:
-                # Qdrant stores just the repo name (e.g. "ramfincorp-backend"),
-                # not the full org/repo slug. Try both forms.
-                repo_name = repo.split("/")[-1] if "/" in repo else repo
-                search_filter = Filter(
-                    must=[FieldCondition(key="repo", match=MatchValue(value=repo_name))]
-                )
-                log.info("Qdrant repo filter: %s → '%s'", repo, repo_name)
-
-            # qdrant-client ≥ 1.9 uses query_points(); older versions use search()
-            try:
-                response = client.query_points(
-                    collection_name=collection,
-                    query=query_vector,
-                    limit=top_k,
-                    query_filter=search_filter,
-                    with_payload=True,
-                )
-                scored_points = response.points
-            except AttributeError:
-                scored_points = client.search(
-                    collection_name=collection,
-                    query_vector=query_vector,
-                    limit=top_k,
-                    query_filter=search_filter,
-                    with_payload=True,
-                )
-
-            return [
-                {
-                    "score": r.score,
-                    "path": (r.payload or {}).get("path", ""),
-                    "repo": (r.payload or {}).get("repo", ""),
-                    "repo_name": (r.payload or {}).get("repo_name", ""),
-                    "language": (r.payload or {}).get("language", ""),
-                    "text": ((r.payload or {}).get("text") or "")[:500],
-                }
-                for r in scored_points
-            ]
-        except Exception as exc:
-            log.warning("Qdrant search failed: %s", exc)
-            return []
-
-    # ── CGC graph context from Neo4j ──────────────────────────────────────────
-
-    def _graph_context_cgc(
-        self,
-        *,
-        file_paths: List[str],
-        keywords: List[str],
-        repo: Optional[str],
-    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Query CGC's Neo4j schema for functions and classes relevant to the ticket."""
-        try:
-            from neo4j import GraphDatabase
-        except ImportError:
-            log.warning("neo4j package not installed; skipping graph context")
-            return [], []
-
-        functions: List[Dict[str, Any]] = []
-        classes: List[Dict[str, Any]] = []
-
-        try:
-            driver = GraphDatabase.driver(
-                self.settings.neo4j_uri,
-                auth=(self.settings.neo4j_user, self.settings.neo4j_password),
-            )
-            with driver.session(database=self.settings.neo4j_database) as session:
-                # Functions in matched files (using ENDS WITH for relative→absolute path match)
-                if file_paths:
-                    result = session.run(
-                        """
-                        MATCH (fn:Function)
-                        WHERE ANY(p IN $paths WHERE fn.path ENDS WITH p)
-                        OPTIONAL MATCH (fn)-[:CALLS]->(callee:Function)
-                        OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
-                        RETURN fn.name AS name,
-                               fn.path AS path,
-                               collect(DISTINCT callee.name)[..8] AS calls,
-                               collect(DISTINCT caller.name)[..8] AS called_by
-                        LIMIT 30
-                        """,
-                        paths=file_paths,
-                    )
-                    functions = [dict(r) for r in result]
-
-                # Classes in matched files
-                if file_paths:
-                    result = session.run(
-                        """
-                        MATCH (cl:Class)
-                        WHERE ANY(p IN $paths WHERE cl.path ENDS WITH p)
-                        RETURN cl.name AS name, cl.path AS path
-                        LIMIT 15
-                        """,
-                        paths=file_paths,
-                    )
-                    classes = [dict(r) for r in result]
-
-                # Keyword fallback: search function names if no file hits
-                if not functions and keywords:
-                    conditions = " OR ".join(
-                        f"toLower(fn.name) CONTAINS toLower('{kw.replace(chr(39), '')}')"
-                        for kw in keywords[:5]
-                    )
-                    result = session.run(
-                        f"""
-                        MATCH (fn:Function)
-                        WHERE {conditions}
-                        OPTIONAL MATCH (fn)-[:CALLS]->(callee:Function)
-                        OPTIONAL MATCH (caller:Function)-[:CALLS]->(fn)
-                        RETURN fn.name AS name,
-                               fn.path AS path,
-                               collect(DISTINCT callee.name)[..8] AS calls,
-                               collect(DISTINCT caller.name)[..8] AS called_by
-                        LIMIT 20
-                        """
-                    )
-                    functions = [dict(r) for r in result]
-
-            driver.close()
-        except Exception as exc:
-            log.warning("Neo4j CGC graph query failed: %s", exc)
-
+        url = f"{self.settings.repo_tree_base_url}/testcases/generate"
         log.info(
-            "CGC graph context: %d functions, %d classes from %d file paths + %d keywords",
-            len(functions), len(classes), len(file_paths), len(keywords),
-        )
-        return functions, classes
-
-    # ── context assembly ──────────────────────────────────────────────────────
-
-    def _build_context_block(
-        self,
-        hits: List[Dict[str, Any]],
-        functions: List[Dict[str, Any]],
-        classes: List[Dict[str, Any]],
-    ) -> str:
-        parts: List[str] = []
-
-        if hits:
-            parts.append("### Semantically Similar Code Files")
-            for h in hits[:5]:
-                score = h.get("score", 0)
-                path = h.get("path", "")
-                lang = h.get("language", "")
-                text = h.get("text", "")
-                parts.append(f"\n**{path}** ({lang}, score={score:.3f})")
-                if text:
-                    parts.append(f"```{lang.lower()}\n{text[:200]}\n```")
-
-        if functions:
-            parts.append("\n### Functions (from CGC call graph)")
-            for fn in functions[:8]:
-                name = fn.get("name", "")
-                path = fn.get("path") or ""
-                calls_str = ", ".join(fn.get("calls") or [])
-                callers_str = ", ".join(fn.get("called_by") or [])
-                entry = f"- **{name}** ({_short_path(path)})"
-                if calls_str:
-                    entry += f"\n  calls: {calls_str}"
-                if callers_str:
-                    entry += f"\n  called_by: {callers_str}"
-                parts.append(entry)
-
-        if classes:
-            parts.append("\n### Classes (from CGC graph)")
-            for cls in classes[:10]:
-                name = cls.get("name", "")
-                path = cls.get("path") or ""
-                parts.append(f"- **{name}** ({_short_path(path)})")
-
-        return "\n".join(parts)
-
-    # ── helpers ───────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def _build_query(ticket_data: Dict[str, Any]) -> str:
-        parts = []
-        for key in ("summary", "title", "description", "description_text"):
-            val = ticket_data.get(key) or ""
-            if val:
-                parts.append(str(val)[:500])
-        return " ".join(parts)
-
-    @staticmethod
-    def _extract_file_paths(hits: List[Dict[str, Any]]) -> List[str]:
-        seen: set[str] = set()
-        paths: List[str] = []
-        for h in hits:
-            p = h.get("path", "")
-            if p and p not in seen:
-                seen.add(p)
-                paths.append(p)
-        return paths
-
-    @staticmethod
-    def _keywords(text: str) -> List[str]:
-        words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{3,}", text.lower())
-        seen: set[str] = set()
-        out: List[str] = []
-        for w in words:
-            if w not in _STOP_WORDS and w not in seen:
-                seen.add(w)
-                out.append(w)
-        return out
-
-    @staticmethod
-    def _ticket_as_text(ticket_data: Dict[str, Any]) -> str:
-        key = (
-            ticket_data.get("issueKey")
-            or ticket_data.get("key")
-            or ticket_data.get("issue_key")
-            or "?"
-        )
-        return (
-            f"Issue Key  : {key}\n"
-            f"Type       : {ticket_data.get('issueType') or ticket_data.get('issue_type') or '?'}\n"
-            f"Summary    : {ticket_data.get('summary') or ticket_data.get('title', '')}\n"
-            f"Description: {ticket_data.get('description') or ticket_data.get('description_text') or '(none)'}"
+            "Calling RepoTree testcase generator ticket=%s repo=%s model=%s style=%s",
+            ticket_key,
+            repo,
+            embedding_model,
+            style,
         )
 
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                headers={"accept": "application/json", "Content-Type": "application/json"},
+                timeout=self.settings.repo_tree_timeout_seconds,
+            )
+            data = _json_response(response)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            detail = _error_detail(getattr(exc, "response", None))
+            message = detail or str(exc)
+            log.warning("RepoTree testcase generation failed for %s: %s", ticket_key, message)
+            raise RuntimeError(f"RepoTree testcase generation failed: {message}") from exc
 
-def _short_path(abs_path: Optional[str], max_parts: int = 4) -> str:
-    """Return last N components of a path to keep context blocks readable."""
-    if not abs_path:
+        grounded_repos = data.get("grounded_repos") or []
+        return {
+            "test_cases": data.get("test_cases") or "",
+            "semantic_hits_count": int(data.get("semantic_hits_count") or 0),
+            "functions_found": len(grounded_repos),
+            "files_touched_count": int(data.get("files_touched_count") or 0),
+            "grounded_repos": grounded_repos,
+            "style": data.get("style") or style,
+            "architecture_context_chars": int(data.get("architecture_context_chars") or 0),
+            "repomix_context_chars": int(data.get("repomix_context_chars") or 0),
+        }
+
+
+def _ticket_payload(ticket_data: Dict[str, Any]) -> Dict[str, Any]:
+    fields = ticket_data.get("fields") or {}
+    issue_type = _string_value(
+        ticket_data.get("issueType")
+        or ticket_data.get("issue_type")
+        or (fields.get("issuetype") or {}).get("name")
+        or ""
+    )
+    description = _string_value(
+        ticket_data.get("description")
+        or ticket_data.get("description_text")
+        or fields.get("description")
+        or ""
+    )
+    labels = ticket_data.get("labels") or fields.get("labels") or []
+    components = ticket_data.get("components") or fields.get("components") or []
+    return {
+        "key": _string_value(ticket_data.get("issueKey") or ticket_data.get("key") or ticket_data.get("issue_key") or ""),
+        "summary": _string_value(ticket_data.get("summary") or ticket_data.get("title") or fields.get("summary") or ""),
+        "issue_type": issue_type,
+        "description": description,
+        "acceptance_criteria": _string_value(
+            ticket_data.get("acceptance_criteria")
+            or ticket_data.get("acceptanceCriteria")
+            or ticket_data.get("ac")
+            or ""
+        ),
+        "labels": [_string_value(label) for label in labels] if isinstance(labels, list) else [],
+        "components": _component_names(components),
+    }
+
+
+def _string_value(value: Any) -> str:
+    if value is None:
         return ""
-    parts = abs_path.replace("\\", "/").split("/")
-    return "/".join(parts[-max_parts:]) if len(parts) > max_parts else abs_path
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except TypeError:
+        return str(value)
+
+
+def _component_names(components: Any) -> list[str]:
+    if not isinstance(components, list):
+        return []
+    names: list[str] = []
+    for component in components:
+        if isinstance(component, str):
+            names.append(component)
+        elif isinstance(component, dict) and component.get("name"):
+            names.append(str(component["name"]))
+        else:
+            value = _string_value(component)
+            if value:
+                names.append(value)
+    return names
+
+
+def _json_response(response: requests.Response) -> dict[str, Any]:
+    try:
+        data = response.json()
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _error_detail(response: requests.Response | None) -> str:
+    if response is None:
+        return ""
+    data = _json_response(response)
+    detail = data.get("detail")
+    if isinstance(detail, str):
+        return detail
+    if detail:
+        return str(detail)
+    return response.text[:500]
