@@ -55,8 +55,14 @@ from app.schemas import (
     SimilarTicketsResponse,
     TestCaseRequest,
     TestCaseResponse,
+    Workflow1ReviewRequest,
+    Workflow1ReviewResponse,
+    Workflow2ReplyRequest,
+    Workflow2ReplyResponse,
     Workflow2Request,
     Workflow2Response,
+    Workflow3SLAResponse,
+    Workflow4DueDateResponse,
 )
 from app.similar_ticket_finder import SimilarTicketFinder
 from app.slack_client import SlackClient
@@ -64,6 +70,10 @@ from app.slack_review_workflow import SlackReviewWorkflow
 from app.testcase_chat_workflow import TestCaseChatWorkflow
 from app.test_case_generator import TestCaseGenerator
 from app.ticket_analyzer import TicketAnalyzer
+from app.workflow1_reviewer import Workflow1Reviewer
+from app.workflow2_replier import Workflow2Replier
+from app.workflow3_sla import Workflow3SLAChecker
+from app.workflow4_due_date import Workflow4DueDateChecker
 
 log = logging.getLogger(__name__)
 
@@ -113,6 +123,75 @@ def health() -> dict:
 @app.get("/prompts", response_model=PromptListResponse)
 def list_prompts() -> PromptListResponse:
     return PromptListResponse(prompts=prompt_store.list_prompts())
+
+
+# ─── Jira AI workflow endpoints ──────────────────────────────────────────────
+
+@app.post("/workflow1", response_model=Workflow1ReviewResponse)
+def workflow1_review(request: Workflow1ReviewRequest) -> Workflow1ReviewResponse:
+    log.info("POST /workflow1 issue=%s", request.issueKey)
+    try:
+        reviewer = Workflow1Reviewer(settings=settings, prompt_store=prompt_store)
+        return Workflow1ReviewResponse(**reviewer.review(request))
+    except ValueError as exc:
+        log.exception("/workflow1 validation failed")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (PromptNotFoundError, RuntimeError) as exc:
+        log.exception("/workflow1 runtime failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow1 failed")
+        raise HTTPException(status_code=500, detail=f"workflow1 failed: {exc}") from exc
+
+
+@app.post("/workflow2/reply", response_model=Workflow2ReplyResponse)
+def workflow2_reply(request: Workflow2ReplyRequest) -> Workflow2ReplyResponse:
+    log.info(
+        "POST /workflow2/reply user=%s channel=%s thread=%s",
+        request.user_id,
+        request.slack_channel_id,
+        request.slack_thread_ts,
+    )
+    try:
+        replier = Workflow2Replier(settings=settings, prompt_store=prompt_store)
+        return Workflow2ReplyResponse(**replier.reply(request))
+    except ValueError as exc:
+        log.exception("/workflow2/reply validation failed")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        log.exception("/workflow2/reply ticket lookup failed")
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow2/reply failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/workflow3", response_model=Workflow3SLAResponse)
+def workflow3_sla_check() -> Workflow3SLAResponse:
+    log.info("POST /workflow3")
+    try:
+        checker = Workflow3SLAChecker(settings=settings)
+        return Workflow3SLAResponse(**checker.check())
+    except RuntimeError as exc:
+        log.exception("/workflow3 runtime failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow3 failed")
+        raise HTTPException(status_code=500, detail=f"workflow3 failed: {exc}") from exc
+
+
+@app.post("/workflow4", response_model=Workflow4DueDateResponse)
+def workflow4_due_date_check() -> Workflow4DueDateResponse:
+    log.info("POST /workflow4")
+    try:
+        checker = Workflow4DueDateChecker(settings=settings)
+        return Workflow4DueDateResponse(**checker.check())
+    except RuntimeError as exc:
+        log.exception("/workflow4 runtime failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow4 failed")
+        raise HTTPException(status_code=500, detail=f"workflow4 failed: {exc}") from exc
 
 
 # ─── Graph admin UI ──────────────────────────────────────────────────────────

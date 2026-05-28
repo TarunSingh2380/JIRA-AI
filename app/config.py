@@ -7,11 +7,12 @@ project does not read environment variables directly.
 
 import os
 from dataclasses import dataclass
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
 
-load_dotenv()
+load_dotenv(encoding="utf-8-sig")
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,12 @@ class Settings:
     )
     llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
     llm_test_case_timeout_seconds: int = int(os.getenv("LLM_TEST_CASE_TIMEOUT_SECONDS", "300"))
-    database_url: str = os.getenv("DATABASE_URL", "")
+    database_url_override: str = os.getenv("DATABASE_URL", "")
+    db_host: str = os.getenv("DB_HOST", "")
+    db_port: str = os.getenv("DB_PORT", "5432")
+    db_name: str = os.getenv("DB_NAME", "")
+    db_user: str = os.getenv("DB_USER", "")
+    db_password: str = os.getenv("DB_PASSWORD", "")
     slack_bot_token: str = os.getenv("SLACK_BOT_TOKEN", "")
     slack_default_channel_id: str = os.getenv("SLACK_DEFAULT_CHANNEL_ID", "")
     jira_base_url: str = os.getenv("JIRA_BASE_URL", "").rstrip("/")
@@ -81,6 +87,19 @@ class Settings:
 
     # Jira ticket cache TTL in hours (0 = always re-fetch)
     jira_cache_ttl_hours: int = int(os.getenv("JIRA_CACHE_TTL_HOURS", "1"))
+
+    @property
+    def database_url(self) -> str:
+        if self.database_url_override:
+            return self.database_url_override
+
+        if not all([self.db_host, self.db_port, self.db_name, self.db_user]):
+            return ""
+
+        username = quote_plus(self.db_user)
+        password = quote_plus(self.db_password)
+        credentials = f"{username}:{password}" if password else username
+        return f"postgresql://{credentials}@{self.db_host}:{self.db_port}/{self.db_name}"
 
 
 settings = Settings()

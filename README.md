@@ -125,7 +125,11 @@ docker compose down
 - `POST /workflow/jira-review`
 - `POST /workflow/slack-reply`
 - `POST /workflow/slack-events`
+- `POST /workflow1`
 - `POST /workflow2`
+- `POST /workflow2/reply`
+- `POST /workflow3`
+- `POST /workflow4`
 
 Example request:
 
@@ -240,6 +244,19 @@ Slack reply request, if your automation sends a normalized payload:
 ```
 
 Slack Events API can also point directly at `POST /workflow/slack-events`. The endpoint handles Slack URL verification, ignores bot messages, and processes only messages that include `thread_ts`.
+
+## Jira AI Workflows 1-4
+
+The merged workflow endpoints are available alongside the existing analyzer,
+graph admin, and Slack follow-up APIs:
+
+- `POST /workflow1` reviews a Jira payload with `Prompt/workflow1_prompt.txt`.
+- `POST /workflow2/reply` handles workflow-specific Slack thread replies with `Prompt/workflow2_prompt.txt`.
+- `POST /workflow3` checks SLA usage and returns Slack alert payloads.
+- `POST /workflow4` checks due-date compliance and returns Slack alert payloads.
+
+`POST /workflow2` is kept for the existing AI Governor test-case Slack reply
+flow, so existing n8n integrations using that endpoint continue to work.
 
 ## AI Governor Test-case Slack Replies
 
