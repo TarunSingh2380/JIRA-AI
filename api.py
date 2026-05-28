@@ -16,9 +16,8 @@ logging.basicConfig(
     force=True,
 )
 
-from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -28,7 +27,6 @@ from fastapi.staticfiles import StaticFiles
 from app.code_analysis_report import build_code_analysis_report
 from app.config import settings
 from app.conversation_store import ConversationStoreError, PostgresConversationStore
-from app.db_init import run_migrations
 from app.exceptions import LLMConfigurationError, PromptNotFoundError
 from app.graph_context import GraphContextClient
 from app.graph_job import job_store
@@ -70,20 +68,10 @@ from app.ticket_analyzer import TicketAnalyzer
 log = logging.getLogger(__name__)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    try:
-        run_migrations(settings.database_url)
-    except Exception as exc:
-        log.error("DB migration failed on startup: %s", exc)
-    yield
-
-
 app = FastAPI(
     title="Jira AI Ticket Analyzer",
     version="0.2.0",
     description="Jira ticket analysis, Slack review workflow, and graph DB administration.",
-    lifespan=lifespan,
     docs_url=None,
 )
 
