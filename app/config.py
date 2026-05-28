@@ -22,6 +22,10 @@ class Settings:
     llm_model: str = os.getenv("LLM_MODEL", "claude-sonnet-4-20250514")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
+    testcase_chat_model: str = os.getenv(
+        "TESTCASE_CHAT_MODEL",
+        os.getenv("ANTHROPIC_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-5")),
+    )
     llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
     llm_test_case_timeout_seconds: int = int(os.getenv("LLM_TEST_CASE_TIMEOUT_SECONDS", "300"))
     database_url: str = os.getenv("DATABASE_URL", "")

@@ -77,6 +77,19 @@ class SlackReplyResponse(BaseModel):
     model_output: Dict[str, Any]
 
 
+class Workflow2Request(BaseModel):
+    user_id: str | None = None
+    slack_channel_id: str
+    slack_thread_ts: str
+    user_message: str
+
+
+class Workflow2Response(BaseModel):
+    slack_channel_id: str
+    slack_thread_ts: str
+    reply: str
+
+
 class GraphAdminTriggerRequest(BaseModel):
     action: Literal["update", "regenerate", "create_new", "jira_tickets_only"]
     repositories: List[str] = []

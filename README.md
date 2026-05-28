@@ -125,6 +125,7 @@ docker compose down
 - `POST /workflow/jira-review`
 - `POST /workflow/slack-reply`
 - `POST /workflow/slack-events`
+- `POST /workflow2`
 
 Example request:
 
@@ -239,6 +240,47 @@ Slack reply request, if your automation sends a normalized payload:
 ```
 
 Slack Events API can also point directly at `POST /workflow/slack-events`. The endpoint handles Slack URL verification, ignores bot messages, and processes only messages that include `thread_ts`.
+
+## AI Governor Test-case Slack Replies
+
+The n8n closing flow can post Slack thread replies to `POST /workflow2`:
+
+```json
+{
+  "user_id": "U123",
+  "slack_channel_id": "C1234567890",
+  "slack_thread_ts": "1715000000.000100",
+  "user_message": "Can you add an edge case for duplicate webhooks?"
+}
+```
+
+The API resolves the Slack thread to its Jira ticket from `tickets.slack_channel_id`
+and `tickets.slack_thread_ts`. It also falls back to older `channelid_table` rows
+and the existing `jira_slack_conversations` table. It loads `test_cases`, asks
+Claude whether the reply is a question or edit, and for edits updates both the
+Jira test-case comment and the Postgres rows.
+
+Required environment:
+
+```text
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/jira_ai
+ANTHROPIC_API_KEY=your_key
+LLM_PROVIDER=anthropic
+TESTCASE_CHAT_MODEL=claude-sonnet-4-5
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=you@example.com
+JIRA_API_TOKEN=your-token
+```
+
+Response:
+
+```json
+{
+  "slack_channel_id": "C1234567890",
+  "slack_thread_ts": "1715000000.000100",
+  "reply": "Updated the test cases..."
+}
+```
 
 ## Simple Slack Chat
 

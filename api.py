@@ -57,10 +57,13 @@ from app.schemas import (
     SimilarTicketsResponse,
     TestCaseRequest,
     TestCaseResponse,
+    Workflow2Request,
+    Workflow2Response,
 )
 from app.similar_ticket_finder import SimilarTicketFinder
 from app.slack_client import SlackClient
 from app.slack_review_workflow import SlackReviewWorkflow
+from app.testcase_chat_workflow import TestCaseChatWorkflow
 from app.test_case_generator import TestCaseGenerator
 from app.ticket_analyzer import TicketAnalyzer
 
@@ -555,6 +558,36 @@ def workflow_slack_events(payload: dict[str, Any]) -> dict[str, Any]:
         )
     )
     return {"ok": True, "result": response.model_dump()}
+
+
+@app.post("/workflow2", response_model=Workflow2Response)
+def workflow2(request: Workflow2Request) -> Workflow2Response:
+    log.info(
+        "POST /workflow2 user=%s channel=%s thread=%s msg_chars=%d",
+        request.user_id,
+        request.slack_channel_id,
+        request.slack_thread_ts,
+        len(request.user_message),
+    )
+
+    def out(reply: str) -> Workflow2Response:
+        return Workflow2Response(
+            slack_channel_id=request.slack_channel_id,
+            slack_thread_ts=request.slack_thread_ts,
+            reply=reply,
+        )
+
+    try:
+        workflow = TestCaseChatWorkflow(settings)
+        reply = workflow.handle(
+            slack_channel_id=request.slack_channel_id,
+            slack_thread_ts=request.slack_thread_ts,
+            user_message=request.user_message,
+        )
+        return out(reply)
+    except Exception:
+        log.exception("/workflow2 failed")
+        return out("Something went wrong while handling that test-case reply. Please check the service logs.")
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

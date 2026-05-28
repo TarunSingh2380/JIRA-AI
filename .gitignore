@@ -37,4 +37,4 @@ Thumbs.db
 Data/
 .claude/
 
-qudrant_storage/
+qdrant_storage/
