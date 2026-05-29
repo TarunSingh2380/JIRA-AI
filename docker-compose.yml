@@ -24,7 +24,9 @@ services:
       CODEBASE_EMBED_MAX_CHARS: 2000
       CODEBASE_EMBED_MAX_FILES_PER_REPO: 1000
       QDRANT_URL: http://host.docker.internal:6333
-      REPO_TREE_BASE_URL: http://13.207.36.226:8001
+      REPO_TREE_SRC_PATH: /app
+      REPO_TREE_CONFIG_PATH: /app/repo_tree/config/repos.yaml
+      REPO_TREE_WORKSPACE_DIR: /app/repo_tree/workspace
       REPO_TREE_TIMEOUT_SECONDS: 300
 
       GRAPH_JOB_REPO_TIMEOUT_SECONDS: 3600
@@ -37,6 +39,8 @@ services:
 
     volumes:
       - /home/ubuntu:/host-repos:rw
+      - /home/ubuntu:/home/ubuntu:rw
+      - ./repo_tree/workspace:/app/repo_tree/workspace:rw
 
     extra_hosts:
       - "host.docker.internal:host-gateway"

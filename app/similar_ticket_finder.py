@@ -30,7 +30,6 @@ _STOP_WORDS = {
     "where", "which", "with",
 }
 
-_MIN_TOP_MATCH_SCORE = 0.55
 _MAX_RETURNED_TICKETS = 1
 _SEARCH_DEPTH = 10
 
@@ -102,10 +101,11 @@ class SimilarTicketFinder:
         else:
             hits = self._enrich_from_db(hits)
 
-        hits = self._top_match_above_threshold(hits)
+        match_threshold = self.settings.similar_ticket_match_threshold
+        hits = self._top_match_above_threshold(hits, match_threshold)
         log.info(
             "SimilarTicketFinder method=%s returned=%d threshold>%s project=%s",
-            method, len(hits), _MIN_TOP_MATCH_SCORE, project_key,
+            method, len(hits), match_threshold, project_key,
         )
         return {"query_summary": summary, "total_found": len(hits),
                 "search_method": method, "tickets": hits}
@@ -390,9 +390,12 @@ class SimilarTicketFinder:
         return out
 
     @staticmethod
-    def _top_match_above_threshold(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _top_match_above_threshold(
+        hits: List[Dict[str, Any]],
+        threshold: float,
+    ) -> List[Dict[str, Any]]:
         best = max(hits, key=SimilarTicketFinder._similarity_score, default=None)
-        if best is None or SimilarTicketFinder._similarity_score(best) <= _MIN_TOP_MATCH_SCORE:
+        if best is None or SimilarTicketFinder._similarity_score(best) <= threshold:
             return []
         return [best][:_MAX_RETURNED_TICKETS]
 

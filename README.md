@@ -51,6 +51,11 @@ Graph DB admin UI:
 http://127.0.0.1:8000/graph-admin
 ```
 
+RepoTree is bundled into this project as `repo_architect/` plus
+`repo_tree/config` and `repo_tree/workspace`. Its APIs are exposed by the same
+JIRA-AI process, so you do not need a separate RepoTree checkout or second
+uvicorn port for scans, Repomix reindexing, or test-case generation.
+
 ## Docker Run
 
 Build and run the API:
@@ -80,6 +85,9 @@ DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/jira_ai
 REPOSITORY_SEARCH_ROOT=/host-repos
 REPOSITORY_HOST_ROOT=/home/ubuntu
 EXCLUDED_REPOSITORY_NAMES=JIRA-AI
+REPO_TREE_SRC_PATH=/app
+REPO_TREE_CONFIG_PATH=/app/repo_tree/config/repos.yaml
+REPO_TREE_WORKSPACE_DIR=/app/repo_tree/workspace
 ```
 
 If n8n runs directly on the host, use `host.docker.internal` in the webhook URL from inside Docker:
@@ -130,6 +138,13 @@ docker compose down
 - `POST /workflow2/reply`
 - `POST /workflow3`
 - `POST /workflow4`
+- `POST /scan/initial` (RepoTree, in-process)
+- `POST /scan/nightly` (RepoTree, in-process)
+- `POST /repomix/reindex` (RepoTree, in-process)
+- `POST /testcases/generate` (RepoTree, in-process)
+- `GET /jobs` (RepoTree, in-process)
+- `GET /jobs/{job_id}` (RepoTree, in-process)
+- `GET /repo-tree/health`
 
 Example request:
 
@@ -170,8 +185,10 @@ GRAPH_JOB_REPO_TIMEOUT_SECONDS=900
 GRAPH_JOB_COMMIT_BATCH_SIZE=500
 GRAPH_JOB_LIMIT_JIRA_ISSUES=0
 GRAPH_JOB_BUILD_EMBEDDINGS=true
-REPO_TREE_BASE_URL=http://13.207.36.226:8001
-REPO_TREE_TIMEOUT_SECONDS=300
+SIMILAR_TICKET_MATCH_THRESHOLD=0.68
+REPO_TREE_SRC_PATH=/home/ubuntu/JIRA-AI
+REPO_TREE_CONFIG_PATH=/home/ubuntu/JIRA-AI/repo_tree/config/repos.yaml
+REPO_TREE_WORKSPACE_DIR=/home/ubuntu/JIRA-AI/repo_tree/workspace
 ```
 
 Actions sent to n8n:
@@ -192,9 +209,10 @@ Qdrant through the configured Ollama embedding model. Repository graph creation
 and Neo4j `EmbeddingDocument` rebuilds no longer use Repograph, because that
 path only covered Python repositories.
 
-Test-case generation now calls RepoTree at `REPO_TREE_BASE_URL`. RepoTree uses
-the existing Qdrant codebase collections plus its Repomix maps, so this flow no
-longer depends on Neo4j graph traversal.
+Test-case generation now calls the bundled RepoTree code in-process. RepoTree
+uses the existing Qdrant codebase collections plus its Repomix maps, so this
+flow no longer depends on Neo4j graph traversal. Set `REPO_TREE_BASE_URL` only
+if you intentionally want to fall back to a remote RepoTree service.
 
 ## Jira Review + Slack Follow-up Workflow
 
@@ -273,9 +291,10 @@ The n8n closing flow can post Slack thread replies to `POST /workflow2`:
 
 The API resolves the Slack thread to its Jira ticket from `tickets.slack_channel_id`
 and `tickets.slack_thread_ts`. It also falls back to older `channelid_table` rows
-and the existing `jira_slack_conversations` table. It loads `test_cases`, asks
-Claude whether the reply is a question or edit, and for edits updates both the
-Jira test-case comment and the Postgres rows.
+and the existing `jira_slack_conversations` table. It loads the live Jira ticket,
+recent thread messages, and `test_cases`, asks Claude whether the reply is a
+ticket question, test-case question, or test-case edit, and for edits updates
+both the Jira test-case comment and the Postgres rows.
 
 Required environment:
 

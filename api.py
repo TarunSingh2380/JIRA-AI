@@ -9,6 +9,8 @@ Graph admin flow (replaces n8n):
 import asyncio
 import json
 import logging
+import time
+from contextlib import asynccontextmanager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +38,12 @@ from app.json_utils import parse_model_json, review_status, review_text
 from app.llm_client import build_llm_client
 from app.prompt_store import PromptStore
 from app.repository_discovery import discover_graph_repositories
+from app.repo_tree_integration import (
+    initialize_repo_tree,
+    register_repo_tree_routes,
+    repo_tree_status,
+    shutdown_repo_tree,
+)
 from app.schemas import (
     AnalyzeTicketRequest,
     AnalyzeTicketResponse,
@@ -78,12 +86,24 @@ from app.workflow4_due_date import Workflow4DueDateChecker
 log = logging.getLogger(__name__)
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    initialize_repo_tree()
+    try:
+        yield
+    finally:
+        shutdown_repo_tree()
+
+
 app = FastAPI(
     title="Jira AI Ticket Analyzer",
     version="0.2.0",
     description="Jira ticket analysis, Slack review workflow, and graph DB administration.",
     docs_url=None,
+    lifespan=lifespan,
 )
+
+register_repo_tree_routes(app)
 
 app.mount(
     "/static",
@@ -117,6 +137,7 @@ def health() -> dict:
         "status": "ok",
         "llm_provider": settings.llm_provider,
         "model": settings.llm_model,
+        "repo_tree": repo_tree_status(),
     }
 
 
@@ -481,7 +502,8 @@ def find_similar_tickets(request: SimilarTicketRequest) -> SimilarTicketsRespons
          Ollama / Qdrant is unavailable.
 
     All ticket statuses are considered. The response returns only the single best
-    ticket when its similarity score is greater than 55%; otherwise it returns empty.
+    ticket when its similarity score is greater than the configured threshold
+    (`SIMILAR_TICKET_MATCH_THRESHOLD`, default 68%); otherwise it returns empty.
     """
     log.info(
         "POST /analyze-ticket/similar summary=%r project=%s",
@@ -629,6 +651,7 @@ def workflow_slack_events(payload: dict[str, Any]) -> dict[str, Any]:
 
 @app.post("/workflow2", response_model=Workflow2Response)
 def workflow2(request: Workflow2Request) -> Workflow2Response:
+    started_at = time.perf_counter()
     log.info(
         "POST /workflow2 user=%s channel=%s thread=%s msg_chars=%d",
         request.user_id,
@@ -651,10 +674,22 @@ def workflow2(request: Workflow2Request) -> Workflow2Response:
             slack_thread_ts=request.slack_thread_ts,
             user_message=request.user_message,
         )
+        log.info(
+            "/workflow2 completed channel=%s thread=%s reply_chars=%d duration_ms=%.2f",
+            request.slack_channel_id,
+            request.slack_thread_ts,
+            len(reply),
+            (time.perf_counter() - started_at) * 1000,
+        )
         return out(reply)
     except Exception:
-        log.exception("/workflow2 failed")
-        return out("Something went wrong while handling that test-case reply. Please check the service logs.")
+        log.exception(
+            "/workflow2 failed channel=%s thread=%s duration_ms=%.2f",
+            request.slack_channel_id,
+            request.slack_thread_ts,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return out("Something went wrong while handling that thread reply. Please check the service logs.")
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

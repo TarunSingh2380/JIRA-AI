@@ -1,0 +1,1394 @@
+# Routes & Endpoints Map
+
+## node-crm
+
+### Login
+```
+POST /login/login                    -> LoginController (login.route.ts) — CRM user login
+POST /login/verify-otp               -> LoginController (login.route.ts) — Verify OTP
+POST /login/forgot-password          -> LoginController (login.route.ts) — Forgot password
+POST /login/update-password          -> LoginController (login.route.ts) — Update password
+POST /login/validate-otp             -> LoginController (login.route.ts) — Validate OTP
+POST /login/login-with-mac           -> LoginController (login.route.ts) — Login with MAC address
+POST /login/login-validation         -> LoginController (login.route.ts) — Login validation
+POST /login/assign-mac-address       -> LoginController (login.route.ts) — Assign MAC address
+```
+
+### Lead
+```
+POST   /lead/lead-list               -> LEADController (lead.route.ts) — Paginated lead listing
+POST   /lead/credit-list             -> LEADController (lead.route.ts) — Credit list
+POST   /lead/sanction-list           -> LEADController (lead.route.ts) — Sanction list
+POST   /lead/unprocessed-list        -> LEADController (lead.route.ts) — Unprocessed leads
+POST   /lead/again-no-loan-list      -> LEADController (lead.route.ts) — Again-no-loan list
+POST   /lead/no-eligible-list        -> LEADController (lead.route.ts) — Not eligible leads
+POST   /lead/change-lead-status      -> LEADController (lead.route.ts) — Change lead status
+POST   /lead/add-collection          -> LEADController (lead.route.ts) — Add collection (Payday)
+POST   /lead/add-emi-collection      -> LEADController (lead.route.ts) — Add EMI collection
+POST   /lead/collection-details      -> LEADController (lead.route.ts) — Collection details for lead
+POST   /lead/collection-follow-up    -> LEADController (lead.route.ts) — Collection follow-up
+POST   /lead/create-address          -> LEADController (lead.route.ts) — Create address
+POST   /lead/create-employment       -> LEADController (lead.route.ts) — Create employment details
+POST   /lead/reference-details       -> LEADController (lead.route.ts) — Add reference details
+POST   /lead/check-pincode           -> LEADController (lead.route.ts) — Check pincode
+POST   /lead/modify-loan             -> LEADController (lead.route.ts) — Modify loan details
+POST   /lead/modify-emi-loan         -> LEADController (lead.route.ts) — Modify EMI loan
+POST   /lead/get-repayment-date      -> LEADController (lead.route.ts) — Get repayment date list
+POST   /lead/update-repayment-date   -> LEADController (lead.route.ts) — Update repayment date
+POST   /lead/name-mismatch           -> LEADController (lead.route.ts) — Get name mismatch data
+POST   /lead/name-mismatch-action    -> LEADController (lead.route.ts) — Accept/reject name mismatch
+POST   /lead/no-dues                 -> LEADController (lead.route.ts) — Generate no-dues certificate
+POST   /lead/get-loan-details        -> LEADController (lead.route.ts) — Get loan details
+POST   /lead/get-emi-loan-details    -> LEADController (lead.route.ts) — Get EMI loan details
+POST   /lead/get-soa                 -> LEADController (lead.route.ts) — Get statement of account
+POST   /lead/generate-soa            -> LEADController (lead.route.ts) — Generate SOA by leadId
+POST   /lead/credit-detail           -> LEADController (lead.route.ts) — Credit detail
+POST   /lead/allocate-to-me          -> LEADController (lead.route.ts) — Allocate lead to me
+POST   /lead/check-penny-drop        -> LEADController (lead.route.ts) — Trigger penny drop check
+POST   /lead/lead-refund-update      -> LEADController (lead.route.ts) — Update lead refund
+POST   /lead/collection-mode-update  -> LEADController (lead.route.ts) — Update collection mode
+POST   /lead/download-collection-csv -> LEADController (lead.route.ts) — Download collection CSV
+POST   /lead/again-no-loan-follow-up -> LEADController (lead.route.ts) — Add again-no-loan follow-up
+POST   /lead/get-again-no-loan-follow-up -> LEADController (lead.route.ts) — Get again-no-loan follow-up
+POST   /lead/blacklist-customer-add  -> LEADController (lead.route.ts) — Add customer to blacklist
+POST   /lead/sync-whitelist-ramfin   -> LEADController (lead.route.ts) — Sync whitelist
+POST   /lead/payment-mode-manager    -> LEADController (lead.route.ts) — Payment mode manager
+POST   /lead/virtual-account         -> LEADController (lead.route.ts) — Virtual account tab
+POST   /lead/generate-emandate       -> LEADController (lead.route.ts) — Generate emandate
+POST   /lead/disable-emandate        -> LEADController (lead.route.ts) — Disable emandate
+POST   /lead/charge-emandate         -> LEADController (lead.route.ts) — Charge emandate
+POST   /lead/bank-account-details    -> LEADController (lead.route.ts) — Bank account details
+POST   /lead/disbursal-by-lead       -> LEADController (lead.route.ts) — Disbursal letter
+POST   /lead/noDuesPdf               -> LEADController (lead.route.ts) — No-dues PDF
+POST   /lead/selfie-liveness         -> LEADController (lead.route.ts) — Selfie liveness data
+POST   /lead/selfie-liveness-image   -> LEADController (lead.route.ts) — Selfie liveness image
+POST   /lead/update-selfie-liveness  -> LEADController (lead.route.ts) — Update selfie liveness
+POST   /lead/loan-modification-list  -> LEADController (lead.route.ts) — Loan modification list
+POST   /lead/loan-modification-report-> LEADController (lead.route.ts) — Loan modification report
+POST   /lead/send-settlement-email   -> LEADController (lead.route.ts) — Send settlement email
+POST   /lead/settlement-data         -> LEADController (lead.route.ts) — Settlement data
+POST   /lead/trigger-loan-write-off  -> LEADController (lead.route.ts) — Trigger loan write-off by date
+POST   /lead/decrypt-mobile          -> LEADController (lead.route.ts) — Decrypt mobile number
+POST   /lead/list-decrypt-mobile     -> LEADController (lead.route.ts) — List decrypted mobiles
+GET    /lead/crm-timeline/:leadID    -> LEADController (lead.route.ts) — CRM timeline
+GET    /lead/profile/:leadID         -> LEADController (lead.route.ts) — Get lead profile
+GET    /lead/assigned-lead           -> LEADController (lead.route.ts) — Get assigned lead ID
+POST   /lead/callback-request        -> LEADController (lead.route.ts) — Callback request list
+POST   /lead/credit-manager-names    -> LEADController (lead.route.ts) — Credit manager name/IDs
+POST   /lead/leads-api-json-view     -> LEADController (lead.route.ts) — Leads API JSON view
+```
+
+### CRM
+```
+POST /crm/update-lead                -> CRMController (crm.route.ts) — Update lead
+POST /crm/emi-calculator             -> CRMController (crm.route.ts) — EMI calculator
+POST /crm/credit-details             -> CRMController (crm.route.ts) — Save credit details
+POST /crm/get-amount-to-disbursed    -> CRMController (crm.route.ts) — Get disbursable amount
+POST /crm/generate-emi               -> CRMController (crm.route.ts) — Generate EMI to DB
+POST /crm/update-payment             -> CRMController (crm.route.ts) — Update payment
+POST /crm/apply-penalty              -> CRMController (crm.route.ts) — Apply penalty
+POST /crm/get-emis                   -> CRMController (crm.route.ts) — Get EMIs
+POST /crm/get-docs-requirements      -> CRMController (crm.route.ts) — Get docs requirements
+POST /crm/get-emi-loan-details       -> CRMController (crm.route.ts) — Get EMI loan details
+POST /crm/upload-bulk-mandate        -> CRMController (crm.route.ts) — Upload bulk mandate file
+POST /crm/get-bulk-mandate-data      -> CRMController (crm.route.ts) — Get bulk mandate data
+POST /crm/get-url-for-bulk-mandate   -> CRMController (crm.route.ts) — Get URL for bulk mandate
+POST /crm/upload-not-required-file   -> CRMController (crm.route.ts) — Upload not-required file
+POST /crm/payday-to-emi-conversion   -> CRMController (crm.route.ts) — Payday to EMI conversion
+POST /crm/loan-details-by-pan        -> CRMController (crm.route.ts) — Loan details by PAN
+POST /crm/loan-agreement-letter      -> CRMController (crm.route.ts) — Loan agreement letter
+```
+
+### Collection
+```
+POST /collection/pending-payday           -> CollectionController (collection.route.ts) — Pending Payday collection
+POST /collection/download-pending-payday  -> CollectionController (collection.route.ts) — Download Payday collection Excel
+POST /collection/pending-emi              -> CollectionController (collection.route.ts) — Pending EMI collection
+POST /collection/download-pending-emi     -> CollectionController (collection.route.ts) — Download EMI collection Excel
+POST /collection/allocate-multiple        -> CollectionController (collection.route.ts) — Allocate multiple leads
+POST /collection/collection-report-closed -> CollectionController (collection.route.ts) — Closed collection report
+POST /collection/download-closed          -> CollectionController (collection.route.ts) — Download closed collection Excel
+POST /collection/part-payment             -> CollectionController (collection.route.ts) — Part payment collection
+POST /collection/download-part-payment    -> CollectionController (collection.route.ts) — Download part payment Excel
+POST /collection/settlement               -> CollectionController (collection.route.ts) — Settlement collection
+POST /collection/download-settlement      -> CollectionController (collection.route.ts) — Download settlement Excel
+POST /collection/waive-off-details        -> CollectionController (collection.route.ts) — Waive-off loan details
+POST /collection/add-waive-off            -> CollectionController (collection.route.ts) — Add waive-off
+POST /collection/collection-manager       -> CollectionController (collection.route.ts) — Collection manager list
+POST /collection/collection-manager-action -> CollectionController (collection.route.ts) — Approve/reject collection
+POST /collection/collection-manager-action-multiple -> CollectionController (collection.route.ts) — Bulk approve/reject
+POST /collection/change-payment-mode      -> CollectionController (collection.route.ts) — Change payment mode
+POST /collection/payment-settlement-again -> CollectionController (collection.route.ts) — Settlement recalculate
+GET  /collection/dnd-list                 -> CustomerController (collection.route.ts) — DND customer list
+POST /collection/delete-dnd               -> CustomerController (collection.route.ts) — Delete DND
+POST /collection/add-dnd                  -> CustomerController (collection.route.ts) — Add DND
+POST /collection/edit-dnd                 -> CustomerController (collection.route.ts) — Edit DND
+POST /collection/download-dnd             -> CustomerController (collection.route.ts) — Download DND Excel
+```
+
+### Customer
+```
+POST /customer/global-search             -> CustomerController (customer.routes.ts) — Global search
+POST /customer/get-customer-list         -> CustomerController (customer.routes.ts) — Customer list
+POST /customer/update-customer           -> CustomerController (customer.routes.ts) — Update customer details
+POST /customer/set-source-partner        -> CustomerController (customer.routes.ts) — Set source partner
+POST /customer/edit-source-partner       -> CustomerController (customer.routes.ts) — Edit source partner
+POST /customer/get-source-partner        -> CustomerController (customer.routes.ts) — Get source partners
+POST /customer/feedback-list             -> CustomerController (customer.routes.ts) — Feedback list
+POST /customer/pan-verification          -> CustomerController (customer.routes.ts) — PAN verification
+POST /customer/aadhar-otp                -> CustomerController (customer.routes.ts) — Aadhaar OTP
+POST /customer/verify-aadhar-otp         -> CustomerController (customer.routes.ts) — Verify Aadhaar OTP
+POST /customer/ckyc                      -> CustomerController (customer.routes.ts) — CKYC fetch
+POST /customer/blacklist-pan             -> CustomerController (customer.routes.ts) — Blacklist PAN (CSV upload)
+POST /customer/upload-blacklist-pan      -> CustomerController (customer.routes.ts) — Upload blacklist PAN CSV
+GET  /customer/api-log/:customerID       -> CustomerController (customer.routes.ts) — Get API log
+```
+
+### Disbursal
+```
+POST /disbursal/bank-update              -> DisbursalController (disbursal.route.ts) — Bank update/disbursal list
+POST /disbursal/export-manual-disbursal  -> DisbursalController (disbursal.route.ts) — Export manual disbursal
+POST /disbursal/import-manual-disbursal  -> DisbursalController (disbursal.route.ts) — Import manual disbursal
+POST /disbursal/allocate                 -> DisbursalController (disbursal.route.ts) — Allocate disbursal leads
+POST /disbursal/initiate                 -> DisbursalController (disbursal.route.ts) — Initiate disbursal
+POST /disbursal/bank-update-reject-failed -> DisbursalController (disbursal.route.ts) — Mark bank update failed
+POST /disbursal/re-initiate              -> DisbursalController (disbursal.route.ts) — Re-initiate disbursal
+```
+
+### Report
+```
+POST /report/customer-feedback           -> ReportController (report.route.ts) — Customer feedback report
+POST /report/disbursal-data              -> ReportController (report.route.ts) — Disbursal data report
+POST /report/download-disbursal-data     -> ReportController (report.route.ts) — Download disbursal Excel
+POST /report/collection-data            -> ReportController (report.route.ts) — Collection data report
+POST /report/download-collection-data   -> ReportController (report.route.ts) — Download collection Excel
+POST /report/date-wise-pending          -> ReportController (report.route.ts) — Date-wise pending payment
+POST /report/date-wise-lead             -> ReportController (report.route.ts) — Date-wise lead report
+POST /report/download-date-wise-lead    -> ReportController (report.route.ts) — Download date-wise lead Excel
+POST /report/date-wise-collection       -> ReportController (report.route.ts) — Date-wise collection report
+POST /report/download-date-wise-collection -> ReportController (report.route.ts) — Download date-wise collection Excel
+POST /report/app-issue                  -> ReportController (report.route.ts) — App issue report
+POST /report/refund                     -> ReportController (report.route.ts) — Refund report
+POST /report/utm-sources                -> ReportController (report.route.ts) — All UTM sources
+POST /report/all-leads                  -> ReportController (report.route.ts) — All leads report
+POST /report/download-refund            -> ReportController (report.route.ts) — Download refund Excel
+POST /report/landing-partner-leads      -> ReportController (report.route.ts) — Landing partner leads
+POST /report/collection-emi             -> ReportController (report.route.ts) — Collection EMI report
+POST /report/settlement                 -> ReportController (report.route.ts) — Settlement report
+POST /report/collection-mode            -> ReportController (report.route.ts) — Collection mode report
+POST /report/disbursal-summary          -> ReportController (report.route.ts) — Disbursal summary report
+POST /report/event-funnel               -> EventFunnelController (report.route.ts) — Event funnel
+```
+
+### User Management
+```
+GET  /user/list                          -> UserController (user.route.ts) — Management user list
+POST /user/add                           -> UserController (user.route.ts) — Add user
+POST /user/edit/:userID                  -> UserController (user.route.ts) — Edit user
+GET  /user/download-list                 -> UserController (user.route.ts) — Download user list Excel
+GET  /user/report-access/:userID         -> UserController (user.route.ts) — Get report access
+POST /user/report-access/update          -> UserController (user.route.ts) — Update report access
+GET  /user/login-logs                    -> UserController (user.route.ts) — Login logs
+GET  /user/whitelist-ips                 -> UserController (user.route.ts) — Whitelist IPs
+POST /user/whitelist-ip/add              -> UserController (user.route.ts) — Add whitelist IP
+DELETE /user/whitelist-ip/:id            -> UserController (user.route.ts) — Delete whitelist IP
+GET  /user/roles                         -> UserController (user.route.ts) — Get roles list
+GET  /user/role/:roleId                  -> UserController (user.route.ts) — Get role details
+POST /user/role/add                      -> UserController (user.route.ts) — Add role
+POST /user/role/edit/:roleId             -> UserController (user.route.ts) — Edit role
+GET  /user/permissions                   -> UserController (user.route.ts) — Get permissions list
+GET  /user/permission/:permissionId      -> UserController (user.route.ts) — Get permission details
+POST /user/permission/add                -> UserController (user.route.ts) — Add permission
+POST /user/permission/edit/:permissionId -> UserController (user.route.ts) — Edit permission
+GET  /user/role-permissions/:roleId      -> UserController (user.route.ts) — Get role permissions
+POST /user/role-permissions/update/:roleId -> UserController (user.route.ts) — Update bulk role permissions
+GET  /user/dashboard                     -> UserController (user.route.ts) — Dashboard stats
+GET  /user/permissions-list              -> UserController (user.route.ts) — All permissions list
+GET  /user/permissions-types             -> UserController (user.route.ts) — Permission types
+GET  /user/:userID                       -> UserController (user.route.ts) — Get user by ID
+```
+
+### Blacklist
+```
+POST /blacklist/blacklist-list           -> BLACKLISTController (blacklist.route.ts) — Blacklisted customer list
+```
+
+### Document
+```
+POST /document/finbox-doc-list           -> DocumentController (document.route.ts) — Finbox doc list
+POST /document/pdf-url                   -> DocumentController (document.route.ts) — PDF URL by ID
+POST /document/name-dob-match            -> DocumentController (document.route.ts) — Name/DOB match
+POST /document/link-aadhar-pan-reverify  -> DocumentController (document.route.ts) — Link Aadhaar-PAN reverify
+POST /document/finbox-check-fraud        -> DocumentController (document.route.ts) — Finbox fraud check
+```
+
+### Logs
+```
+POST /logs/update-sms-logs               -> LogsController (logs.routes.ts) — Update SMS logs
+POST /logs/api-logs                      -> LogsController (logs.routes.ts) — Get API logs
+POST /logs/logs-view                     -> LogsController (logs.routes.ts) — Logs view
+POST /logs/migrate                       -> LogsController (logs.routes.ts) — Migrate leads API logs
+```
+
+### History
+```
+POST /history/loan-history               -> HistoryController (history.route.ts) — Loan history
+POST /history/lead-history               -> HistoryController (history.route.ts) — Lead history
+POST /history/address-history            -> HistoryController (history.route.ts) — Address history
+POST /history/add-address                -> HistoryController (history.route.ts) — Add address
+POST /history/employment-history         -> HistoryController (history.route.ts) — Employment history
+POST /history/salary-history             -> HistoryController (history.route.ts) — Salary history
+POST /history/location-history           -> HistoryController (history.route.ts) — Location history
+POST /history/account-aggregator         -> HistoryController (history.route.ts) — Account aggregator history
+POST /history/email-history              -> HistoryController (history.route.ts) — Email history
+```
+
+### SOA
+```
+POST /soa/generate-pdf                   -> SoaController (soa.route.ts) — Generate SOA PDF
+POST /soa/section-data                   -> SoaController (soa.route.ts) — Sanction data
+```
+
+### Refund
+```
+POST /refund/razorpay-refund             -> RefundController (refund.route.ts) — Razorpay refund
+POST /refund/bulk-refund                 -> RefundController (refund.route.ts) — Bulk refund
+POST /refund/upload-bulk-refund          -> RefundController (refund.route.ts) — Upload bulk refund file
+POST /refund/user-refund-report          -> RefundController (refund.route.ts) — User refund report
+POST /refund/download-refund-report      -> RefundController (refund.route.ts) — Download refund report Excel
+POST /refund/refund-files                -> RefundController (refund.route.ts) — Get refund files
+POST /refund/get-updated-refund-file     -> RefundController (refund.route.ts) — Get updated refund file
+POST /refund/get-refund-file-url         -> RefundController (refund.route.ts) — Get refund file URL
+POST /refund/refund-dashboard-summary    -> RefundController (refund.route.ts) — Refund dashboard summary
+```
+
+### Quick Report
+```
+POST /quick-report/menu                  -> QuickReportController (quickReport.route.ts) — Menu
+POST /quick-report/reports               -> QuickReportController (quickReport.route.ts) — Get reports
+POST /quick-report/download              -> QuickReportController (quickReport.route.ts) — Download report
+```
+
+### Projection
+```
+POST /projection/upload                  -> ProjectionController (projection.route.ts) — Upload projection file
+POST /projection/report                  -> ProjectionController (projection.route.ts) — Projection report
+POST /projection/failed-file             -> ProjectionController (projection.route.ts) — Failed file
+POST /projection/call-monitoring         -> ProjectionController (projection.route.ts) — Call monitoring data
+POST /projection/call-description        -> ProjectionController (projection.route.ts) — Call description data
+GET  /projection/failed-details          -> ProjectionController (projection.route.ts) — Failed projection details
+```
+
+### Common
+```
+POST /common/experian-user-details       -> CommonController (common.route.ts) — Experian user details
+POST /common/experian-crm-details        -> CommonController (common.route.ts) — Experian CRM details
+POST /common/experian-bureau-details     -> CommonController (common.route.ts) — Experian bureau details
+POST /common/stepper                     -> CommonController (common.route.ts) — Stepper update
+POST /common/data-update                 -> CommonController (common.route.ts) — Data update
+GET  /common/lead-statuses               -> CommonController (common.route.ts) — Get lead statuses
+```
+
+### Filter
+```
+POST /filter/filter                      -> FilterController (filter.route.ts) — Get filters by page
+```
+
+### App Function
+```
+POST /app-function/holiday-list          -> AppFunctionController (appFunction.route.ts) — Holiday list
+POST /app-function/add-holiday           -> AppFunctionController (appFunction.route.ts) — Add holiday
+POST /app-function/delete-holiday        -> AppFunctionController (appFunction.route.ts) — Delete holiday
+POST /app-function/disb-status           -> AppFunctionController (appFunction.route.ts) — Get disbursal status
+POST /app-function/update-disb-status    -> AppFunctionController (appFunction.route.ts) — Update disbursal status
+POST /app-function/gateway-type          -> AppFunctionController (appFunction.route.ts) — Get gateway type
+POST /app-function/update-gateway-type   -> AppFunctionController (appFunction.route.ts) — Update repayment gateway type
+```
+
+### Bulk Upload Collection
+```
+POST /bulk-upload/upload                 -> bulkUploadCollection (bulkUploadCollection.route.ts) — Upload collection CSV
+POST /bulk-upload/history-log            -> bulkUploadCollection (bulkUploadCollection.route.ts) — History log with pagination
+POST /bulk-upload/download-excel         -> bulkUploadCollection (bulkUploadCollection.route.ts) — Download group-wise Excel
+```
+
+### DSA
+```
+GET  /dsa/list                           -> DsaController (dsa.route.ts) — List DSA
+POST /dsa/create                         -> DsaController (dsa.route.ts) — Create DSA
+POST /dsa/update                         -> DsaController (dsa.route.ts) — Update DSA
+POST /dsa/delete                         -> DsaController (dsa.route.ts) — Delete DSA
+POST /dsa/upload-emis                    -> DsaController (dsa.route.ts) — Upload DSA EMI file
+POST /dsa/mis-report                     -> DsaController (dsa.route.ts) — MIS report
+POST /dsa/download-mis-report            -> DsaController (dsa.route.ts) — Download MIS report
+POST /dsa/credit-links                   -> DsaController (dsa.route.ts) — Credit links
+```
+
+### Waiver
+```
+POST /waiver/create                      -> WaiverController (waiver.route.ts) — Create waiver
+POST /waiver/action                      -> WaiverController (waiver.route.ts) — Waiver action
+POST /waiver/bulk-action                 -> WaiverController (waiver.route.ts) — Bulk waiver action
+POST /waiver/list                        -> WaiverController (waiver.route.ts) — Waiver list
+POST /waiver/cancel/:collectionID        -> WaiverController (waiver.route.ts) — Cancel waive-off
+POST /waiver/manager                     -> WaiverController (waiver.route.ts) — Waiver manager
+```
+
+### Contact Us
+```
+POST /contact-us/data                    -> ContactUsController (contactUs.route.ts) — Contact us data
+POST /contact-us/excel                   -> ContactUsController (contactUs.route.ts) — Contact us Excel
+```
+
+### Deep Link
+```
+GET  /deeplink/:referrer                 -> DeepLinkController (deeplink.route.ts) — Deep link redirect
+```
+
+### Report Summary
+```
+GET  /report-summary                     -> ReportController (reportSummary.route.ts) — Report summary
+```
+
+### Lentra Report
+```
+POST /lentra-report/failed-loans         -> LentraReportController (lentraReport.route.ts) — Failed loan report
+POST /lentra-report/export-failed-loans  -> LentraReportController (lentraReport.route.ts) — Export failed loans
+```
+
+### Customer Data Update
+```
+POST /customer-data-update/update        -> CustomerDataUpdateController (customerDataUpdate.routes.ts) — Update customer data with history
+```
+
+### Index
+```
+GET  /                                   -> IndexController (index.route.ts) — Health check / root
+```
+
+---
+
+## node-crm.raw
+
+### Login
+```
+POST /login/login                    -> LoginController (login.route.ts) — CRM user login
+POST /login/verify-otp               -> LoginController (login.route.ts) — Verify OTP
+POST /login/forgot-password          -> LoginController (login.route.ts) — Forgot password
+POST /login/update-password          -> LoginController (login.route.ts) — Update password
+POST /login/validate-otp             -> LoginController (login.route.ts) — Validate OTP
+POST /login/login-with-mac           -> LoginController (login.route.ts) — Login with MAC address
+POST /login/login-validation         -> LoginController (login.route.ts) — Login validation
+POST /login/assign-mac-address       -> LoginController (login.route.ts) — Assign MAC address
+```
+
+### Lead
+```
+POST   /lead/lead-list               -> LEADController (lead.route.ts) — Paginated lead listing
+POST   /lead/credit-list             -> LEADController (lead.route.ts) — Credit list
+POST   /lead/sanction-list           -> LEADController (lead.route.ts) — Sanction list
+POST   /lead/unprocessed-list        -> LEADController (lead.route.ts) — Unprocessed leads
+POST   /lead/again-no-loan-list      -> LEADController (lead.route.ts) — Again-no-loan list
+POST   /lead/no-eligible-list        -> LEADController (lead.route.ts) — Not eligible leads
+POST   /lead/change-lead-status      -> LEADController (lead.route.ts) — Change lead status
+POST   /lead/add-collection          -> LEADController (lead.route.ts) — Add collection (Payday)
+POST   /lead/add-emi-collection      -> LEADController (lead.route.ts) — Add EMI collection
+POST   /lead/collection-details      -> LEADController (lead.route.ts) — Collection details for lead
+POST   /lead/collection-follow-up    -> LEADController (lead.route.ts) — Collection follow-up
+POST   /lead/create-address          -> LEADController (lead.route.ts) — Create address
+POST   /lead/create-employment       -> LEADController (lead.route.ts) — Create employment details
+POST   /lead/reference-details       -> LEADController (lead.route.ts) — Add reference details
+POST   /lead/check-pincode           -> LEADController (lead.route.ts) — Check pincode
+POST   /lead/modify-loan             -> LEADController (lead.route.ts) — Modify loan details
+POST   /lead/modify-emi-loan         -> LEADController (lead.route.ts) — Modify EMI loan
+POST   /lead/get-repayment-date      -> LEADController (lead.route.ts) — Get repayment date list
+POST   /lead/update-repayment-date   -> LEADController (lead.route.ts) — Update repayment date
+POST   /lead/name-mismatch           -> LEADController (lead.route.ts) — Get name mismatch data
+POST   /lead/name-mismatch-action    -> LEADController (lead.route.ts) — Accept/reject name mismatch
+POST   /lead/no-dues                 -> LEADController (lead.route.ts) — Generate no-dues certificate
+POST   /lead/get-loan-details        -> LEADController (lead.route.ts) — Get loan details
+POST   /lead/get-emi-loan-details    -> LEADController (lead.route.ts) — Get EMI loan details
+POST   /lead/get-soa                 -> LEADController (lead.route.ts) — Get statement of account
+POST   /lead/generate-soa            -> LEADController (lead.route.ts) — Generate SOA by leadId
+POST   /lead/credit-detail           -> LEADController (lead.route.ts) — Credit detail
+POST   /lead/allocate-to-me          -> LEADController (lead.route.ts) — Allocate lead to me
+POST   /lead/check-penny-drop        -> LEADController (lead.route.ts) — Trigger penny drop check
+POST   /lead/lead-refund-update      -> LEADController (lead.route.ts) — Update lead refund
+POST   /lead/collection-mode-update  -> LEADController (lead.route.ts) — Update collection mode
+POST   /lead/download-collection-csv -> LEADController (lead.route.ts) — Download collection CSV
+POST   /lead/again-no-loan-follow-up -> LEADController (lead.route.ts) — Add again-no-loan follow-up
+POST   /lead/get-again-no-loan-follow-up -> LEADController (lead.route.ts) — Get again-no-loan follow-up
+POST   /lead/blacklist-customer-add  -> LEADController (lead.route.ts) — Add customer to blacklist
+POST   /lead/sync-whitelist-ramfin   -> LEADController (lead.route.ts) — Sync whitelist
+POST   /lead/payment-mode-manager    -> LEADController (lead.route.ts) — Payment mode manager
+POST   /lead/virtual-account         -> LEADController (lead.route.ts) — Virtual account tab
+POST   /lead/generate-emandate       -> LEADController (lead.route.ts) — Generate emandate
+POST   /lead/disable-emandate        -> LEADController (lead.route.ts) — Disable emandate
+POST   /lead/charge-emandate         -> LEADController (lead.route.ts) — Charge emandate
+POST   /lead/bank-account-details    -> LEADController (lead.route.ts) — Bank account details
+POST   /lead/disbursal-by-lead       -> LEADController (lead.route.ts) — Disbursal letter
+POST   /lead/noDuesPdf               -> LEADController (lead.route.ts) — No-dues PDF
+POST   /lead/selfie-liveness         -> LEADController (lead.route.ts) — Selfie liveness data
+POST   /lead/selfie-liveness-image   -> LEADController (lead.route.ts) — Selfie liveness image
+POST   /lead/update-selfie-liveness  -> LEADController (lead.route.ts) — Update selfie liveness
+POST   /lead/loan-modification-list  -> LEADController (lead.route.ts) — Loan modification list
+POST   /lead/loan-modification-report-> LEADController (lead.route.ts) — Loan modification report
+POST   /lead/send-settlement-email   -> LEADController (lead.route.ts) — Send settlement email
+POST   /lead/settlement-data         -> LEADController (lead.route.ts) — Settlement data
+POST   /lead/trigger-loan-write-off  -> LEADController (lead.route.ts) — Trigger loan write-off by date
+POST   /lead/decrypt-mobile          -> LEADController (lead.route.ts) — Decrypt mobile number
+POST   /lead/list-decrypt-mobile     -> LEADController (lead.route.ts) — List decrypted mobiles
+GET    /lead/crm-timeline/:leadID    -> LEADController (lead.route.ts) — CRM timeline
+GET    /lead/profile/:leadID         -> LEADController (lead.route.ts) — Get lead profile
+GET    /lead/assigned-lead           -> LEADController (lead.route.ts) — Get assigned lead ID
+POST   /lead/callback-request        -> LEADController (lead.route.ts) — Callback request list
+POST   /lead/credit-manager-names    -> LEADController (lead.route.ts) — Credit manager name/IDs
+POST   /lead/leads-api-json-view     -> LEADController (lead.route.ts) — Leads API JSON view
+```
+
+### CRM
+```
+POST /crm/update-lead                -> CRMController (crm.route.ts) — Update lead
+POST /crm/emi-calculator             -> CRMController (crm.route.ts) — EMI calculator
+POST /crm/credit-details             -> CRMController (crm.route.ts) — Save credit details
+POST /crm/get-amount-to-disbursed    -> CRMController (crm.route.ts) — Get disbursable amount
+POST /crm/generate-emi               -> CRMController (crm.route.ts) — Generate EMI to DB
+POST /crm/update-payment             -> CRMController (crm.route.ts) — Update payment
+POST /crm/apply-penalty              -> CRMController (crm.route.ts) — Apply penalty
+POST /crm/get-emis                   -> CRMController (crm.route.ts) — Get EMIs
+POST /crm/get-docs-requirements      -> CRMController (crm.route.ts) — Get docs requirements
+POST /crm/get-emi-loan-details       -> CRMController (crm.route.ts) — Get EMI loan details
+POST /crm/upload-bulk-mandate        -> CRMController (crm.route.ts) — Upload bulk mandate file
+POST /crm/get-bulk-mandate-data      -> CRMController (crm.route.ts) — Get bulk mandate data
+POST /crm/get-url-for-bulk-mandate   -> CRMController (crm.route.ts) — Get URL for bulk mandate
+POST /crm/upload-not-required-file   -> CRMController (crm.route.ts) — Upload not-required file
+POST /crm/payday-to-emi-conversion   -> CRMController (crm.route.ts) — Payday to EMI conversion
+POST /crm/loan-details-by-pan        -> CRMController (crm.route.ts) — Loan details by PAN
+POST /crm/loan-agreement-letter      -> CRMController (crm.route.ts) — Loan agreement letter
+```
+
+### Collection
+```
+POST /collection/pending-payday           -> CollectionController (collection.route.ts) — Pending Payday collection
+POST /collection/download-pending-payday  -> CollectionController (collection.route.ts) — Download Payday collection Excel
+POST /collection/pending-emi              -> CollectionController (collection.route.ts) — Pending EMI collection
+POST /collection/download-pending-emi     -> CollectionController (collection.route.ts) — Download EMI collection Excel
+POST /collection/allocate-multiple        -> CollectionController (collection.route.ts) — Allocate multiple leads
+POST /collection/collection-report-closed -> CollectionController (collection.route.ts) — Closed collection report
+POST /collection/download-closed          -> CollectionController (collection.route.ts) — Download closed collection Excel
+POST /collection/part-payment             -> CollectionController (collection.route.ts) — Part payment collection
+POST /collection/download-part-payment    -> CollectionController (collection.route.ts) — Download part payment Excel
+POST /collection/settlement               -> CollectionController (collection.route.ts) — Settlement collection
+POST /collection/download-settlement      -> CollectionController (collection.route.ts) — Download settlement Excel
+POST /collection/waive-off-details        -> CollectionController (collection.route.ts) — Waive-off loan details
+POST /collection/add-waive-off            -> CollectionController (collection.route.ts) — Add waive-off
+POST /collection/collection-manager       -> CollectionController (collection.route.ts) — Collection manager list
+POST /collection/collection-manager-action -> CollectionController (collection.route.ts) — Approve/reject collection
+POST /collection/collection-manager-action-multiple -> CollectionController (collection.route.ts) — Bulk approve/reject
+POST /collection/change-payment-mode      -> CollectionController (collection.route.ts) — Change payment mode
+POST /collection/payment-settlement-again -> CollectionController (collection.route.ts) — Settlement recalculate
+GET  /collection/dnd-list                 -> CustomerController (collection.route.ts) — DND customer list
+POST /collection/delete-dnd               -> CustomerController (collection.route.ts) — Delete DND
+POST /collection/add-dnd                  -> CustomerController (collection.route.ts) — Add DND
+POST /collection/edit-dnd                 -> CustomerController (collection.route.ts) — Edit DND
+POST /collection/download-dnd             -> CustomerController (collection.route.ts) — Download DND Excel
+```
+
+### Customer
+```
+POST /customer/global-search             -> CustomerController (customer.routes.ts) — Global search
+POST /customer/get-customer-list         -> CustomerController (customer.routes.ts) — Customer list
+POST /customer/update-customer           -> CustomerController (customer.routes.ts) — Update customer details
+POST /customer/set-source-partner        -> CustomerController (customer.routes.ts) — Set source partner
+POST /customer/edit-source-partner       -> CustomerController (customer.routes.ts) — Edit source partner
+POST /customer/get-source-partner        -> CustomerController (customer.routes.ts) — Get source partners
+POST /customer/feedback-list             -> CustomerController (customer.routes.ts) — Feedback list
+POST /customer/pan-verification          -> CustomerController (customer.routes.ts) — PAN verification
+POST /customer/aadhar-otp                -> CustomerController (customer.routes.ts) — Aadhaar OTP
+POST /customer/verify-aadhar-otp         -> CustomerController (customer.routes.ts) — Verify Aadhaar OTP
+POST /customer/ckyc                      -> CustomerController (customer.routes.ts) — CKYC fetch
+POST /customer/blacklist-pan             -> CustomerController (customer.routes.ts) — Blacklist PAN (CSV upload)
+POST /customer/upload-blacklist-pan      -> CustomerController (customer.routes.ts) — Upload blacklist PAN CSV
+GET  /customer/api-log/:customerID       -> CustomerController (customer.routes.ts) — Get API log
+```
+
+### Disbursal
+```
+POST /disbursal/bank-update              -> DisbursalController (disbursal.route.ts) — Bank update/disbursal list
+POST /disbursal/export-manual-disbursal  -> DisbursalController (disbursal.route.ts) — Export manual disbursal
+POST /disbursal/import-manual-disbursal  -> DisbursalController (disbursal.route.ts) — Import manual disbursal
+POST /disbursal/allocate                 -> DisbursalController (disbursal.route.ts) — Allocate disbursal leads
+POST /disbursal/initiate                 -> DisbursalController (disbursal.route.ts) — Initiate disbursal
+POST /disbursal/bank-update-reject-failed -> DisbursalController (disbursal.route.ts) — Mark bank update failed
+POST /disbursal/re-initiate              -> DisbursalController (disbursal.route.ts) — Re-initiate disbursal
+```
+
+### Report
+```
+POST /report/customer-feedback           -> ReportController (report.route.ts) — Customer feedback report
+POST /report/disbursal-data              -> ReportController (report.route.ts) — Disbursal data report
+POST /report/download-disbursal-data     -> ReportController (report.route.ts) — Download disbursal Excel
+POST /report/collection-data            -> ReportController (report.route.ts) — Collection data report
+POST /report/download-collection-data   -> ReportController (report.route.ts) — Download collection Excel
+POST /report/date-wise-pending          -> ReportController (report.route.ts) — Date-wise pending payment
+POST /report/date-wise-lead             -> ReportController (report.route.ts) — Date-wise lead report
+POST /report/download-date-wise-lead    -> ReportController (report.route.ts) — Download date-wise lead Excel
+POST /report/date-wise-collection       -> ReportController (report.route.ts) — Date-wise collection report
+POST /report/download-date-wise-collection -> ReportController (report.route.ts) — Download date-wise collection Excel
+POST /report/app-issue                  -> ReportController (report.route.ts) — App issue report
+POST /report/refund                     -> ReportController (report.route.ts) — Refund report
+POST /report/utm-sources                -> ReportController (report.route.ts) — All UTM sources
+POST /report/all-leads                  -> ReportController (report.route.ts) — All leads report
+POST /report/download-refund            -> ReportController (report.route.ts) — Download refund Excel
+POST /report/landing-partner-leads      -> ReportController (report.route.ts) — Landing partner leads
+POST /report/collection-emi             -> ReportController (report.route.ts) — Collection EMI report
+POST /report/settlement                 -> ReportController (report.route.ts) — Settlement report
+POST /report/collection-mode            -> ReportController (report.route.ts) — Collection mode report
+POST /report/disbursal-summary          -> ReportController (report.route.ts) — Disbursal summary report
+POST /report/event-funnel               -> EventFunnelController (report.route.ts) — Event funnel
+```
+
+### User Management
+```
+GET  /user/list                          -> UserController (user.route.ts) — Management user list
+POST /user/add                           -> UserController (user.route.ts) — Add user
+POST /user/edit/:userID                  -> UserController (user.route.ts) — Edit user
+GET  /user/download-list                 -> UserController (user.route.ts) — Download user list Excel
+GET  /user/report-access/:userID         -> UserController (user.route.ts) — Get report access
+POST /user/report-access/update          -> UserController (user.route.ts) — Update report access
+GET  /user/login-logs                    -> UserController (user.route.ts) — Login logs
+GET  /user/whitelist-ips                 -> UserController (user.route.ts) — Whitelist IPs
+POST /user/whitelist-ip/add              -> UserController (user.route.ts) — Add whitelist IP
+DELETE /user/whitelist-ip/:id            -> UserController (user.route.ts) — Delete whitelist IP
+GET  /user/roles                         -> UserController (user.route.ts) — Get roles list
+GET  /user/role/:roleId                  -> UserController (user.route.ts) — Get role details
+POST /user/role/add                      -> UserController (user.route.ts) — Add role
+POST /user/role/edit/:roleId             -> UserController (user.route.ts) — Edit role
+GET  /user/permissions                   -> UserController (user.route.ts) — Get permissions list
+GET  /user/permission/:permissionId      -> UserController (user.route.ts) — Get permission details
+POST /user/permission/add                -> UserController (user.route.ts) — Add permission
+POST /user/permission/edit/:permissionId -> UserController (user.route.ts) — Edit permission
+GET  /user/role-permissions/:roleId      -> UserController (user.route.ts) — Get role permissions
+POST /user/role-permissions/update/:roleId -> UserController (user.route.ts) — Update bulk role permissions
+GET  /user/dashboard                     -> UserController (user.route.ts) — Dashboard stats
+GET  /user/permissions-list              -> UserController (user.route.ts) — All permissions list
+GET  /user/permissions-types             -> UserController (user.route.ts) — Permission types
+GET  /user/:userID                       -> UserController (user.route.ts) — Get user by ID
+```
+
+### Blacklist
+```
+POST /blacklist/blacklist-list           -> BLACKLISTController (blacklist.route.ts) — Blacklisted customer list
+```
+
+### Document
+```
+POST /document/finbox-doc-list           -> DocumentController (document.route.ts) — Finbox doc list
+POST /document/pdf-url                   -> DocumentController (document.route.ts) — PDF URL by ID
+POST /document/name-dob-match            -> DocumentController (document.route.ts) — Name/DOB match
+POST /document/link-aadhar-pan-reverify  -> DocumentController (document.route.ts) — Link Aadhaar-PAN reverify
+POST /document/finbox-check-fraud        -> DocumentController (document.route.ts) — Finbox fraud check
+```
+
+### Logs
+```
+POST /logs/update-sms-logs               -> LogsController (logs.routes.ts) — Update SMS logs
+POST /logs/api-logs                      -> LogsController (logs.routes.ts) — Get API logs
+POST /logs/logs-view                     -> LogsController (logs.routes.ts) — Logs view
+POST /logs/migrate                       -> LogsController (logs.routes.ts) — Migrate leads API logs
+```
+
+### History
+```
+POST /history/loan-history               -> HistoryController (history.route.ts) — Loan history
+POST /history/lead-history               -> HistoryController (history.route.ts) — Lead history
+POST /history/address-history            -> HistoryController (history.route.ts) — Address history
+POST /history/add-address                -> HistoryController (history.route.ts) — Add address
+POST /history/employment-history         -> HistoryController (history.route.ts) — Employment history
+POST /history/salary-history             -> HistoryController (history.route.ts) — Salary history
+POST /history/location-history           -> HistoryController (history.route.ts) — Location history
+POST /history/account-aggregator         -> HistoryController (history.route.ts) — Account aggregator history
+POST /history/email-history              -> HistoryController (history.route.ts) — Email history
+```
+
+### SOA
+```
+POST /soa/generate-pdf                   -> SoaController (soa.route.ts) — Generate SOA PDF
+POST /soa/section-data                   -> SoaController (soa.route.ts) — Sanction data
+```
+
+### Refund
+```
+POST /refund/razorpay-refund             -> RefundController (refund.route.ts) — Razorpay refund
+POST /refund/bulk-refund                 -> RefundController (refund.route.ts) — Bulk refund
+POST /refund/upload-bulk-refund          -> RefundController (refund.route.ts) — Upload bulk refund file
+POST /refund/user-refund-report          -> RefundController (refund.route.ts) — User refund report
+POST /refund/download-refund-report      -> RefundController (refund.route.ts) — Download refund report Excel
+POST /refund/refund-files                -> RefundController (refund.route.ts) — Get refund files
+POST /refund/get-updated-refund-file     -> RefundController (refund.route.ts) — Get updated refund file
+POST /refund/get-refund-file-url         -> RefundController (refund.route.ts) — Get refund file URL
+POST /refund/refund-dashboard-summary    -> RefundController (refund.route.ts) — Refund dashboard summary
+```
+
+### Quick Report
+```
+POST /quick-report/menu                  -> QuickReportController (quickReport.route.ts) — Menu
+POST /quick-report/reports               -> QuickReportController (quickReport.route.ts) — Get reports
+POST /quick-report/download              -> QuickReportController (quickReport.route.ts) — Download report
+```
+
+### Projection
+```
+POST /projection/upload                  -> ProjectionController (projection.route.ts) — Upload projection file
+POST /projection/report                  -> ProjectionController (projection.route.ts) — Projection report
+POST /projection/failed-file             -> ProjectionController (projection.route.ts) — Failed file
+POST /projection/call-monitoring         -> ProjectionController (projection.route.ts) — Call monitoring data
+POST /projection/call-description        -> ProjectionController (projection.route.ts) — Call description data
+GET  /projection/failed-details          -> ProjectionController (projection.route.ts) — Failed projection details
+```
+
+### Common
+```
+POST /common/experian-user-details       -> CommonController (common.route.ts) — Experian user details
+POST /common/experian-crm-details        -> CommonController (common.route.ts) — Experian CRM details
+POST /common/experian-bureau-details     -> CommonController (common.route.ts) — Experian bureau details
+POST /common/stepper                     -> CommonController (common.route.ts) — Stepper update
+POST /common/data-update                 -> CommonController (common.route.ts) — Data update
+GET  /common/lead-statuses               -> CommonController (common.route.ts) — Get lead statuses
+```
+
+### Filter
+```
+POST /filter/filter                      -> FilterController (filter.route.ts) — Get filters by page
+```
+
+### App Function
+```
+POST /app-function/holiday-list          -> AppFunctionController (appFunction.route.ts) — Holiday list
+POST /app-function/add-holiday           -> AppFunctionController (appFunction.route.ts) — Add holiday
+POST /app-function/delete-holiday        -> AppFunctionController (appFunction.route.ts) — Delete holiday
+POST /app-function/disb-status           -> AppFunctionController (appFunction.route.ts) — Get disbursal status
+POST /app-function/update-disb-status    -> AppFunctionController (appFunction.route.ts) — Update disbursal status
+POST /app-function/gateway-type          -> AppFunctionController (appFunction.route.ts) — Get gateway type
+POST /app-function/update-gateway-type   -> AppFunctionController (appFunction.route.ts) — Update repayment gateway type
+```
+
+### Bulk Upload Collection
+```
+POST /bulk-upload/upload                 -> bulkUploadCollection (bulkUploadCollection.route.ts) — Upload collection CSV
+POST /bulk-upload/history-log            -> bulkUploadCollection (bulkUploadCollection.route.ts) — History log with pagination
+POST /bulk-upload/download-excel         -> bulkUploadCollection (bulkUploadCollection.route.ts) — Download group-wise Excel
+```
+
+### DSA
+```
+GET  /dsa/list                           -> DsaController (dsa.route.ts) — List DSA
+POST /dsa/create                         -> DsaController (dsa.route.ts) — Create DSA
+POST /dsa/update                         -> DsaController (dsa.route.ts) — Update DSA
+POST /dsa/delete                         -> DsaController (dsa.route.ts) — Delete DSA
+POST /dsa/upload-emis                    -> DsaController (dsa.route.ts) — Upload DSA EMI file
+POST /dsa/mis-report                     -> DsaController (dsa.route.ts) — MIS report
+POST /dsa/download-mis-report            -> DsaController (dsa.route.ts) — Download MIS report
+POST /dsa/credit-links                   -> DsaController (dsa.route.ts) — Credit links
+```
+
+### Waiver
+```
+POST /waiver/create                      -> WaiverController (waiver.route.ts) — Create waiver
+POST /waiver/action                      -> WaiverController (waiver.route.ts) — Waiver action
+POST /waiver/bulk-action                 -> WaiverController (waiver.route.ts) — Bulk waiver action
+POST /waiver/list                        -> WaiverController (waiver.route.ts) — Waiver list
+POST /waiver/cancel/:collectionID        -> WaiverController (waiver.route.ts) — Cancel waive-off
+POST /waiver/manager                     -> WaiverController (waiver.route.ts) — Waiver manager
+```
+
+### Contact Us
+```
+POST /contact-us/data                    -> ContactUsController (contactUs.route.ts) — Contact us data
+POST /contact-us/excel                   -> ContactUsController (contactUs.route.ts) — Contact us Excel
+```
+
+### Deep Link
+```
+GET  /deeplink/:referrer                 -> DeepLinkController (deeplink.route.ts) — Deep link redirect
+```
+
+### Report Summary
+```
+GET  /report-summary                     -> ReportController (reportSummary.route.ts) — Report summary
+```
+
+### Lentra Report
+```
+POST /lentra-report/failed-loans         -> LentraReportController (lentraReport.route.ts) — Failed loan report
+POST /lentra-report/export-failed-loans  -> LentraReportController (lentraReport.route.ts) — Export failed loans
+```
+
+### Customer Data Update
+```
+POST /customer-data-update/update        -> CustomerDataUpdateController (customerDataUpdate.routes.ts) — Update customer data with history
+```
+
+### Index
+```
+GET  /                                   -> IndexController (index.route.ts) — Health check / root
+```
+
+---
+
+## onboarding-service-frontend
+
+All routes defined in `src/routes/AppRoutes.jsx`.
+
+**Public Routes**
+```
+GET /                    ->  Login               (src/pages/Login.jsx)          — Mobile OTP login
+GET /auto-login          ->  AutoLogin           (src/pages/AutoLogin.jsx)       — Token-based auto login
+GET /logout              ->  Logout              (src/pages/Logout.jsx)          — Clear session and redirect
+GET /*                   ->  NotFound            (src/pages/NotFound.jsx)        — 404 fallback
+```
+
+**Protected Routes (require auth)**
+```
+GET /stepper             ->  Stepper             (src/pages/Stepper.jsx)                 — Step checker/router
+GET /pan-verify          ->  PANVerify           (src/pages/PANVerify.jsx)               — PAN number input and confirmation
+GET /pan-verify-rejected ->  PANVerifyRejected   (src/pages/PANVerifyRejected.jsx)       — Age ineligibility screen
+GET /employment-details  ->  EmploymentDetails   (src/pages/EmploymentDetails.jsx)       — Employment/income form
+GET /finbox              ->  Finbox              (src/pages/Finbox.jsx)                  — Finbox bank statement widget
+GET /finbox-error        ->  FinboxError         (src/pages/FinboxError.jsx)             — Finbox failure screen
+GET /finbox-status       ->  FinboxStatus        (src/pages/FinboxStatus.jsx)            — Finbox status check
+GET /select-tenure       ->  SelectTenure        (src/pages/SelectTenure.jsx)            — Choose loan offer/tenure
+GET /loan-approval       ->  LoanApproval        (src/pages/LoanApproval.jsx)            — Loan approval details + bank confirm
+GET /loan-rejected       ->  LoanRejected        (src/pages/LoanRejected.jsx)            — Application rejected screen
+GET /your-email          ->  YourEmail           (src/pages/YourEmail.jsx)               — Email input + OTP verify
+GET /aadhaar-verification ->  AadhaarVerification (src/pages/AadhaarVerification.jsx)   — Aadhaar OTP or Digilocker KYC
+GET /digilocker-verify   ->  DigilockerVerify    (src/pages/DigilockerVerify.jsx)        — Digilocker webhook result
+GET /camera-permission   ->  CameraPermission    (src/pages/CameraPermission.jsx)        — Camera access guide (commented out in routes)
+GET /selfie-verification ->  Selfie              (src/pages/Selfie.jsx)                  — Selfie capture (commented out in routes)
+GET /selfie-hyperverge   ->  SelfieHyperVerge    (src/pages/SelfieHyperVerge.jsx)        — HyperVerge selfie flow
+GET /selfie-hyperverge-result -> SelfieHyperVergeResult (src/pages/SelfieHyperVergeResult.jsx) — HyperVerge result
+GET /add-bank-account    ->  AddBankAccount      (src/pages/AddBankAccount.jsx)          — Bank account form
+GET /penny-drop          ->  PennyDrop           (src/pages/PennyDrop.jsx)               — Penny drop verification
+GET /emandate            ->  Emandate            (src/pages/Emandate.jsx)                — E-mandate setup
+GET /kfs                 ->  KFS                 (src/pages/KFS.jsx)                     — Key Fact Statement acceptance
+GET /disbursed           ->  Disbursed           (src/pages/Disbursed.jsx)               — Loan disbursed success screen
+```
+
+---
+
+## onboarding-service-frontend.raw
+
+All routes defined in `src/routes/AppRoutes.jsx`.
+
+**Public Routes**
+```
+GET /                    ->  Login               (src/pages/Login.jsx)          — Mobile OTP login
+GET /auto-login          ->  AutoLogin           (src/pages/AutoLogin.jsx)       — Token-based auto login
+GET /logout              ->  Logout              (src/pages/Logout.jsx)          — Clear session and redirect
+GET /*                   ->  NotFound            (src/pages/NotFound.jsx)        — 404 fallback
+```
+
+**Protected Routes (require auth)**
+```
+GET /stepper             ->  Stepper             (src/pages/Stepper.jsx)                 — Step checker/router
+GET /pan-verify          ->  PANVerify           (src/pages/PANVerify.jsx)               — PAN number input and confirmation
+GET /pan-verify-rejected ->  PANVerifyRejected   (src/pages/PANVerifyRejected.jsx)       — Age ineligibility screen
+GET /employment-details  ->  EmploymentDetails   (src/pages/EmploymentDetails.jsx)       — Employment/income form
+GET /finbox              ->  Finbox              (src/pages/Finbox.jsx)                  — Finbox bank statement widget
+GET /finbox-error        ->  FinboxError         (src/pages/FinboxError.jsx)             — Finbox failure screen
+GET /finbox-status       ->  FinboxStatus        (src/pages/FinboxStatus.jsx)            — Finbox status check
+GET /select-tenure       ->  SelectTenure        (src/pages/SelectTenure.jsx)            — Choose loan offer/tenure
+GET /loan-approval       ->  LoanApproval        (src/pages/LoanApproval.jsx)            — Loan approval details + bank confirm
+GET /loan-rejected       ->  LoanRejected        (src/pages/LoanRejected.jsx)            — Application rejected screen
+GET /your-email          ->  YourEmail           (src/pages/YourEmail.jsx)               — Email input + OTP verify
+GET /aadhaar-verification ->  AadhaarVerification (src/pages/AadhaarVerification.jsx)   — Aadhaar OTP or Digilocker KYC
+GET /digilocker-verify   ->  DigilockerVerify    (src/pages/DigilockerVerify.jsx)        — Digilocker webhook result
+GET /camera-permission   ->  CameraPermission    (src/pages/CameraPermission.jsx)        — Camera access guide (commented out in routes)
+GET /selfie-verification ->  Selfie              (src/pages/Selfie.jsx)                  — Selfie capture (commented out in routes)
+GET /selfie-hyperverge   ->  SelfieHyperVerge    (src/pages/SelfieHyperVerge.jsx)        — HyperVerge selfie flow
+GET /selfie-hyperverge-result -> SelfieHyperVergeResult (src/pages/SelfieHyperVergeResult.jsx) — HyperVerge result
+GET /add-bank-account    ->  AddBankAccount      (src/pages/AddBankAccount.jsx)          — Bank account form
+GET /penny-drop          ->  PennyDrop           (src/pages/PennyDrop.jsx)               — Penny drop verification
+GET /emandate            ->  Emandate            (src/pages/Emandate.jsx)                — E-mandate setup
+GET /kfs                 ->  KFS                 (src/pages/KFS.jsx)                     — Key Fact Statement acceptance
+GET /disbursed           ->  Disbursed           (src/pages/Disbursed.jsx)               — Loan disbursed success screen
+```
+
+---
+
+## onboarding-service
+
+### Auth (`src/routes/auth.routes.ts`)
+```
+POST /new-api/auth/forget-password           → forgetPassword             (auth.controller.ts)      — Password reset
+POST /new-api/auth/reset-password            → resetPassword              (auth.controller.ts)      — Reset password
+GET  /new-api/auth/login-list                → loginList                  (auth.controller.ts)      — Login list
+POST /new-api/auth/verify-google             → verifyGoogleAuth           (auth.controller.ts)      — Google OAuth verify
+POST /new-api/auth/truecaller-init           → trueCallerInit             (auth.controller.ts)      — TrueCaller init
+POST /new-api/auth/truecaller-callback       → trueCallerCallback         (auth.controller.ts)      — TrueCaller callback
+POST /new-api/auth/truecaller-login          → trueCallerLogin            (auth.controller.ts)      — TrueCaller login
+```
+
+### Customer (`src/routes/customer.route.ts`)
+```
+POST /new-api/customers/login                        → customerLoginByMobile         (customers.controller.ts) — Send OTP
+POST /new-api/customers/verify-otp                   → verifyOtp                     (customers.controller.ts) — Verify OTP & login
+POST /new-api/customers/auth                         → authGenerationService         (customers.controller.ts) — Auth token generation
+POST /new-api/customers/dsa-auth                     → dsaAuthGenerationService      (customers.controller.ts) — DSA auth
+POST /new-api/customers/onboard-without-otp          → customerOnboardWithoutOtp     (customers.controller.ts) — Onboard without OTP
+POST /new-api/customers/google-login                 → customerLoginByGoogle         (customers.controller.ts) — Google login
+POST /new-api/customers/truecaller-login             → customerLoginByTrueCaller     (customers.controller.ts) — TrueCaller login
+GET  /new-api/customers/dashboard                    → customerCheckForDashboard     (customers.controller.ts) — Dashboard data
+POST /new-api/customers/check-pan-dedup              → (inline)                      (customers.controller.ts) — PAN dedup check
+POST /new-api/customers/incompleteDetailsUpdate      → onePageReloan                 (customers.controller.ts) — Update onboarding details
+POST /new-api/customers/partialIncompleteDetailsUpdate → partialIncompleteDetailsUpdate (customers.controller.ts) — Partial details update
+POST /new-api/customers/check-repeat-case/:leadID    → onePageReloanv2               (customers.controller.ts) — Repeat case check
+POST /new-api/customers/check-kyc-feature            → kycFeature                   (customers.controller.ts) — KYC feature flag
+POST /new-api/customers/bureau-decision              → (bureauDecision)              (customers.controller.ts) — Bureau decision API
+POST /new-api/customers/dsa-pan-verification         → (dsaPanVerification)          (customers.controller.ts) — DSA PAN verification
+POST /new-api/customers/dsa-lead-creation            → (dsaLeadCreation)             (customers.controller.ts) — DSA lead creation
+GET  /new-api/customers/dsa-lead-status              → dsaCheckLeadStatus            (customers.controller.ts) — DSA lead status
+POST /new-api/customers/ongoing-status               → checkOngoingStatusService     (customers.controller.ts) — Check ongoing status
+POST /new-api/customers/apptrove-artham-data         → processApptroveArthamData     (customers.controller.ts) — Apptrove/Artham data
+POST /new-api/customers/pan-mobile-auto-fetch        → panMobileAutoFetchService     (customers.controller.ts) — Auto-fetch PAN/mobile
+```
+
+### Onboarding (`src/routes/onboarding.routes.ts`)
+```
+POST /new-api/customer_onboarding/pan-verification                → panFetch                        (onboarding.controller.ts) — PAN verify (Surepass)
+POST /new-api/customer_onboarding/pan-verification-v2            → panFetchDigitap                  (onboarding.controller.ts) — PAN verify (Digitap)
+POST /new-api/customer_onboarding/pan-confirmation               → panConfirmation                  (onboarding.controller.ts) — Confirm PAN
+POST /new-api/customer_onboarding/send-aadhar-otp                → sendAadharOtp                    (onboarding.controller.ts) — Send Aadhaar OTP
+POST /new-api/customer_onboarding/verify-aadhar-otp              → verifyAadharOtp                  (onboarding.controller.ts) — Verify Aadhaar OTP
+POST /new-api/customer_onboarding/initiate-digilocker            → initiateDigilocker               (onboarding.controller.ts) — Initiate Digilocker
+GET  /new-api/customer_onboarding/aadhar-verification-webhook    → aadharVerificationWebhook        (onboarding.controller.ts) — Digilocker callback
+POST /new-api/customer_onboarding/aadhar-verification-webhook-v2 → aadharVerificationWebhookV2      (onboarding.controller.ts) — Digilocker v2 callback
+POST /new-api/customer_onboarding/basic-details                  → saveBasicDetails                 (onboarding.controller.ts) — Save employment/income details
+POST /new-api/customer_onboarding/finbox-bank-connect            → finboxBankConnect                (onboarding.controller.ts) — Finbox bank connect
+POST /new-api/customer_onboarding/finbox-bank-connect-status     → finboxBankConnectStatus          (onboarding.controller.ts) — Finbox bank connect status
+POST /new-api/customer_onboarding/initiate-penny-drop            → pennyDropInitiate                (onboarding.controller.ts) — Initiate penny drop
+POST /new-api/customer_onboarding/verify-penny-drop              → pennyDropVerify                  (onboarding.controller.ts) — Verify penny drop
+POST /new-api/customer_onboarding/set-emandate                   → setEmandate                      (onboarding.controller.ts) — Set e-mandate
+POST /new-api/customer_onboarding/key-fact-statement             → keyFactStatement                 (onboarding.controller.ts) — KFS acceptance
+POST /new-api/customer_onboarding/approval-view                  → approvalView                     (onboarding.controller.ts) — Loan approval view
+POST /new-api/customer_onboarding/approval-view-v2              → approvalViewV2                    (onboarding.controller.ts) — Loan approval view v2
+POST /new-api/customer_onboarding/reference-details             → saveReferenceDetails              (onboarding.controller.ts) — Save references
+POST /new-api/customer_onboarding/update-reference-details      → updateReferenceDetails            (onboarding.controller.ts) — Update references
+POST /new-api/customer_onboarding/selfie-verification           → verifySelfie                      (onboarding.controller.ts) — Selfie liveness
+POST /new-api/customer_onboarding/verify-selfie-hyperverge      → verifyHypervergeSelfie            (onboarding.controller.ts) — Hyperverge selfie
+POST /new-api/customer_onboarding/ckyc-search                   → ckycSearch                        (onboarding.controller.ts) — CKYC search
+POST /new-api/customer_onboarding/verify-email-otp              → verifyEmailOtp                    (onboarding.controller.ts) — Verify email OTP
+POST /new-api/customer_onboarding/get-basic-details             → getBasicDetails                   (onboarding.controller.ts) — Get basic details
+POST /new-api/customer_onboarding/initiate-digilocker-v2        → initiateDigilockerV2              (onboarding.controller.ts) — Digilocker v2 initiate
+```
+
+### Customer Bank Account (`src/routes/customerBankAccount.route.ts`)
+```
+POST /new-api/customer_bank_account/save-bank-details       → saveBankAccount          (customerBankAccount.controller.ts) — Save bank account
+POST /new-api/customer_bank_account/update-bank-details     → updateBankDetails        (customerBankAccount.controller.ts) — Update bank details
+GET  /new-api/customer_bank_account/bank-accounts           → getCustomerBankAccounts  (customerBankAccount.controller.ts) — List bank accounts
+GET  /new-api/customer_bank_account/bank-details-ifsc       → getBankDetailsOnIfsc     (customerBankAccount.controller.ts) — Lookup bank by IFSC
+GET  /new-api/customer_bank_account/bank-account/:id        → getBankAccountById       (customerBankAccount.controller.ts) — Get account by ID
+POST /new-api/customer_bank_account/confirm-bank-account    → confirmBankAccount       (customerBankAccount.controller.ts) — Confirm bank account
+POST /new-api/customer_bank_account/mandate-feature         → getMandateFeature        (customerBankAccount.controller.ts) — Check mandate requirement
+```
+
+### Step (`src/routes/step.route.ts`)
+```
+POST /new-api/step/next-step   → getUserNextStep   (step.controller.ts) — Get next onboarding step for customer
+```
+
+### CRM (`src/routes/crm.route.ts`)
+```
+POST /new-api/crm/lead-update              → leadUpdate              (crm.controller.ts) — Update lead
+POST /new-api/crm/emi-calculator           → emiCalculator           (crm.controller.ts) — Calculate EMI
+POST /new-api/crm/credit-details           → creditDetails           (crm.controller.ts) — Create credit record
+POST /new-api/crm/generate-emi             → generateEMI             (crm.controller.ts) — Generate EMI schedule
+POST /new-api/crm/update-payment           → updatePayment           (crm.controller.ts) — Update payment
+POST /new-api/crm/paydayToEmiConversion    → paydayToEmiConversion   (crm.controller.ts) — Convert payday to EMI
+```
+
+### Event Funnel (`src/routes/eventFunnel.route.ts`)
+```
+POST /new-api/event-funnel/save-frontend-events          → saveFrontendEventLogs    (eventFunnel.controller.ts) — Save frontend events
+POST /new-api/event-funnel/save-third-party-events       → saveThirdPartyEventLogs  (eventFunnel.controller.ts) — Save third-party events
+GET  /new-api/event-funnel/funnel-report                 → getFunnelReport          (eventFunnel.controller.ts) — Get funnel analytics
+```
+
+### Lentra (`src/routes/lentra.route.ts`)
+```
+POST /new-api/lentra/stp                  → lentraStp              (lentra.controller.ts) — Lentra STP flow
+POST /new-api/lentra/unique-check         → uniqueCheck            (lentra.controller.ts) — Lentra unique check
+GET  /new-api/lentra/repayment-data       → getRepaymentData       (lentra.controller.ts) — Lentra repayment data
+GET  /new-api/lentra/repayment-page       → repaymentPage          (lentra.controller.ts) — Repayment page data
+```
+
+### Lender (`src/routes/lender.route.ts`)
+```
+POST /new-api/lender/get-credentials   → getCredentials   (lender.controller.ts) — Get lender credentials
+```
+
+### Webhooks (`src/routes/webhooks.route.ts`)
+```
+POST /new-api/webhooks/razorpay              → razorpayWebhook        (webhooks.controller.ts) — Razorpay payment webhook
+POST /new-api/webhooks/razorpay-verification → razorpayVerification   (webhooks.controller.ts) — Razorpay verification webhook
+POST /new-api/webhooks/decentro-payment      → decentroPaymentWebhook (webhooks.controller.ts) — Decentro payment webhook
+```
+
+### Health Check (inline in `app.ts`)
+```
+GET /health   → (inline)   (app.ts) — Health check endpoint
+```
+
+---
+
+## ramfincorp-backend
+
+### Index
+`GET /`  →  IndexController (src/routes/index.route.ts)
+
+### Bureau Decision (`/api/v1/ramfincorp`)
+`GET /api/v1/ramfincorp/health`  →  BureauDecisionController.healthCheck  (src/routes/bureauDecision.route.ts)  — Health check
+`POST /api/v1/ramfincorp/bureau-decision`  →  BureauDecisionController.processBureauDecision  (src/routes/bureauDecision.route.ts)  — Process bureau decision with API key auth
+`POST /api/v1/ramfincorp/dsa-pan-verification`  →  BureauDecisionController.processDsaPanVerification  (src/routes/bureauDecision.route.ts)  — DSA PAN verification
+`POST /api/v1/ramfincorp/check-lead-status`  →  BureauDecisionController.checkLeadStatus  (src/routes/bureauDecision.route.ts)  — Check lead status by mobile
+
+### CIBIL Score (`/cibil`)
+`GET /cibil/terms-and-conditions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get T&C
+`POST /cibil/update-journey`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Update user journey step
+`POST /cibil/create-checkout`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Create Razorpay subscription checkout
+`GET /cibil/payment-status`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get subscription payment status
+`POST /cibil/experian-pull`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Pull Experian credit report
+`POST /cibil/answer-questions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Submit Experian auth questions
+`POST /cibil/payment-checkout`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Process subscription payment
+`GET /cibil/journey-step`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get current journey step
+`GET /cibil/subscriptions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — List subscriptions
+`GET /cibil/subscription-payments`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — List subscription payments
+`GET /cibil/subscription-process`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get subscription process
+`POST /cibil/report-summary`  →  CibilScoreController.reportSummary  (src/routes/cibilscore.route.ts)  — Get credit report summary
+`POST /cibil/account-details`  →  CibilScoreController.accountDetails  (src/routes/cibilscore.route.ts)  — Get account details
+`POST /cibil/view-impact`  →  CibilScoreController.viewImpactDetails  (src/routes/cibilscore.route.ts)  — View credit impact
+`GET /cibil/fetch-order-details`  →  CibilScoreController.fetchRazorpayOrder  (src/routes/cibilscore.route.ts)  — Fetch Razorpay order
+
+### Collection CRM (`/collection-crm`)
+`POST /collection-crm/add`  →  CollectionCrmController (src/routes/collectionCrm.route.ts)  — Add collection entry
+`GET /collection-crm/all`  →  CollectionCrmController (src/routes/collectionCrm.route.ts)  — Get all collections
+
+### Common (`/common`)
+`POST /common/ivr-menu-one`  →  CommonController (src/routes/common.route.ts)  — IVR menu 1 handler
+`POST /common/ivr-menu-two`  →  CommonController (src/routes/common.route.ts)  — IVR menu 2 handler
+`POST /common/customer-details`  →  CommonController (src/routes/common.route.ts)  — Get customer details
+`GET /common/bank-details`  →  CommonController (src/routes/common.route.ts)  — Get bank details by IFSC
+`GET /common/aadhar-down`  →  CommonController (src/routes/common.route.ts)  — Check Aadhaar service status
+
+### CRM (`/crm`)
+`PUT /crm/lead-update`  →  CRMController (src/routes/crm.route.ts)  — Update lead
+`POST /crm/emi-calculator`  →  CRMController (src/routes/crm.route.ts)  — Calculate EMI
+`POST /crm/credit-details`  →  CRMController (src/routes/crm.route.ts)  — Save credit details
+`GET /crm/amount-to-disburse`  →  CRMController (src/routes/crm.route.ts)  — Get disbursable amount
+`POST /crm/generate-emi`  →  CRMController (src/routes/crm.route.ts)  — Generate EMI schedule
+`POST /crm/update-payment`  →  CRMController (src/routes/crm.route.ts)  — Update payment
+`POST /crm/apply-penalty`  →  CRMController (src/routes/crm.route.ts)  — Apply penalty
+`GET /crm/emis`  →  CRMController (src/routes/crm.route.ts)  — Get EMIs
+`GET /crm/docs-requirements`  →  CRMController (src/routes/crm.route.ts)  — Get document requirements
+`GET /crm/emi-loan-details`  →  CRMController (src/routes/crm.route.ts)  — Get EMI loan details
+`POST /crm/payday-to-emi`  →  CRMController (src/routes/crm.route.ts)  — Convert payday to EMI
+`POST /crm/upload-bulk-mandate`  →  CRMController (src/routes/crm.route.ts)  — Upload bulk mandate CSV
+`GET /crm/mandates`  →  CRMController (src/routes/crm.route.ts)  — Get mandates
+`GET /crm/mandate-file-url`  →  CRMController (src/routes/crm.route.ts)  — Get mandate file URL
+`POST /crm/verify-payment`  →  CRMController (src/routes/crm.route.ts)  — Verify Razorpay payment range
+`POST /crm/verify-payu-payment`  →  CRMController (src/routes/crm.route.ts)  — Verify PayU payment range
+
+### Customers (`/customers`)
+`POST /customers/login`  →  CustomersController (src/routes/customer.route.ts)  — Customer login / send OTP
+`POST /customers/verify-otp`  →  CustomersController (src/routes/customer.route.ts)  — Verify OTP
+`GET /customers/dashboard`  →  CustomersController (src/routes/customer.route.ts)  — Customer dashboard data
+`POST /customers/incompleteDetailsUpdate`  →  CustomersController (src/routes/customer.route.ts)  — Update incomplete customer details + BRE
+`POST /customers/partial-incomplete-update`  →  CustomersController (src/routes/customer.route.ts)  — Partial incomplete details update
+`GET /customers/check-repeat-case/:leadID`  →  CustomersController (src/routes/customer.route.ts)  — Check repeat case / one-page reloan
+`POST /customers/updateEMIPayment`  →  CustomersController (src/routes/customer.route.ts)  — Update EMI payment (Razorpay)
+`POST /customers/updatePayUPayment`  →  CustomersController (src/routes/customer.route.ts)  — Update PayU payment
+`GET /customers/emi-soa`  →  CustomersController (src/routes/customer.route.ts)  — EMI statement of account
+`GET /customers/one-page-view`  →  CustomersController (src/routes/customer.route.ts)  — One-page loan view
+`GET /customers/repayment-page`  →  CustomersController (src/routes/customer.route.ts)  — Repayment page data
+`POST /customers/check-pdf`  →  CustomersController (src/routes/customer.route.ts)  — Check/generate PDF
+`GET /customers/loans`  →  CustomersController (src/routes/customer.route.ts)  — Customer loan list
+`POST /customers/dsa-lead-creation`  →  CustomersController (src/routes/customer.route.ts)  — DSA lead creation (API key auth)
+`POST /customers/create-otp`  →  CustomersController (src/routes/customer.route.ts)  — New OTP creation
+`POST /customers/verify-otp-service`  →  CustomersController (src/routes/customer.route.ts)  — New OTP verification
+`POST /customers/attributions`  →  CustomersController (src/routes/customer.route.ts)  — Save UTM attributions
+`GET /customers/lead-bulk`  →  CustomersController (src/routes/customer.route.ts)  — Bulk lead operations
+`POST /customers/update-emi-transactions`  →  CustomersController (src/routes/customer.route.ts)  — Update EMI transactions
+`POST /customers/update-payout`  →  CustomersController (src/routes/customer.route.ts)  — Update payout status
+`POST /customers/update-lead-status`  →  CustomersController (src/routes/customer.route.ts)  — Update lead status
+`POST /customers/update-job-status`  →  CustomersController (src/routes/customer.route.ts)  — Update job status
+`GET /customers/auto-login`  →  CustomersController (src/routes/customer.route.ts)  — Auto login via JWT
+`POST /customers/send-disbursal-document`  →  CustomersController (src/routes/customer.route.ts)  — Send disbursal document to SQS
+`GET /customers/get-journey`  →  CustomersController (src/routes/customer.route.ts)  — Get customer journey
+`POST /customers/check-pancard-dpd`  →  CustomersController (src/routes/customer.route.ts)  — Check PAN DPD status
+
+### Customer Bank Account (`/customer-bank-account`)
+`GET /customer-bank-account/list`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Get bank account list for emandate
+`POST /customer-bank-account/confirm`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Confirm bank account
+`POST /customer-bank-account/save`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Save bank details
+`GET /customer-bank-account/referrer-list`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Get referrer bank accounts
+`POST /customer-bank-account/save-referrer`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Save referrer bank details
+`POST /customer-bank-account/confirm-referrer`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Confirm referrer bank account
+
+### Document Dispatch (`/document-dispatch`)
+`POST /document-dispatch/init`  →  DocumentDispatchController.init  (src/routes/documentDispatch.route.ts)  — Initialize document dispatch
+`POST /document-dispatch/mark-sent`  →  DocumentDispatchController.markSent  (src/routes/documentDispatch.route.ts)  — Mark document as sent
+`POST /document-dispatch/error`  →  DocumentDispatchController.markError  (src/routes/documentDispatch.route.ts)  — Mark document dispatch error
+
+### Event Funnel (`/event-funnel`)
+`GET /event-funnel/report`  →  EventFunnelController (src/routes/eventFunnel.route.ts)  — Get event funnel report
+
+### Lender (`/lender`)
+`POST /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Add lender credentials
+`PUT /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Update lender credentials
+`GET /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Get lender credentials
+
+### Lentra (`/lentra`)
+`POST /lentra/stp`  →  LentraController (src/routes/lentra.route.ts)  — Lentra STP (straight-through processing)
+`GET /lentra/repayment-page`  →  LentraController (src/routes/lentra.route.ts)  — Lentra repayment page data
+`GET /lentra/repayment-data`  →  LentraController (src/routes/lentra.route.ts)  — Lentra repayment data
+
+### Loan Restructure (`/loan-restructure`)
+`GET /loan-restructure/charges/:leadID`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — Get restructure charges
+`POST /loan-restructure/reason`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — Submit restructure reason
+`POST /loan-restructure/kfs`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — KFS acceptance for restructure
+`GET /loan-restructure/kfs-view`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — View restructure KFS
+
+### Logs (`/logs`)
+`PUT /logs/sms`  →  LogsController.updateSMSLogs  (src/routes/logs.routes.ts)  — Update SMS delivery logs
+
+### Customer Onboarding (`/customer_onboarding`)
+`POST /customer_onboarding/pan-verification`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — PAN verification (SurePass/Digitap)
+`POST /customer_onboarding/pan-confirmation`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — PAN confirmation
+`POST /customer_onboarding/aadhar-otp-send`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Send Aadhaar OTP (SurePass)
+`POST /customer_onboarding/aadhar-otp-verify`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Verify Aadhaar OTP (SurePass)
+`POST /customer_onboarding/aadhar-verification-initiate-digilocker`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Initiate DigiLocker Aadhaar
+`GET /customer_onboarding/aadhar-verification-webhook-digilocker`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — DigiLocker webhook callback
+`POST /customer_onboarding/name-email`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Save name and email
+`POST /customer_onboarding/email`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Update email
+`POST /customer_onboarding/selfie-verification`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Selfie liveness verification
+`POST /customer_onboarding/hyperverge-onboard`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge onboarding start
+`POST /customer_onboarding/hyperverge-result`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge result fetch
+`POST /customer_onboarding/finbox-create-url`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Create Finbox bank connect URL
+`POST /customer_onboarding/finbox-bank-connect`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Finbox bank connect callback
+`POST /customer_onboarding/penny-drop-initiate`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Initiate penny drop
+`POST /customer_onboarding/emandate`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Create emandate
+`POST /customer_onboarding/emandate-callback`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Emandate Razorpay callback
+`POST /customer_onboarding/reference-details`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Save reference details
+`PUT /customer_onboarding/reference-details`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Update reference details
+`GET /customer_onboarding/states`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Get state suggestions
+`GET /customer_onboarding/approval-view`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view data
+`GET /customer_onboarding/approval-view-v2`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view v2
+`POST /customer_onboarding/key-fact`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Generate KFS document
+`POST /customer_onboarding/key-fact-acceptance`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Accept KFS
+`POST /customer_onboarding/send-kfs`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Send KFS document
+`GET /customer_onboarding/fetch-credit-score`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Fetch credit score
+
+### Page Instruction (`/page-instruction`)
+`GET /page-instruction`  →  PageInstructionController (src/routes/pageInstruction.route.ts)  — Get page instruction by name
+`POST /page-instruction`  →  PageInstructionController (src/routes/pageInstruction.route.ts)  — Add page instruction
+
+### Payment (`/payment`)
+`POST /payment/initiate`  →  PaymentController (src/routes/payment.route.ts)  — Initiate payment (PayU/Razorpay)
+`POST /payment/verify-payu`  →  PaymentController (src/routes/payment.route.ts)  — Verify PayU payment response
+`POST /payment/verify-razorpay`  →  PaymentController (src/routes/payment.route.ts)  — Verify Razorpay payment
+
+### Referral (`/referral`)
+`POST /referral/create`  →  ReferralController.createAndGenerateReferrer  (src/routes/referral.route.ts)  — Create referral link
+`GET /referral/url`  →  ReferralController.getReferrarUrl  (src/routes/referral.route.ts)  — Get referral URL
+`GET /referral/invite-status`  →  ReferralController.getInviteStatus  (src/routes/referral.route.ts)  — Get invite status list
+`GET /referral/invite-status/:id`  →  ReferralController.getInviteStatusById  (src/routes/referral.route.ts)  — Get single invite status
+`POST /referral/tracking`  →  ReferralController.tracking  (src/routes/referral.route.ts)  — Track referral
+
+### Report Summary (`/report`)
+`GET /report/summary`  →  reportSummary (src/routes/reportSummary.route.ts)  — Credit score report summary
+`GET /report/score-history`  →  scoreHistory (src/routes/reportSummary.route.ts)  — Score history
+
+### SMS Delivery Log (`/sms-delivery`)
+`POST /sms-delivery/textnation`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — TextNation SMS delivery webhook
+`POST /sms-delivery/msg91`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — MSG91 SMS delivery webhook
+`POST /sms-delivery/acquirit`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — Acquirit SMS delivery webhook
+
+### SOA (`/soa`)
+`POST /soa/generate`  →  SoaController (src/routes/soa.route.ts)  — Generate statement of account PDF
+`GET /soa/sanction-data`  →  SoaController (src/routes/soa.route.ts)  — Get sanction data
+`GET /soa/sanction-pdf`  →  SoaController (src/routes/soa.route.ts)  — Generate sanction PDF
+
+### Step (`/step`)
+`GET /step/next`  →  StepController (src/routes/step.route.ts)  — Get user's next onboarding step
+`GET /step/referrer-next`  →  StepController (src/routes/step.route.ts)  — Get referrer next step
+
+### Webhooks (`/webhooks`)
+`POST /webhooks/razorpay`  →  WebhookController (src/routes/webhooks.routes.ts)  — Razorpay payment webhook
+`POST /webhooks/emandate`  →  WebhookController (src/routes/webhooks.routes.ts)  — Razorpay emandate webhook
+`POST /webhooks/decentro`  →  WebhookController (src/routes/webhooks.routes.ts)  — Decentro reverse penny webhook
+
+### WhatsApp (`/whatsapp`)
+`POST /whatsapp/identify`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Identify customer via WhatsApp
+`POST /whatsapp/verify-pan`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Verify PAN via WhatsApp
+`POST /whatsapp/confirm-pan`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Confirm PAN via WhatsApp
+`POST /whatsapp/customer-type`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Check customer type
+`POST /whatsapp/bre-eligibility`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Check BRE eligibility
+
+### Withdrawal (`/withdrawal`)
+`POST /withdrawal/request`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Process withdrawal request
+`GET /withdrawal/eligibility`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Check withdrawal eligibility
+`GET /withdrawal/history`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get withdrawal transaction history
+`GET /withdrawal/balance`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get available balance
+`GET /withdrawal/limits`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get withdrawal limits
+`GET /withdrawal/transaction/:transactionId`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get transaction details
+`GET /withdrawal/receipt/:transactionId`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Download PDF receipt
+`GET /withdrawal/preview-receipt`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Preview receipt template
+`POST /withdrawal/webhook`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Handle payment gateway webhook
+
+### SQS Consumers (message handlers)
+`SQS queue: razorpaySqsQueueUrl`  →  startSqsConsumer  (src/consumers/razorpay.sqs.consumer.ts)  — Process Razorpay webhook messages from SQS
+`SQS queue: missingPaymentSettleQueueUrl`  →  consumerLoop  (src/consumers/missing.payment.settlement.consumer.ts)  — Settle missing normal payments
+`SQS queue: emandateMissingPaymentSettleQueueUrl`  →  consumerLoop  (src/consumers/emandate.missing.payment.consumer.ts)  — Settle missing emandate payments
+
+### Cron Jobs (scheduled)
+`CronJob`  →  CronJobService.autoDisbursalCoverage  (src/services/cronJobs/cronJobs.service.ts)  — Auto-approve repeat customers
+`CronJob`  →  CronJobService.fetchEMIPayments  (src/services/cronJobs/cronJobs.service.ts)  — Auto-pay EMIs via emandate
+`CronJob`  →  CronJobService.managePaymentCron  (src/services/cronJobs/cronJobs.service.ts)  — Settle pending Razorpay payments
+`CronJob`  →  CronJobService.updateLeadStatusAfterCheckCOllection  (src/services/cronJobs/cronJobs.service.ts)  — Update lead statuses post collection
+`CronJob`  →  CronJobService.updateLeadStatusAfterCheckCOllectionEmi  (src/services/cronJobs/cronJobs.service.ts)  — Update EMI lead statuses
+`CronJob`  →  CronJobService.setReferralRewardsProcessing  (src/services/cronJobs/cronJobs.service.ts)  — Process referral rewards daily 6PM IST
+`CronJob`  →  CronJobService.checkHourlyDisbursalThreshold  (src/services/cronJobs/cronJobs.service.ts)  — Alert on disbursal anomalies
+`CronJob`  →  CronJobService.requeuePendingDocumentsCron  (src/services/cronJobs/cronJobs.service.ts)  — Requeue pending document dispatches
+`CronJob`  →  CronJobService.customerExpiredON30Days  (src/services/cronJobs/cronJobs.service.ts)  — Expire 30-day incomplete leads
+`CronJob`  →  CronJobService.checkUtm  (src/services/cronJobs/cronJobs.service.ts)  — Process UTM attribution cleanup
+`CronJob`  →  RazorPayPaymentSettlementCronService.razorpayWebhookSettlement  (src/services/cronJobs/razorpayPaymentSettlementCron.ts)  — Razorpay SQS-based payment settlement
+`CronJob`  →  EventLogsCronJobervice  (src/services/cronJobs/eventLogsCronJob.service.ts)  — Save KFS-done-non-disbursed events
+
+---
+
+## ramfincorp-backend.raw
+
+### Index
+`GET /`  →  IndexController (src/routes/index.route.ts)
+
+### Bureau Decision (`/api/v1/ramfincorp`)
+`GET /api/v1/ramfincorp/health`  →  BureauDecisionController.healthCheck  (src/routes/bureauDecision.route.ts)  — Health check
+`POST /api/v1/ramfincorp/bureau-decision`  →  BureauDecisionController.processBureauDecision  (src/routes/bureauDecision.route.ts)  — Process bureau decision with API key auth
+`POST /api/v1/ramfincorp/dsa-pan-verification`  →  BureauDecisionController.processDsaPanVerification  (src/routes/bureauDecision.route.ts)  — DSA PAN verification
+`POST /api/v1/ramfincorp/check-lead-status`  →  BureauDecisionController.checkLeadStatus  (src/routes/bureauDecision.route.ts)  — Check lead status by mobile
+
+### CIBIL Score (`/cibil`)
+`GET /cibil/terms-and-conditions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get T&C
+`POST /cibil/update-journey`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Update user journey step
+`POST /cibil/create-checkout`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Create Razorpay subscription checkout
+`GET /cibil/payment-status`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get subscription payment status
+`POST /cibil/experian-pull`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Pull Experian credit report
+`POST /cibil/answer-questions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Submit Experian auth questions
+`POST /cibil/payment-checkout`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Process subscription payment
+`GET /cibil/journey-step`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get current journey step
+`GET /cibil/subscriptions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — List subscriptions
+`GET /cibil/subscription-payments`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — List subscription payments
+`GET /cibil/subscription-process`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get subscription process
+`POST /cibil/report-summary`  →  CibilScoreController.reportSummary  (src/routes/cibilscore.route.ts)  — Get credit report summary
+`POST /cibil/account-details`  →  CibilScoreController.accountDetails  (src/routes/cibilscore.route.ts)  — Get account details
+`POST /cibil/view-impact`  →  CibilScoreController.viewImpactDetails  (src/routes/cibilscore.route.ts)  — View credit impact
+`GET /cibil/fetch-order-details`  →  CibilScoreController.fetchRazorpayOrder  (src/routes/cibilscore.route.ts)  — Fetch Razorpay order
+
+### Collection CRM (`/collection-crm`)
+`POST /collection-crm/add`  →  CollectionCrmController (src/routes/collectionCrm.route.ts)  — Add collection entry
+`GET /collection-crm/all`  →  CollectionCrmController (src/routes/collectionCrm.route.ts)  — Get all collections
+
+### Common (`/common`)
+`POST /common/ivr-menu-one`  →  CommonController (src/routes/common.route.ts)  — IVR menu 1 handler
+`POST /common/ivr-menu-two`  →  CommonController (src/routes/common.route.ts)  — IVR menu 2 handler
+`POST /common/customer-details`  →  CommonController (src/routes/common.route.ts)  — Get customer details
+`GET /common/bank-details`  →  CommonController (src/routes/common.route.ts)  — Get bank details by IFSC
+`GET /common/aadhar-down`  →  CommonController (src/routes/common.route.ts)  — Check Aadhaar service status
+
+### CRM (`/crm`)
+`PUT /crm/lead-update`  →  CRMController (src/routes/crm.route.ts)  — Update lead
+`POST /crm/emi-calculator`  →  CRMController (src/routes/crm.route.ts)  — Calculate EMI
+`POST /crm/credit-details`  →  CRMController (src/routes/crm.route.ts)  — Save credit details
+`GET /crm/amount-to-disburse`  →  CRMController (src/routes/crm.route.ts)  — Get disbursable amount
+`POST /crm/generate-emi`  →  CRMController (src/routes/crm.route.ts)  — Generate EMI schedule
+`POST /crm/update-payment`  →  CRMController (src/routes/crm.route.ts)  — Update payment
+`POST /crm/apply-penalty`  →  CRMController (src/routes/crm.route.ts)  — Apply penalty
+`GET /crm/emis`  →  CRMController (src/routes/crm.route.ts)  — Get EMIs
+`GET /crm/docs-requirements`  →  CRMController (src/routes/crm.route.ts)  — Get document requirements
+`GET /crm/emi-loan-details`  →  CRMController (src/routes/crm.route.ts)  — Get EMI loan details
+`POST /crm/payday-to-emi`  →  CRMController (src/routes/crm.route.ts)  — Convert payday to EMI
+`POST /crm/upload-bulk-mandate`  →  CRMController (src/routes/crm.route.ts)  — Upload bulk mandate CSV
+`GET /crm/mandates`  →  CRMController (src/routes/crm.route.ts)  — Get mandates
+`GET /crm/mandate-file-url`  →  CRMController (src/routes/crm.route.ts)  — Get mandate file URL
+`POST /crm/verify-payment`  →  CRMController (src/routes/crm.route.ts)  — Verify Razorpay payment range
+`POST /crm/verify-payu-payment`  →  CRMController (src/routes/crm.route.ts)  — Verify PayU payment range
+
+### Customers (`/customers`)
+`POST /customers/login`  →  CustomersController (src/routes/customer.route.ts)  — Customer login / send OTP
+`POST /customers/verify-otp`  →  CustomersController (src/routes/customer.route.ts)  — Verify OTP
+`GET /customers/dashboard`  →  CustomersController (src/routes/customer.route.ts)  — Customer dashboard data
+`POST /customers/incompleteDetailsUpdate`  →  CustomersController (src/routes/customer.route.ts)  — Update incomplete customer details + BRE
+`POST /customers/partial-incomplete-update`  →  CustomersController (src/routes/customer.route.ts)  — Partial incomplete details update
+`GET /customers/check-repeat-case/:leadID`  →  CustomersController (src/routes/customer.route.ts)  — Check repeat case / one-page reloan
+`POST /customers/updateEMIPayment`  →  CustomersController (src/routes/customer.route.ts)  — Update EMI payment (Razorpay)
+`POST /customers/updatePayUPayment`  →  CustomersController (src/routes/customer.route.ts)  — Update PayU payment
+`GET /customers/emi-soa`  →  CustomersController (src/routes/customer.route.ts)  — EMI statement of account
+`GET /customers/one-page-view`  →  CustomersController (src/routes/customer.route.ts)  — One-page loan view
+`GET /customers/repayment-page`  →  CustomersController (src/routes/customer.route.ts)  — Repayment page data
+`POST /customers/check-pdf`  →  CustomersController (src/routes/customer.route.ts)  — Check/generate PDF
+`GET /customers/loans`  →  CustomersController (src/routes/customer.route.ts)  — Customer loan list
+`POST /customers/dsa-lead-creation`  →  CustomersController (src/routes/customer.route.ts)  — DSA lead creation (API key auth)
+`POST /customers/create-otp`  →  CustomersController (src/routes/customer.route.ts)  — New OTP creation
+`POST /customers/verify-otp-service`  →  CustomersController (src/routes/customer.route.ts)  — New OTP verification
+`POST /customers/attributions`  →  CustomersController (src/routes/customer.route.ts)  — Save UTM attributions
+`GET /customers/lead-bulk`  →  CustomersController (src/routes/customer.route.ts)  — Bulk lead operations
+`POST /customers/update-emi-transactions`  →  CustomersController (src/routes/customer.route.ts)  — Update EMI transactions
+`POST /customers/update-payout`  →  CustomersController (src/routes/customer.route.ts)  — Update payout status
+`POST /customers/update-lead-status`  →  CustomersController (src/routes/customer.route.ts)  — Update lead status
+`POST /customers/update-job-status`  →  CustomersController (src/routes/customer.route.ts)  — Update job status
+`GET /customers/auto-login`  →  CustomersController (src/routes/customer.route.ts)  — Auto login via JWT
+`POST /customers/send-disbursal-document`  →  CustomersController (src/routes/customer.route.ts)  — Send disbursal document to SQS
+`GET /customers/get-journey`  →  CustomersController (src/routes/customer.route.ts)  — Get customer journey
+`POST /customers/check-pancard-dpd`  →  CustomersController (src/routes/customer.route.ts)  — Check PAN DPD status
+
+### Customer Bank Account (`/customer-bank-account`)
+`GET /customer-bank-account/list`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Get bank account list for emandate
+`POST /customer-bank-account/confirm`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Confirm bank account
+`POST /customer-bank-account/save`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Save bank details
+`GET /customer-bank-account/referrer-list`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Get referrer bank accounts
+`POST /customer-bank-account/save-referrer`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Save referrer bank details
+`POST /customer-bank-account/confirm-referrer`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Confirm referrer bank account
+
+### Document Dispatch (`/document-dispatch`)
+`POST /document-dispatch/init`  →  DocumentDispatchController.init  (src/routes/documentDispatch.route.ts)  — Initialize document dispatch
+`POST /document-dispatch/mark-sent`  →  DocumentDispatchController.markSent  (src/routes/documentDispatch.route.ts)  — Mark document as sent
+`POST /document-dispatch/error`  →  DocumentDispatchController.markError  (src/routes/documentDispatch.route.ts)  — Mark document dispatch error
+
+### Event Funnel (`/event-funnel`)
+`GET /event-funnel/report`  →  EventFunnelController (src/routes/eventFunnel.route.ts)  — Get event funnel report
+
+### Lender (`/lender`)
+`POST /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Add lender credentials
+`PUT /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Update lender credentials
+`GET /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Get lender credentials
+
+### Lentra (`/lentra`)
+`POST /lentra/stp`  →  LentraController (src/routes/lentra.route.ts)  — Lentra STP (straight-through processing)
+`GET /lentra/repayment-page`  →  LentraController (src/routes/lentra.route.ts)  — Lentra repayment page data
+`GET /lentra/repayment-data`  →  LentraController (src/routes/lentra.route.ts)  — Lentra repayment data
+
+### Loan Restructure (`/loan-restructure`)
+`GET /loan-restructure/charges/:leadID`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — Get restructure charges
+`POST /loan-restructure/reason`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — Submit restructure reason
+`POST /loan-restructure/kfs`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — KFS acceptance for restructure
+`GET /loan-restructure/kfs-view`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — View restructure KFS
+
+### Logs (`/logs`)
+`PUT /logs/sms`  →  LogsController.updateSMSLogs  (src/routes/logs.routes.ts)  — Update SMS delivery logs
+
+### Customer Onboarding (`/customer_onboarding`)
+`POST /customer_onboarding/pan-verification`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — PAN verification (SurePass/Digitap)
+`POST /customer_onboarding/pan-confirmation`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — PAN confirmation
+`POST /customer_onboarding/aadhar-otp-send`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Send Aadhaar OTP (SurePass)
+`POST /customer_onboarding/aadhar-otp-verify`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Verify Aadhaar OTP (SurePass)
+`POST /customer_onboarding/aadhar-verification-initiate-digilocker`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Initiate DigiLocker Aadhaar
+`GET /customer_onboarding/aadhar-verification-webhook-digilocker`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — DigiLocker webhook callback
+`POST /customer_onboarding/name-email`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Save name and email
+`POST /customer_onboarding/email`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Update email
+`POST /customer_onboarding/selfie-verification`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Selfie liveness verification
+`POST /customer_onboarding/hyperverge-onboard`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge onboarding start
+`POST /customer_onboarding/hyperverge-result`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge result fetch
+`POST /customer_onboarding/finbox-create-url`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Create Finbox bank connect URL
+`POST /customer_onboarding/finbox-bank-connect`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Finbox bank connect callback
+`POST /customer_onboarding/penny-drop-initiate`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Initiate penny drop
+`POST /customer_onboarding/emandate`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Create emandate
+`POST /customer_onboarding/emandate-callback`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Emandate Razorpay callback
+`POST /customer_onboarding/reference-details`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Save reference details
+`PUT /customer_onboarding/reference-details`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Update reference details
+`GET /customer_onboarding/states`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Get state suggestions
+`GET /customer_onboarding/approval-view`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view data
+`GET /customer_onboarding/approval-view-v2`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view v2
+`POST /customer_onboarding/key-fact`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Generate KFS document
+`POST /customer_onboarding/key-fact-acceptance`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Accept KFS
+`POST /customer_onboarding/send-kfs`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Send KFS document
+`GET /customer_onboarding/fetch-credit-score`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Fetch credit score
+
+### Page Instruction (`/page-instruction`)
+`GET /page-instruction`  →  PageInstructionController (src/routes/pageInstruction.route.ts)  — Get page instruction by name
+`POST /page-instruction`  →  PageInstructionController (src/routes/pageInstruction.route.ts)  — Add page instruction
+
+### Payment (`/payment`)
+`POST /payment/initiate`  →  PaymentController (src/routes/payment.route.ts)  — Initiate payment (PayU/Razorpay)
+`POST /payment/verify-payu`  →  PaymentController (src/routes/payment.route.ts)  — Verify PayU payment response
+`POST /payment/verify-razorpay`  →  PaymentController (src/routes/payment.route.ts)  — Verify Razorpay payment
+
+### Referral (`/referral`)
+`POST /referral/create`  →  ReferralController.createAndGenerateReferrer  (src/routes/referral.route.ts)  — Create referral link
+`GET /referral/url`  →  ReferralController.getReferrarUrl  (src/routes/referral.route.ts)  — Get referral URL
+`GET /referral/invite-status`  →  ReferralController.getInviteStatus  (src/routes/referral.route.ts)  — Get invite status list
+`GET /referral/invite-status/:id`  →  ReferralController.getInviteStatusById  (src/routes/referral.route.ts)  — Get single invite status
+`POST /referral/tracking`  →  ReferralController.tracking  (src/routes/referral.route.ts)  — Track referral
+
+### Report Summary (`/report`)
+`GET /report/summary`  →  reportSummary (src/routes/reportSummary.route.ts)  — Credit score report summary
+`GET /report/score-history`  →  scoreHistory (src/routes/reportSummary.route.ts)  — Score history
+
+### SMS Delivery Log (`/sms-delivery`)
+`POST /sms-delivery/textnation`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — TextNation SMS delivery webhook
+`POST /sms-delivery/msg91`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — MSG91 SMS delivery webhook
+`POST /sms-delivery/acquirit`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — Acquirit SMS delivery webhook
+
+### SOA (`/soa`)
+`POST /soa/generate`  →  SoaController (src/routes/soa.route.ts)  — Generate statement of account PDF
+`GET /soa/sanction-data`  →  SoaController (src/routes/soa.route.ts)  — Get sanction data
+`GET /soa/sanction-pdf`  →  SoaController (src/routes/soa.route.ts)  — Generate sanction PDF
+
+### Step (`/step`)
+`GET /step/next`  →  StepController (src/routes/step.route.ts)  — Get user's next onboarding step
+`GET /step/referrer-next`  →  StepController (src/routes/step.route.ts)  — Get referrer next step
+
+### Webhooks (`/webhooks`)
+`POST /webhooks/razorpay`  →  WebhookController (src/routes/webhooks.routes.ts)  — Razorpay payment webhook
+`POST /webhooks/emandate`  →  WebhookController (src/routes/webhooks.routes.ts)  — Razorpay emandate webhook
+`POST /webhooks/decentro`  →  WebhookController (src/routes/webhooks.routes.ts)  — Decentro reverse penny webhook
+
+### WhatsApp (`/whatsapp`)
+`POST /whatsapp/identify`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Identify customer via WhatsApp
+`POST /whatsapp/verify-pan`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Verify PAN via WhatsApp
+`POST /whatsapp/confirm-pan`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Confirm PAN via WhatsApp
+`POST /whatsapp/customer-type`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Check customer type
+`POST /whatsapp/bre-eligibility`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Check BRE eligibility
+
+### Withdrawal (`/withdrawal`)
+`POST /withdrawal/request`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Process withdrawal request
+`GET /withdrawal/eligibility`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Check withdrawal eligibility
+`GET /withdrawal/history`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get withdrawal transaction history
+`GET /withdrawal/balance`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get available balance
+`GET /withdrawal/limits`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get withdrawal limits
+`GET /withdrawal/transaction/:transactionId`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get transaction details
+`GET /withdrawal/receipt/:transactionId`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Download PDF receipt
+`GET /withdrawal/preview-receipt`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Preview receipt template
+`POST /withdrawal/webhook`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Handle payment gateway webhook
+
+### SQS Consumers (message handlers)
+`SQS queue: razorpaySqsQueueUrl`  →  startSqsConsumer  (src/consumers/razorpay.sqs.consumer.ts)  — Process Razorpay webhook messages from SQS
+`SQS queue: missingPaymentSettleQueueUrl`  →  consumerLoop  (src/consumers/missing.payment.settlement.consumer.ts)  — Settle missing normal payments
+`SQS queue: emandateMissingPaymentSettleQueueUrl`  →  consumerLoop  (src/consumers/emandate.missing.payment.consumer.ts)  — Settle missing emandate payments
+
+### Cron Jobs (scheduled)
+`CronJob`  →  CronJobService.autoDisbursalCoverage  (src/services/cronJobs/cronJobs.service.ts)  — Auto-approve repeat customers
+`CronJob`  →  CronJobService.fetchEMIPayments  (src/services/cronJobs/cronJobs.service.ts)  — Auto-pay EMIs via emandate
+`CronJob`  →  CronJobService.managePaymentCron  (src/services/cronJobs/cronJobs.service.ts)  — Settle pending Razorpay payments
+`CronJob`  →  CronJobService.updateLeadStatusAfterCheckCOllection  (src/services/cronJobs/cronJobs.service.ts)  — Update lead statuses post collection
+`CronJob`  →  CronJobService.updateLeadStatusAfterCheckCOllectionEmi  (src/services/cronJobs/cronJobs.service.ts)  — Update EMI lead statuses
+`CronJob`  →  CronJobService.setReferralRewardsProcessing  (src/services/cronJobs/cronJobs.service.ts)  — Process referral rewards daily 6PM IST
+`CronJob`  →  CronJobService.checkHourlyDisbursalThreshold  (src/services/cronJobs/cronJobs.service.ts)  — Alert on disbursal anomalies
+`CronJob`  →  CronJobService.requeuePendingDocumentsCron  (src/services/cronJobs/cronJobs.service.ts)  — Requeue pending document dispatches
+`CronJob`  →  CronJobService.customerExpiredON30Days  (src/services/cronJobs/cronJobs.service.ts)  — Expire 30-day incomplete leads
+`CronJob`  →  CronJobService.checkUtm  (src/services/cronJobs/cronJobs.service.ts)  — Process UTM attribution cleanup
+`CronJob`  →  RazorPayPaymentSettlementCronService.razorpayWebhookSettlement  (src/services/cronJobs/razorpayPaymentSettlementCron.ts)  — Razorpay SQS-based payment settlement
+`CronJob`  →  EventLogsCronJobervice  (src/services/cronJobs/eventLogsCronJob.service.ts)  — Save KFS-done-non-disbursed events
+
+---
+

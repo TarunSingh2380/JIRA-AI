@@ -1,0 +1,28 @@
+model: claude-sonnet-4-6
+use_skeleton: true
+max_input_tokens: 180000
+hard_input_token_ceiling: 500000
+max_output_tokens: 32000
+
+repos:
+  - name: ramfincorp-backend
+    path: /home/ubuntu/ramfincorp-backend
+    description: "Primary backend service for RamfinCorp"
+
+  # - name: node-crm
+  #   path: /home/ubuntu/node_crm
+  #   description: "Node.js CRM application"
+
+  # - name: onboarding-service
+  #   path: /home/ubuntu/onboarding_service
+  #   description: "Customer onboarding backend service"
+
+  # - name: onboarding-service-frontend
+  #   path: /home/ubuntu/onboarding_service_frontend
+  #   description: "Frontend application for onboarding service"
+
+  # - name: aws-configs
+  #   path: /home/ubuntu/AWS
+  #   description: "AWS infrastructure, deployment, and configuration scripts"
+  #   exclude:
+  #     - "scripts"

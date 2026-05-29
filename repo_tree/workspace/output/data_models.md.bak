@@ -1,0 +1,729 @@
+# Data Models Map
+
+## node-crm
+
+### MySQL (Knex-based models)
+
+`IAddress (src/database/mysql/address.ts)` — fields: addressID, customerID, type, address, city, state, pincode, status, verifiedBy, createdDate, address2, landmark, area, region, fetchedBy
+
+`IApproval (src/database/mysql/approval.ts)` — fields: approvalID, customerID, leadID, loanType, productType, branch, loanAmtApproved, tenure, roi, repayDate, adminFee, plateFormFee, convinineceFee, creditRiskAnalisys, GstOfAdminFee, alternateMobile, officialEmail, monthlyIncome, cibil, activeLoans, activePL, activeHL, activeCC, activePaydayLoan, outstandingAmount, monthlyObligation, status, formNo, employed, remark, loanRequirePurpose, creditedBy, rejectionReason, documentr, redFlag, createdDate, sanctionalloUID, customerApproval, employmentType, m1-m3, m_avg, p1-p3, m1_date-m3_date, disbursalRemark
+
+`ILead (src/database/mysql/leads.ts)` — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, commingLeadsDate, ip, callAssign, creditAssign, createdDate, alloUID, sanctionalloUID, sanctionAppID, entity_id, field_officer_id, em_id, step, kfs, bureauVersion, bankingSurrogateVersion, MLresponse, MLfeatures, MLamount, MLsalary, mlDateTime, productID, ipc, hold_date, hold_time, iu_date, lenderID, kfs_ip
+
+`ICustomer (src/database/mysql/customer.ts)` — fields: customerID, name, firstName, middleName, lastName, gender, dob, mobile, email, pancard, aadharNo, password, marrital, profile, otp, isVerified, employeeType, createdDate, industry, designation, working_since, salary_date, official_email, education, pan_cust_verified, dob_digit_match, is_pan_aadhar_linked, is_dob_match, status, dob_digit_match_btn_click, sim_available, emandate_required, email_verification_status, email_delivery_status, email_last_validation, step, ckyc_status
+
+`ILoan (src/database/mysql/loan.ts)` — fields: loanID, leadID, lenderID, loanNo, customerID, approvalID, disbursalAmount, disbursalDate, disbursalTime, disbursalRefrenceNo, accountNo, accountType, bankIfsc, bank, bankBranch, chequeDetails, pdDate, pdDoneBy, repayDate, deduction, remarks, status, rejReason, companyAccountNo, ip, disbursedBy, createdDate, allocate_date, allocated_by, is_manual, manual_date, utr, payout_status, cooling_period_flag, cooling_period_date
+
+`ICredit (src/database/mysql/credit.ts)` — fields: creditID, customerID, leadID, productID, branch, foir, aqb, roi, tenure, actualTenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, paneltyEmis, status, principal, amountToBeRepayed, firstDueDate, brokenPeriodIntrest, gst, created_at, disbursalDate
+
+`IEmi (src/database/mysql/emi.ts)` — fields: emiID, creditID, productID, leadID, customerID, principal, interest, panelty, amountPayable, openingBalance, closingBalance, dueDate, actualPaymentDate, delayDays, paneltyID, paymentID, status, amountRemains, createdAt, updatedAt, amountRemainsInterest, amountRemainsPenalty, amountRemainsBrokenPeriodIntrest, brokenPeriodIntrest, accessAmount, color, bgcolor, paymentReceived, is_deleted, waive_off_amount
+
+`ICollection (src/database/mysql/collection.ts)` — fields: collectionID, customerID, leadID, loanNo, collectedAmount, penaltyAmount, collectedMode, collectedDate, referenceNo, discountAmount, settlemenAmount, status, remark, collectedBy, createdDate, collectionStatus, collectionStatusby, approvedDate, orderID, excess_amount, discount_waiver, discount_waiver_amount, refund_utr_no, opening_balance, closing_balance, total_interest, principal_amount, penality_charge, collected_interest, collected_principal, collected_penality, updated_date, collectedDateIST, refundType, refundRemarks, approvedBy, amount, mode, remarks
+
+`ICustomerAccount (src/database/mysql/customerAccount.ts)` — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, createdDate, bank_holder_name, is_credit, isAadharVerified
+
+`IDocument (src/database/mysql/document.ts)` — fields: documentID, customerID, leadID, documentType, documentFile, password, status, verifiedBy, verifiedDate, uploadBy, uploadedDate, type, upload_platform, iu_date
+
+`IDocumentFinbox (src/database/mysql/documentFinbox.ts)` — fields: documentID, customerID, leadID, entityID, type, statement_id, documentType, documentFile, verifiedBy, status, verifiedDate, uid, aa_check, iu_date
+
+`IEmployer (src/database/mysql/employer.ts)` — fields: employerID, customerID, leadID, employerName, empEmail, empDob, empSalary, empDesignation, empWorkIndustry, employment, totalExperience, currentCompany, address, city, state, pincode, status, verifiedBy, createdDate, office_email_id, office_email_otp, is_verified_email
+
+`IReferenceModel (src/database/mysql/reference.ts)` — fields: referenceID, customerID, relation, name, address, city, state, pincode, contactNo, createdBy, createdDate, name_contact, reference_verify, is_verified, recording, upload_platform
+
+`IPennyDropModel (src/database/mysql/pennyDrop.ts)` — fields: id, customerID, p_id, leadID, name, ifsc, bank_name, account_number, account_status, registered_name, credated_date, logs, penny_status, uid, penny_drop_name_match, penny_type
+
+`IRazorpayMandate (src/database/mysql/razorpay_mandate.ts)` — fields: id, customerID, accountNo, accountType, bank, ifsc, leadID, inv_id, entity, receipt, invoice_number, customer_id, cust_name, cust_email, cust_contact, order_id, status, sms_status, email_status, short_url, type, credated_date, uid, devices, etype, token_id, emMaxamount, res_response, need_another_mandate, name_missmatch_reject, payment_id
+
+`IRazorpayEMOrder (src/interfaces/razorpay_emOrder.ts)` — fields: id, emID, customerID, leadID, orderID, entity, amount, amount_paid, amount_due, currency, receipt, remarks, status, notes_key_1, razorpay_payment_id, razorpay_order_id, razorpay_signature, tokenID, uid, createdDate
+
+`IRazorpayPayoutDisbursedAmount (src/database/mysql/razorpay_payout_disbured_amount.ts)` — fields: disID, disbDate, id, entity, fund_account_id, amount, currency, notes_key_1, notes_key_2, fees, tax, status, utr, mode, purpose, reference_id, narration, batch_id, description, source, reason, merchant_id, status_details_id, customerID, leadID, creadatedDate, failure_reason, uid, reamrk, api_log, bank_changed, is_checked
+
+`IRazorpaySubscription (src/database/mysql/razorpay_subscription.ts)` — fields: id, customerID, startAt, endAt, status, cancelled_date, productID, razorpay_response, razorpay_subscription_id, createdAt, updatedAt
+
+`ILentraCustomerMapping (src/database/mysql/lentra_customer_mapping.ts)` — fields: id, customerID, leadID, lms_id, los_id, loan_no, entity_id, bank_details_id, created_at, updated_at, isNachNeeded, nachMandateId, nachStatus, stpStatus, mandateCanceled, workflow_id, reference_id, stp_retries, nach_retries, nach_cancel_retries
+
+`IUser (src/database/mysql/users.ts)` — fields: userID, name, email, mobile, did_no, branch, userName, password, role, status, createdBy, createdDate, accessPer, utype, firebase_token, device_token, lip, convoque_login_id, convoque_exten, whatsapp_email, lead_status, otp, password_updated_at, mac_address, random_id, mac_otp, utmSource, sessionID, iu_date
+
+`IRole (src/database/mysql/roles.ts)` — fields: role_id, role_name, role_display_name, status, created_at, created_by, updated_at, updated_by
+
+`IPermission (src/database/mysql/permissions.ts)` — fields: permission_id, permission_name, permission_display_name, permission_type, status, created_by, created_at, updated_at, updated_by
+
+`IRolePermissionLinks (src/interfaces/role_permission_links.interface.ts)` — fields: id, role_id, permission_id, status, created_at, created_by, updated_at, updated_by, iu_date
+
+`ICustomerDnd (src/database/mysql/customerDnd.ts)` — fields: id, name, customerID, mobile, reason, start_date, expiry_date, created_at, updated_at, pancard, updated_by, is_deleted, removed_by, updatedName, removedName
+
+`IDsa (src/database/mysql/dsa.ts)` — fields: id, dsa_name, min_age, max_age, employment, min_salary, min_income_se, geography, credit_score, min_loan_amount, max_loan_amount, tenure_min_months, tenure_max_months, pf_starting, interest_starting, is_deleted, created_at, updated_at
+
+`ISourcePartner (src/database/mysql/source_partners.ts)` — fields: id, image, name, link, status, created_at, updated_at
+
+`IRepayDateHolidayModel (src/database/mysql/repayDateHoliday.ts)` — fields: id, repaydate
+
+`IRepaymentGatewayTypeModel (src/database/mysql/repayment_gateway_type.ts)` — fields: id, gateway_type, hard_status, created_at, updated_at
+
+`IAutoDisbStatus (src/database/mysql/auto_disb_status.ts)` — fields: id, auto_disb_status
+
+`ILoginLogs (src/database/mysql/loginLogs.ts)` — fields: id, userID, name, email, ip, loginStart, loginEnd, iu_date
+
+`IReportLog (src/database/mysql/reportLog.model.ts)` — fields: id, user_id, user_name, report_name, requested_url, requested_params, ip_address, created_at, updated_at
+
+`IBankUpdateCheckModel (src/database/mysql/bank_update_check.ts)` — fields: id, customerID, leadID, data
+
+`IDisbursalJobsModel (src/database/mysql/disbursal_jobs.ts)` — fields: id, customerID, leadID, loanID, loanNo, accountNo, ifsc, actualDisbAmount, custName, custMobile, custEmail, companyAcc, userID, createdDate, currentStatus, jobStatus, apiStatus
+
+`IMobileToken (src/database/mysql/mobileToken.ts)` — fields: id, customerID, mobile, appID, credatedDate, imei, access_token, last_login, android_id, firebase_token, jwt_access_token
+
+`ICustomerHistory (src/interfaces/customerHistory.interface.ts)` — fields: id, customerID, changedBy, changeType, tableName, fieldName, oldValue, newValue, changeReason, ipAddress, userAgent, createdAt
+
+`IWhitelistIP (src/database/mysql/user_ip_details.ts)` — fields: id, ip, status, added_by
+
+`IMobileDecryptionLog (src/database/mysql/mobile_decryption_log.ts)` — fields: id, user_id, decrypted_mobile, created_at, updated_at
+
+`ICollectionFollowUp (src/database/mysql/collectionFollowUp.ts)` — fields: reviewID, customerID, leadID, loanNo, followType, StatusType, statusTypeDate, remark, createdBy, createdDate, followup_type, reason, iu_date
+
+`INoLoanFollowUpLogs (src/database/mysql/no_loan_follow_up_logs.ts)` — fields: id, lead_id, customer_id, follow_up_by, follow_type, status_type, remark, created_at, updated_at, iu_date
+
+`IKalyeraLog (src/database/mysql/kaleyraLogs.ts)` — fields: (MySQL table-mapped; see also Mongo model)
+
+`ICallHistoryLog (src/database/mysql/callhistorylogs.ts)` — fields: callHistoryID, customerID, leadID, callType, status, appAmount, noteli, remark, callbackTime, calledBy, createdDate
+
+`IOnlinePayment (src/database/mysql/onlinepayment.ts)` — fields: pID, name, email, phone, service, typeProduct, toValue, message, razorpayOrderId, razorpayPaymentId, paymentStatus, makerstamp, updatestamp, status, approved_id, paymentType, method, leadID, device
+
+`ITransection (src/database/mysql/transections.ts)` — fields: id, customerID, leadID, loanNo, status, type, mode, referenceNo, orderId, deleted, gateway, createdAt, updatedAt, createdBy, updatedBy, amount, collectionID, emiID, transactionDate, remarks, payment_transaction_status, waiver, discount_type
+
+`IUserMetadata (src/database/mysql/user_metadata.ts)` — fields: id, customerID, mobile, panVerify, aadharVerify, aadhar_mask, metaJSON, profile_image, created_at, updated_at
+
+`IReportAccess (src/interfaces/reports.interface.ts)` — fields: id, name, procedure, input, created_at, updated_at, delete, date
+
+`IVirtualAccount (src/database/mysql/virtualAccount.ts)` — fields: accID, customerID, leadID, accounID, name, customer_id, recid, entity, ifsc, bankName, recName, account_number, credatedDate, uid, iu_date
+
+`IWhatsappMessageIds (src/database/mysql/whatsapp_message_ids.ts)` — fields: id, wc_id, template_name, leadID, lead_status, send_from, user_id, created_at, updated_at, iu_date
+
+`ICreditReport (src/database/mysql/credit_report.ts)` — fields: id, cr_provider, bucket_id, customerID, stage_one_id, stage_two_id, errors, status, score, response_time, initiated_by, action_type, cb_mark, created_by, log_id, created_at, updated_at, updated_by, unique_cust_id
+
+`ICreditScoreUserJourney (src/database/mysql/credit_socore_user_journey.ts)` — fields: id, step, attempt, customerID
+
+`ISubscriptionPayment (src/database/mysql/subscription_payments.ts)` — fields: id, customerID, subscriptionId, orderId, paymentId, amount, gst, totalAmount, status, response, createdAt, updatedAt
+
+`ISubscriptionRefund (src/database/mysql/subscription_refund.ts)` — fields: id, pg_refund_id, amount, payment_id, status, subscriptionId, customerID, createdAt, updatedAt
+
+`IStepTrackerModel (src/database/mysql/step_tracker.ts)` — fields: id, step_id, is_completed, created_at, updated_at, is_skippable, customer_id, lead_id
+
+`IStepControlModel (src/database/mysql/step-control.ts)` — fields: id, product_id, provider_id, instrument_id, step_name, step_display_name, pre_step_name, pre_step_display_name, post_step_name, post_step_display_name, step_order, next_route, is_active, created_at, created_by, updated_by, updated_at, current_route, prev_route, dashboard_message1-4, should_recheck
+
+`IEMITransaction (src/database/mysql/emiTransactions.ts)` — fields: transaction_id, order_id, emi_id, interest, principal, penalty, dpd_amount, transaction_date, lead_id, emi_status
+
+`IMailTemplate (src/database/mysql/mail_template.ts)` — fields: id, name, subject, message
+
+`INotification (src/database/mysql/notification.ts)` — fields: notificationID, customerID, leadID, notification, type, subject, createdDate, mtype, uid
+
+`IPaymentMode (src/database/mysql/paymentMode.ts)` — fields: id, mode, status, id_date
+
+`IPaymentModeForBanks (src/database/mysql/payment_mode_for_banks.ts)` — fields: id, bank_name, payment_mode, created_by, created_date, updated_by, updated_date, status, id_date
+
+`IRefundReasons (src/database/mysql/refundReasons.ts)` — fields: reasonID, reason, isActive
+
+`IBankIfscModel (src/database/mysql/bankIfsc.ts)` — fields: id, BANK, IFSC, BRANCH, CENTRE, DISTRICT, STATE, ADDRESS, CONTACT, IMPS, RTGS, CITY, ISO3166, NEFT, MICR, UPI, SWIFT, is_active
+
+`ICallDisposition (src/database/mysql/call_disposition.ts)` — fields: id, call_date, call_time, loan_no, agent_name, campaign, disposition, sub_disposition, callback_time, next_action_datetime, ptp_amount, remarks, lot_name, branch_name, customer_name, customer_email, customer_mobile, loan_amount, due_date_repay_amount, repay_amount, disbursed_date, repay_date, remaining_collection, total_collection, loan_tenure, roi, address, call_landing_time, call_duration, disposition_duration, end_call_time, hangup_by
+
+`IWhatsappDisposition (src/database/mysql/whatsapp_disposition.ts)` — fields: id, phone_number, country_code, customer_name, failed, failure_reason, sent_timestamp, delivered_timestamp, read_timestamp, replied_timestamp, campaign_owner_email, loan_no
+
+`ICustomerAppLocation (src/database/mysql/customerAppLocation.ts)` — fields: id, mobile, customerID, residenceAddress, state, city, pincode, created_at
+
+`ICustomerSalary (src/database/mysql/customerSalary.ts)` — fields: id, customerID, salary_date, particulars, amount, createdBy, created_at
+
+`IFinboxClientUrl (src/database/mysql/finboxClientUrl.ts)` — fields: id, leadID, customerID, url, uid, credated_date
+
+`IEmandateNotRequiredLogsModel (src/database/mysql/emandate_not_required_logs.ts)` — fields: id, customerID, nr_startBy, nr_startDate, nr_endBy, nr_endDate, last_emandate_paid
+
+`IAutoDisbStatusLog (src/database/mysql/auto_disb_status_log.ts)` — fields: changed_status, changed_by
+
+`IAutoDisbursalLogsModel (src/database/mysql/auto_disbursal_logs.ts)` — fields: id, customerID, leadID, api_request, api_response, userID, any_error, status, createdDate
+
+`IRazorPayMandateStatusModel (src/database/mysql/razorpay_mandate_status.ts)` — fields: id, emId, leadID, customer_id, inv_id, emstatus, credated_date, tokenID, accountNo, accountType, bank, ifsc
+
+`IRazorPayPayoutAccountsModel (src/database/mysql/razorpay_payout_accounts.ts)` — fields: payaccID, customerID, leadID, acc_id, entity, contact_id, account_type, ifsc, bank_name, name, account_number, active, batch_id, createdDate, uid
+
+`IRazorPayPayoutContactsModel (src/database/mysql/razorpay_payout_contact.ts)` — fields: payoutID, customerID, leadID, cont_id, cont_entity, cont_name, cont_contact, cont_email, cont_type, cont_reference_id, cont_batch_id, cont_active, cont_notes_key_1, cont_notes_key_2, createdDate, uid, iu_date
+
+`IUserLoginAttempt (src/database/mysql/user_login_attempt.ts)` — fields: userID, login_attempt, otp_attempt, last_attempt
+
+`IUserSummary (src/database/mysql/user_summary.ts)` — fields: id, api_type, customerID, provider_id, json_value, Status, created_at, created_by, updatedAt
+
+`ICustomerBlackListModel (src/database/mysql/blackListCustomer.ts)` — fields: id, customerid, leadid, email, mobile, date, uid, lead_status, message, iu_date
+
+`IBlacklistCustomerPancard (src/database/mysql/blacklistCustomerPancard.ts)` — fields: id, pancard, status, addBy, addDate, removeBy, removeDate, createdDate, reason
+
+`IApiReqResLog (src/database/mysql/api_req_res_log.ts)` — fields: id, customerID, mobile, api_request, api_response, created_at, status, message, api_name
+
+`ILeadsApiLog (src/database/mysql/lead_api_log.ts)` — fields: id, leadID, api_supplier, api_type, api_endpoint_url, api_headers, api_method, api_request, api_response, created_at, status, customerID, mobile_no, pancard, aadharNo, code, state, entity_id, sync_id, sync_result, sync_data, amount
+
+`IRazorpayLog (src/database/mysql/razorpay_logs.ts)` — fields: id, customerID, leadID, req_url, api_request, api_response, type, created_at
+
+`ISendInblueLog (src/database/mysql/send_inblue_log.ts)` — fields: id, customer_id, iu_date, api_response, type, updated_at, created_at
+
+`IChatLog (src/database/mysql/chat_logs.ts)` — fields: id, leadID, agent_id, customer_reply, customer_number, message, messgae_json, status, created_at, api_request, api_response, message_id, msg_seen, document_type, cron_msg_send, iu_date
+
+`IDialerLog (src/database/mysql/dialer_log.ts)` — fields: id, lead_id, mobile_no, user_id, api_type, api_trace_id, api_message, api_status, api_response, created_at, src, customer_no, call_start_time, call_end_time, agent_ring_time, agent_talk_time, call_status, hangup_cause, hangup_text, unique_id, callback_created_at, iu_date
+
+`IWhatsappLog (src/database/mysql/whatsapp_log.ts)` — fields: id, customer_id, id_date, response, type, updated_at, created_at
+
+`IAppInstallationsLog (src/database/mysql/app_installation_log.ts)` — fields: apps, created_at, customerID, id, iu_date, updated_at
+
+`IAppVideoModel (src/database/mysql/appVideo.ts)` — fields: vid, customerID, leadID, vSize, viFile, vUrl, credated_date, upload_platform, rejected_status
+
+`ICity (src/database/mysql/cities.ts)` — fields: cityID, stateID, cityName, status, createdDate
+
+`IState (src/database/mysql/states.ts)` — fields: stateID, stateName, status, createdDate, code, cibil_state_code
+
+`IProduct (src/database/mysql/product.ts)` — fields: productID, name, logo, discription, type, step, status, leadID, customerID
+
+`IOtherCharges (src/database/mysql/other_charges.ts)` — fields: id, emiID, creditID, amount, customerID, transectionID, discription, status, leadID, loanID
+
+`IOnlinePaymentLog (src/database/mysql/onlinepaymentlog.ts)` — fields: id, pID, razorpayOrderId, razorpayPaymentId, paymentStatus, createdDate
+
+`IEMITransaction (src/database/mysql/emiTransactions.ts)` — fields: transaction_id, order_id, emi_id, interest, principal, penalty, dpd_amount, transaction_date, lead_id, emi_status
+
+`IFinboxNameMismatchModel (src/interfaces/finboxNameMismatch.interface.ts)` — fields: id, customerID, leadID, accountNo, firstName, secondName, percentageMatch, status, action_by, createdDate, id_date
+
+`ILentraMaintainanceModel (src/interfaces/lentra.interface.ts)` — fields: id, downtime_start, downtime_end, reason, is_active, created_at, updated_at
+
+### Prisma / MySQL (schema.prisma)
+
+`User (src/database/prisma/schema.prisma)` — fields: id (Int, PK), email (String, unique), password (String)
+
+### MongoDB (Mongoose)
+
+`CustomerAssetData (src/database/mongo/model/CustomerAssetData.ts)` — fields: userId (Number), leadId (Number), shakey (String), customerAsset (Any) — relationships: none
+
+`EmiAutoPaymentCronLog (src/database/mongo/model/EmiAutoPaymentCronLog.ts)` — fields: emiIDs (Number[]), individualRecord ([{emiID, razorpay_mendate_id, status, errorMessage, step}]), createdAt, updatedAt — relationships: none
+
+`KaleyraLogs (src/database/mongo/model/KaleyraLogs.ts)` — fields: mobile (String), req_url (String), api_request (Any), api_response (Any), curl_error (String), type (String), created_at (Date) — relationships: none
+
+`RazorpayRefundLogs (src/database/mongo/model/RazorpayRefundLogs.ts)` — fields: leadID, customerID, loanNo, refund_id, payment_id, order_id, refund_amount, excess_amount, status, refund_mode, reason, product_id, fileName, folderName, utr, created_at, processed_at, uid, name, mobile, email, pancard — relationships: none
+
+`RazorpayWebhookLogs (src/database/mongo/model/RazorpayWeebhookLogs.ts)` — fields: id (ObjectId), subscriptionId (String), response (String), createdAt, updatedAt — relationships: none
+
+`User (src/database/mongo/model/User.ts)` — fields: name (String), email (String, optional), password (String, optional) — relationships: none
+
+`LentraLogs (src/models/lentraLogs.model.ts)` — fields: apiRequest (Object), apiResponse (Object), apiType (String), customerID (Number), leadID (Number), createdAt, updatedAt — relationships: none
+
+## node-crm.raw
+
+### MySQL (Knex-based models)
+
+`IAddress (src/database/mysql/address.ts)` — fields: addressID, customerID, type, address, city, state, pincode, status, verifiedBy, createdDate, address2, landmark, area, region, fetchedBy
+
+`IApproval (src/database/mysql/approval.ts)` — fields: approvalID, customerID, leadID, loanType, productType, branch, loanAmtApproved, tenure, roi, repayDate, adminFee, plateFormFee, convinineceFee, creditRiskAnalisys, GstOfAdminFee, alternateMobile, officialEmail, monthlyIncome, cibil, activeLoans, activePL, activeHL, activeCC, activePaydayLoan, outstandingAmount, monthlyObligation, status, formNo, employed, remark, loanRequirePurpose, creditedBy, rejectionReason, documentr, redFlag, createdDate, sanctionalloUID, customerApproval, employmentType, m1-m3, m_avg, p1-p3, m1_date-m3_date, disbursalRemark
+
+`ILead (src/database/mysql/leads.ts)` — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, commingLeadsDate, ip, callAssign, creditAssign, createdDate, alloUID, sanctionalloUID, sanctionAppID, entity_id, field_officer_id, em_id, step, kfs, bureauVersion, bankingSurrogateVersion, MLresponse, MLfeatures, MLamount, MLsalary, mlDateTime, productID, ipc, hold_date, hold_time, iu_date, lenderID, kfs_ip
+
+`ICustomer (src/database/mysql/customer.ts)` — fields: customerID, name, firstName, middleName, lastName, gender, dob, mobile, email, pancard, aadharNo, password, marrital, profile, otp, isVerified, employeeType, createdDate, industry, designation, working_since, salary_date, official_email, education, pan_cust_verified, dob_digit_match, is_pan_aadhar_linked, is_dob_match, status, dob_digit_match_btn_click, sim_available, emandate_required, email_verification_status, email_delivery_status, email_last_validation, step, ckyc_status
+
+`ILoan (src/database/mysql/loan.ts)` — fields: loanID, leadID, lenderID, loanNo, customerID, approvalID, disbursalAmount, disbursalDate, disbursalTime, disbursalRefrenceNo, accountNo, accountType, bankIfsc, bank, bankBranch, chequeDetails, pdDate, pdDoneBy, repayDate, deduction, remarks, status, rejReason, companyAccountNo, ip, disbursedBy, createdDate, allocate_date, allocated_by, is_manual, manual_date, utr, payout_status, cooling_period_flag, cooling_period_date
+
+`ICredit (src/database/mysql/credit.ts)` — fields: creditID, customerID, leadID, productID, branch, foir, aqb, roi, tenure, actualTenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, paneltyEmis, status, principal, amountToBeRepayed, firstDueDate, brokenPeriodIntrest, gst, created_at, disbursalDate
+
+`IEmi (src/database/mysql/emi.ts)` — fields: emiID, creditID, productID, leadID, customerID, principal, interest, panelty, amountPayable, openingBalance, closingBalance, dueDate, actualPaymentDate, delayDays, paneltyID, paymentID, status, amountRemains, createdAt, updatedAt, amountRemainsInterest, amountRemainsPenalty, amountRemainsBrokenPeriodIntrest, brokenPeriodIntrest, accessAmount, color, bgcolor, paymentReceived, is_deleted, waive_off_amount
+
+`ICollection (src/database/mysql/collection.ts)` — fields: collectionID, customerID, leadID, loanNo, collectedAmount, penaltyAmount, collectedMode, collectedDate, referenceNo, discountAmount, settlemenAmount, status, remark, collectedBy, createdDate, collectionStatus, collectionStatusby, approvedDate, orderID, excess_amount, discount_waiver, discount_waiver_amount, refund_utr_no, opening_balance, closing_balance, total_interest, principal_amount, penality_charge, collected_interest, collected_principal, collected_penality, updated_date, collectedDateIST, refundType, refundRemarks, approvedBy, amount, mode, remarks
+
+`ICustomerAccount (src/database/mysql/customerAccount.ts)` — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, createdDate, bank_holder_name, is_credit, isAadharVerified
+
+`IDocument (src/database/mysql/document.ts)` — fields: documentID, customerID, leadID, documentType, documentFile, password, status, verifiedBy, verifiedDate, uploadBy, uploadedDate, type, upload_platform, iu_date
+
+`IDocumentFinbox (src/database/mysql/documentFinbox.ts)` — fields: documentID, customerID, leadID, entityID, type, statement_id, documentType, documentFile, verifiedBy, status, verifiedDate, uid, aa_check, iu_date
+
+`IEmployer (src/database/mysql/employer.ts)` — fields: employerID, customerID, leadID, employerName, empEmail, empDob, empSalary, empDesignation, empWorkIndustry, employment, totalExperience, currentCompany, address, city, state, pincode, status, verifiedBy, createdDate, office_email_id, office_email_otp, is_verified_email
+
+`IReferenceModel (src/database/mysql/reference.ts)` — fields: referenceID, customerID, relation, name, address, city, state, pincode, contactNo, createdBy, createdDate, name_contact, reference_verify, is_verified, recording, upload_platform
+
+`IPennyDropModel (src/database/mysql/pennyDrop.ts)` — fields: id, customerID, p_id, leadID, name, ifsc, bank_name, account_number, account_status, registered_name, credated_date, logs, penny_status, uid, penny_drop_name_match, penny_type
+
+`IRazorpayMandate (src/database/mysql/razorpay_mandate.ts)` — fields: id, customerID, accountNo, accountType, bank, ifsc, leadID, inv_id, entity, receipt, invoice_number, customer_id, cust_name, cust_email, cust_contact, order_id, status, sms_status, email_status, short_url, type, credated_date, uid, devices, etype, token_id, emMaxamount, res_response, need_another_mandate, name_missmatch_reject, payment_id
+
+`IRazorpayEMOrder (src/interfaces/razorpay_emOrder.ts)` — fields: id, emID, customerID, leadID, orderID, entity, amount, amount_paid, amount_due, currency, receipt, remarks, status, notes_key_1, razorpay_payment_id, razorpay_order_id, razorpay_signature, tokenID, uid, createdDate
+
+`IRazorpayPayoutDisbursedAmount (src/database/mysql/razorpay_payout_disbured_amount.ts)` — fields: disID, disbDate, id, entity, fund_account_id, amount, currency, notes_key_1, notes_key_2, fees, tax, status, utr, mode, purpose, reference_id, narration, batch_id, description, source, reason, merchant_id, status_details_id, customerID, leadID, creadatedDate, failure_reason, uid, reamrk, api_log, bank_changed, is_checked
+
+`IRazorpaySubscription (src/database/mysql/razorpay_subscription.ts)` — fields: id, customerID, startAt, endAt, status, cancelled_date, productID, razorpay_response, razorpay_subscription_id, createdAt, updatedAt
+
+`ILentraCustomerMapping (src/database/mysql/lentra_customer_mapping.ts)` — fields: id, customerID, leadID, lms_id, los_id, loan_no, entity_id, bank_details_id, created_at, updated_at, isNachNeeded, nachMandateId, nachStatus, stpStatus, mandateCanceled, workflow_id, reference_id, stp_retries, nach_retries, nach_cancel_retries
+
+`IUser (src/database/mysql/users.ts)` — fields: userID, name, email, mobile, did_no, branch, userName, password, role, status, createdBy, createdDate, accessPer, utype, firebase_token, device_token, lip, convoque_login_id, convoque_exten, whatsapp_email, lead_status, otp, password_updated_at, mac_address, random_id, mac_otp, utmSource, sessionID, iu_date
+
+`IRole (src/database/mysql/roles.ts)` — fields: role_id, role_name, role_display_name, status, created_at, created_by, updated_at, updated_by
+
+`IPermission (src/database/mysql/permissions.ts)` — fields: permission_id, permission_name, permission_display_name, permission_type, status, created_by, created_at, updated_at, updated_by
+
+`IRolePermissionLinks (src/interfaces/role_permission_links.interface.ts)` — fields: id, role_id, permission_id, status, created_at, created_by, updated_at, updated_by, iu_date
+
+`ICustomerDnd (src/database/mysql/customerDnd.ts)` — fields: id, name, customerID, mobile, reason, start_date, expiry_date, created_at, updated_at, pancard, updated_by, is_deleted, removed_by, updatedName, removedName
+
+`IDsa (src/database/mysql/dsa.ts)` — fields: id, dsa_name, min_age, max_age, employment, min_salary, min_income_se, geography, credit_score, min_loan_amount, max_loan_amount, tenure_min_months, tenure_max_months, pf_starting, interest_starting, is_deleted, created_at, updated_at
+
+`ISourcePartner (src/database/mysql/source_partners.ts)` — fields: id, image, name, link, status, created_at, updated_at
+
+`IRepayDateHolidayModel (src/database/mysql/repayDateHoliday.ts)` — fields: id, repaydate
+
+`IRepaymentGatewayTypeModel (src/database/mysql/repayment_gateway_type.ts)` — fields: id, gateway_type, hard_status, created_at, updated_at
+
+`IAutoDisbStatus (src/database/mysql/auto_disb_status.ts)` — fields: id, auto_disb_status
+
+`ILoginLogs (src/database/mysql/loginLogs.ts)` — fields: id, userID, name, email, ip, loginStart, loginEnd, iu_date
+
+`IReportLog (src/database/mysql/reportLog.model.ts)` — fields: id, user_id, user_name, report_name, requested_url, requested_params, ip_address, created_at, updated_at
+
+`IBankUpdateCheckModel (src/database/mysql/bank_update_check.ts)` — fields: id, customerID, leadID, data
+
+`IDisbursalJobsModel (src/database/mysql/disbursal_jobs.ts)` — fields: id, customerID, leadID, loanID, loanNo, accountNo, ifsc, actualDisbAmount, custName, custMobile, custEmail, companyAcc, userID, createdDate, currentStatus, jobStatus, apiStatus
+
+`IMobileToken (src/database/mysql/mobileToken.ts)` — fields: id, customerID, mobile, appID, credatedDate, imei, access_token, last_login, android_id, firebase_token, jwt_access_token
+
+`ICustomerHistory (src/interfaces/customerHistory.interface.ts)` — fields: id, customerID, changedBy, changeType, tableName, fieldName, oldValue, newValue, changeReason, ipAddress, userAgent, createdAt
+
+`IWhitelistIP (src/database/mysql/user_ip_details.ts)` — fields: id, ip, status, added_by
+
+`IMobileDecryptionLog (src/database/mysql/mobile_decryption_log.ts)` — fields: id, user_id, decrypted_mobile, created_at, updated_at
+
+`ICollectionFollowUp (src/database/mysql/collectionFollowUp.ts)` — fields: reviewID, customerID, leadID, loanNo, followType, StatusType, statusTypeDate, remark, createdBy, createdDate, followup_type, reason, iu_date
+
+`INoLoanFollowUpLogs (src/database/mysql/no_loan_follow_up_logs.ts)` — fields: id, lead_id, customer_id, follow_up_by, follow_type, status_type, remark, created_at, updated_at, iu_date
+
+`IKalyeraLog (src/database/mysql/kaleyraLogs.ts)` — fields: (MySQL table-mapped; see also Mongo model)
+
+`ICallHistoryLog (src/database/mysql/callhistorylogs.ts)` — fields: callHistoryID, customerID, leadID, callType, status, appAmount, noteli, remark, callbackTime, calledBy, createdDate
+
+`IOnlinePayment (src/database/mysql/onlinepayment.ts)` — fields: pID, name, email, phone, service, typeProduct, toValue, message, razorpayOrderId, razorpayPaymentId, paymentStatus, makerstamp, updatestamp, status, approved_id, paymentType, method, leadID, device
+
+`ITransection (src/database/mysql/transections.ts)` — fields: id, customerID, leadID, loanNo, status, type, mode, referenceNo, orderId, deleted, gateway, createdAt, updatedAt, createdBy, updatedBy, amount, collectionID, emiID, transactionDate, remarks, payment_transaction_status, waiver, discount_type
+
+`IUserMetadata (src/database/mysql/user_metadata.ts)` — fields: id, customerID, mobile, panVerify, aadharVerify, aadhar_mask, metaJSON, profile_image, created_at, updated_at
+
+`IReportAccess (src/interfaces/reports.interface.ts)` — fields: id, name, procedure, input, created_at, updated_at, delete, date
+
+`IVirtualAccount (src/database/mysql/virtualAccount.ts)` — fields: accID, customerID, leadID, accounID, name, customer_id, recid, entity, ifsc, bankName, recName, account_number, credatedDate, uid, iu_date
+
+`IWhatsappMessageIds (src/database/mysql/whatsapp_message_ids.ts)` — fields: id, wc_id, template_name, leadID, lead_status, send_from, user_id, created_at, updated_at, iu_date
+
+`ICreditReport (src/database/mysql/credit_report.ts)` — fields: id, cr_provider, bucket_id, customerID, stage_one_id, stage_two_id, errors, status, score, response_time, initiated_by, action_type, cb_mark, created_by, log_id, created_at, updated_at, updated_by, unique_cust_id
+
+`ICreditScoreUserJourney (src/database/mysql/credit_socore_user_journey.ts)` — fields: id, step, attempt, customerID
+
+`ISubscriptionPayment (src/database/mysql/subscription_payments.ts)` — fields: id, customerID, subscriptionId, orderId, paymentId, amount, gst, totalAmount, status, response, createdAt, updatedAt
+
+`ISubscriptionRefund (src/database/mysql/subscription_refund.ts)` — fields: id, pg_refund_id, amount, payment_id, status, subscriptionId, customerID, createdAt, updatedAt
+
+`IStepTrackerModel (src/database/mysql/step_tracker.ts)` — fields: id, step_id, is_completed, created_at, updated_at, is_skippable, customer_id, lead_id
+
+`IStepControlModel (src/database/mysql/step-control.ts)` — fields: id, product_id, provider_id, instrument_id, step_name, step_display_name, pre_step_name, pre_step_display_name, post_step_name, post_step_display_name, step_order, next_route, is_active, created_at, created_by, updated_by, updated_at, current_route, prev_route, dashboard_message1-4, should_recheck
+
+`IEMITransaction (src/database/mysql/emiTransactions.ts)` — fields: transaction_id, order_id, emi_id, interest, principal, penalty, dpd_amount, transaction_date, lead_id, emi_status
+
+`IMailTemplate (src/database/mysql/mail_template.ts)` — fields: id, name, subject, message
+
+`INotification (src/database/mysql/notification.ts)` — fields: notificationID, customerID, leadID, notification, type, subject, createdDate, mtype, uid
+
+`IPaymentMode (src/database/mysql/paymentMode.ts)` — fields: id, mode, status, id_date
+
+`IPaymentModeForBanks (src/database/mysql/payment_mode_for_banks.ts)` — fields: id, bank_name, payment_mode, created_by, created_date, updated_by, updated_date, status, id_date
+
+`IRefundReasons (src/database/mysql/refundReasons.ts)` — fields: reasonID, reason, isActive
+
+`IBankIfscModel (src/database/mysql/bankIfsc.ts)` — fields: id, BANK, IFSC, BRANCH, CENTRE, DISTRICT, STATE, ADDRESS, CONTACT, IMPS, RTGS, CITY, ISO3166, NEFT, MICR, UPI, SWIFT, is_active
+
+`ICallDisposition (src/database/mysql/call_disposition.ts)` — fields: id, call_date, call_time, loan_no, agent_name, campaign, disposition, sub_disposition, callback_time, next_action_datetime, ptp_amount, remarks, lot_name, branch_name, customer_name, customer_email, customer_mobile, loan_amount, due_date_repay_amount, repay_amount, disbursed_date, repay_date, remaining_collection, total_collection, loan_tenure, roi, address, call_landing_time, call_duration, disposition_duration, end_call_time, hangup_by
+
+`IWhatsappDisposition (src/database/mysql/whatsapp_disposition.ts)` — fields: id, phone_number, country_code, customer_name, failed, failure_reason, sent_timestamp, delivered_timestamp, read_timestamp, replied_timestamp, campaign_owner_email, loan_no
+
+`ICustomerAppLocation (src/database/mysql/customerAppLocation.ts)` — fields: id, mobile, customerID, residenceAddress, state, city, pincode, created_at
+
+`ICustomerSalary (src/database/mysql/customerSalary.ts)` — fields: id, customerID, salary_date, particulars, amount, createdBy, created_at
+
+`IFinboxClientUrl (src/database/mysql/finboxClientUrl.ts)` — fields: id, leadID, customerID, url, uid, credated_date
+
+`IEmandateNotRequiredLogsModel (src/database/mysql/emandate_not_required_logs.ts)` — fields: id, customerID, nr_startBy, nr_startDate, nr_endBy, nr_endDate, last_emandate_paid
+
+`IAutoDisbStatusLog (src/database/mysql/auto_disb_status_log.ts)` — fields: changed_status, changed_by
+
+`IAutoDisbursalLogsModel (src/database/mysql/auto_disbursal_logs.ts)` — fields: id, customerID, leadID, api_request, api_response, userID, any_error, status, createdDate
+
+`IRazorPayMandateStatusModel (src/database/mysql/razorpay_mandate_status.ts)` — fields: id, emId, leadID, customer_id, inv_id, emstatus, credated_date, tokenID, accountNo, accountType, bank, ifsc
+
+`IRazorPayPayoutAccountsModel (src/database/mysql/razorpay_payout_accounts.ts)` — fields: payaccID, customerID, leadID, acc_id, entity, contact_id, account_type, ifsc, bank_name, name, account_number, active, batch_id, createdDate, uid
+
+`IRazorPayPayoutContactsModel (src/database/mysql/razorpay_payout_contact.ts)` — fields: payoutID, customerID, leadID, cont_id, cont_entity, cont_name, cont_contact, cont_email, cont_type, cont_reference_id, cont_batch_id, cont_active, cont_notes_key_1, cont_notes_key_2, createdDate, uid, iu_date
+
+`IUserLoginAttempt (src/database/mysql/user_login_attempt.ts)` — fields: userID, login_attempt, otp_attempt, last_attempt
+
+`IUserSummary (src/database/mysql/user_summary.ts)` — fields: id, api_type, customerID, provider_id, json_value, Status, created_at, created_by, updatedAt
+
+`ICustomerBlackListModel (src/database/mysql/blackListCustomer.ts)` — fields: id, customerid, leadid, email, mobile, date, uid, lead_status, message, iu_date
+
+`IBlacklistCustomerPancard (src/database/mysql/blacklistCustomerPancard.ts)` — fields: id, pancard, status, addBy, addDate, removeBy, removeDate, createdDate, reason
+
+`IApiReqResLog (src/database/mysql/api_req_res_log.ts)` — fields: id, customerID, mobile, api_request, api_response, created_at, status, message, api_name
+
+`ILeadsApiLog (src/database/mysql/lead_api_log.ts)` — fields: id, leadID, api_supplier, api_type, api_endpoint_url, api_headers, api_method, api_request, api_response, created_at, status, customerID, mobile_no, pancard, aadharNo, code, state, entity_id, sync_id, sync_result, sync_data, amount
+
+`IRazorpayLog (src/database/mysql/razorpay_logs.ts)` — fields: id, customerID, leadID, req_url, api_request, api_response, type, created_at
+
+`ISendInblueLog (src/database/mysql/send_inblue_log.ts)` — fields: id, customer_id, iu_date, api_response, type, updated_at, created_at
+
+`IChatLog (src/database/mysql/chat_logs.ts)` — fields: id, leadID, agent_id, customer_reply, customer_number, message, messgae_json, status, created_at, api_request, api_response, message_id, msg_seen, document_type, cron_msg_send, iu_date
+
+`IDialerLog (src/database/mysql/dialer_log.ts)` — fields: id, lead_id, mobile_no, user_id, api_type, api_trace_id, api_message, api_status, api_response, created_at, src, customer_no, call_start_time, call_end_time, agent_ring_time, agent_talk_time, call_status, hangup_cause, hangup_text, unique_id, callback_created_at, iu_date
+
+`IWhatsappLog (src/database/mysql/whatsapp_log.ts)` — fields: id, customer_id, id_date, response, type, updated_at, created_at
+
+`IAppInstallationsLog (src/database/mysql/app_installation_log.ts)` — fields: apps, created_at, customerID, id, iu_date, updated_at
+
+`IAppVideoModel (src/database/mysql/appVideo.ts)` — fields: vid, customerID, leadID, vSize, viFile, vUrl, credated_date, upload_platform, rejected_status
+
+`ICity (src/database/mysql/cities.ts)` — fields: cityID, stateID, cityName, status, createdDate
+
+`IState (src/database/mysql/states.ts)` — fields: stateID, stateName, status, createdDate, code, cibil_state_code
+
+`IProduct (src/database/mysql/product.ts)` — fields: productID, name, logo, discription, type, step, status, leadID, customerID
+
+`IOtherCharges (src/database/mysql/other_charges.ts)` — fields: id, emiID, creditID, amount, customerID, transectionID, discription, status, leadID, loanID
+
+`IOnlinePaymentLog (src/database/mysql/onlinepaymentlog.ts)` — fields: id, pID, razorpayOrderId, razorpayPaymentId, paymentStatus, createdDate
+
+`IEMITransaction (src/database/mysql/emiTransactions.ts)` — fields: transaction_id, order_id, emi_id, interest, principal, penalty, dpd_amount, transaction_date, lead_id, emi_status
+
+`IFinboxNameMismatchModel (src/interfaces/finboxNameMismatch.interface.ts)` — fields: id, customerID, leadID, accountNo, firstName, secondName, percentageMatch, status, action_by, createdDate, id_date
+
+`ILentraMaintainanceModel (src/interfaces/lentra.interface.ts)` — fields: id, downtime_start, downtime_end, reason, is_active, created_at, updated_at
+
+### Prisma / MySQL (schema.prisma)
+
+`User (src/database/prisma/schema.prisma)` — fields: id (Int, PK), email (String, unique), password (String)
+
+### MongoDB (Mongoose)
+
+`CustomerAssetData (src/database/mongo/model/CustomerAssetData.ts)` — fields: userId (Number), leadId (Number), shakey (String), customerAsset (Any) — relationships: none
+
+`EmiAutoPaymentCronLog (src/database/mongo/model/EmiAutoPaymentCronLog.ts)` — fields: emiIDs (Number[]), individualRecord ([{emiID, razorpay_mendate_id, status, errorMessage, step}]), createdAt, updatedAt — relationships: none
+
+`KaleyraLogs (src/database/mongo/model/KaleyraLogs.ts)` — fields: mobile (String), req_url (String), api_request (Any), api_response (Any), curl_error (String), type (String), created_at (Date) — relationships: none
+
+`RazorpayRefundLogs (src/database/mongo/model/RazorpayRefundLogs.ts)` — fields: leadID, customerID, loanNo, refund_id, payment_id, order_id, refund_amount, excess_amount, status, refund_mode, reason, product_id, fileName, folderName, utr, created_at, processed_at, uid, name, mobile, email, pancard — relationships: none
+
+`RazorpayWebhookLogs (src/database/mongo/model/RazorpayWeebhookLogs.ts)` — fields: id (ObjectId), subscriptionId (String), response (String), createdAt, updatedAt — relationships: none
+
+`User (src/database/mongo/model/User.ts)` — fields: name (String), email (String, optional), password (String, optional) — relationships: none
+
+`LentraLogs (src/models/lentraLogs.model.ts)` — fields: apiRequest (Object), apiResponse (Object), apiType (String), customerID (Number), leadID (Number), createdAt, updatedAt — relationships: none
+
+## onboarding-service-frontend
+
+No ORM or database models exist in this frontend repository. All persistent state is managed via Redux + `redux-persist` (localStorage).
+
+**In-memory / Redux state (localStorage via redux-persist)**
+
+`appSlice`  (src/redux/slices/appSlice.js) — fields: `loading.status`, `loading.message`, `stepperDisable`, `triggerInstallOnce`
+
+`userSlice`  (src/redux/slices/userSlice.js) — fields: `mobile`, `requestId`, `customer`, `lead`, `employment`, `accountId`, `selectedLoanOffer`, `hasLoanOffer`, `upgradeLoanAmount`, `month12Clicked`, `isNewDigilocker`
+
+**LocalStorage keys** (src/utils/storage.js) — `KEYS` object; specific key names unclear from source (skeletonized), but includes: `JWT_TOKEN`, `ACCESS_TOKEN`, `LEAD_ID` (referenced in service file comments)
+
+**i18n locale schemas** (src/i18n/locales/en.json, hi.json, ka.json) — Not DB models; UI string maps for English, Hindi, Kannada. Keys cover: `login`, `panVerify`, `employmentDetails`, `selectLoanOffer`, `loanApproval`, `yourEmail`, `aadhaarVerification`, `cameraPermission`, `selfie`, `addBankAccount`, `pennyDrop`, `kfs`, `disbursed`, `loanRejected`, `finboxError`, `loaderMsg`, plus validation namespaces.
+
+## onboarding-service-frontend.raw
+
+No ORM or database models exist in this frontend repository. All persistent state is managed via Redux + `redux-persist` (localStorage).
+
+**In-memory / Redux state (localStorage via redux-persist)**
+
+`appSlice`  (src/redux/slices/appSlice.js) — fields: `loading.status`, `loading.message`, `stepperDisable`, `triggerInstallOnce`
+
+`userSlice`  (src/redux/slices/userSlice.js) — fields: `mobile`, `requestId`, `customer`, `lead`, `employment`, `accountId`, `selectedLoanOffer`, `hasLoanOffer`, `upgradeLoanAmount`, `month12Clicked`, `isNewDigilocker`
+
+**LocalStorage keys** (src/utils/storage.js) — `KEYS` object; specific key names unclear from source (skeletonized), but includes: `JWT_TOKEN`, `ACCESS_TOKEN`, `LEAD_ID` (referenced in service file comments)
+
+**i18n locale schemas** (src/i18n/locales/en.json, hi.json, ka.json) — Not DB models; UI string maps for English, Hindi, Kannada. Keys cover: `login`, `panVerify`, `employmentDetails`, `selectLoanOffer`, `loanApproval`, `yourEmail`, `aadhaarVerification`, `cameraPermission`, `selfie`, `addBankAccount`, `pennyDrop`, `kfs`, `disbursed`, `loanRejected`, `finboxError`, `loaderMsg`, plus validation namespaces.
+
+## onboarding-service
+
+### MySQL (Knex/Objection)
+
+**Customer & Identity:**
+`ICustomer  (src/interfaces/customer.interface.ts)` — fields: customerID, name, firstName, middleName, lastName, gender, dob, mobile, email, pancard, aadharNo, password, marrital, profile, otp, kfs_otp, isVerified, employeeType, createdDate, industry, designation, working_since, salary_date, official_email, education, pan_cust_verified, dob_digit_match, is_pan_aadhar_linked, is_dob_match, status, client_key, client_id, plateform, consent, source, medium
+
+`ICustomerAccount  (src/interfaces/customerAccount.interface.ts)` — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, bank_holder_name, is_credit, iu_date, isActive, isAadharVerified, auto_verified, lentraCustomerBankDetailsId
+
+`IMobileToken  (src/interfaces/mobileToken.interface.ts)` — fields: id, customerID, mobile, appID, credatedDate, imei, access_token, last_login, android_id, firebase_token, jwt_access_token
+
+`ILead  (src/interfaces/lead.interface.ts)` — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, ip, em_id, step, kfs, productID, ipc, lenderID, isRestructure, plateform, journeyID, lms_type
+
+`IAddress  (src/interfaces/address.interface.ts)` — fields: addressID, customerID, type, address, city, state, pincode, status, verifiedBy, createdDate, address2, landmark, area, region, fetchedBy
+
+**Loan & Credit:**
+`ILoan  (src/interfaces/loan.interface.ts)` — fields: loanID, leadID, loanNo, customerID, disbursalAmount, disbursalDate, disbursalTime, disbursalRefrenceNo, accountNo, accountType, bankIfsc, bank, bankBranch, status, rejReason, disbursedBy, createdDate, utr, payout_status
+
+`ICredit  (src/interfaces/credit.interface.ts)` — fields: creditID, customerID, leadID, productID, branch, foir, aqb, roi, tenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, paneltyEmis, status, principal, amountToBeRepayed, firstDueDate, brokenPeriodIntrest, gst, created_at, disbursalDate
+
+`IEmi  (src/interfaces/emi.interface.ts)` — fields: emiID, creditID, productID, leadID, customerID, principal, interest, panelty, amountPayable, openingBalance, closingBalance, dueDate, actualPaymentDate, delayDays, paymentID, status, amountRemains, waive_off_amount
+
+`IApproval  (src/interfaces/approval.interface.ts)` — fields: approvalID, customerID, leadID, branch, loanAmtApproved, tenure, roi, repayDate, adminFee, plateFormFee, GstOfAdminFee, alternateMobile, officialEmail, monthlyIncome, cibil, status, formNo, employed, remark, creditedBy, rejectionReason
+
+**KYC & Bureau:**
+`ILeadsApiLog  (src/interfaces/leadApiLogs.interface.ts)` — fields: id, leadID, api_supplier, api_type, api_endpoint_url, api_headers, api_method, api_request, api_response, created_at, status, customerID, mobile_no, pancard, aadharNo, code, state, entity_id, accountID, external_reference_id
+
+`IBureauDataModel  (src/interfaces/bureauData.interface.ts)` — fields: id, customerID, leadID, reference_id, affordability_generic, predicted_income, predicted_affordability, Decision, LoanAmount, version, createdDate, emi_eligible, loan_type, emi_max_tenure, long_term_tenure
+
+`ICkycRecords  (src/interfaces/ckycRecords.interface.ts)` — fields: id, decentroTxnId, ckycNo, ckycReferenceId, firstName, lastName, fullName, mobNum, pan, gender, dob, masked_aadhaar, customerID
+
+`IPennyDropModel  (src/interfaces/penny_drop.interface.ts)` — fields: id, customerID, p_id, leadID, name, ifsc, bank_name, account_number, account_status, registered_name, logs, penny_status, uid, penny_drop_name_match, penny_type
+
+**Payments & Mandates:**
+`IRazorpayMandate  (src/interfaces/razorpayMandate.interface.ts)` — fields: id, customerID, accountNo, accountType, bank, ifsc, leadID, inv_id, entity, receipt, customer_id, cust_name, cust_email, cust_contact, order_id, status, short_url, type, credated_date, uid, token_id, emMaxamount, res_response, need_another_mandate, name_missmatch_reject, lenderID
+
+`ICollection  (src/interfaces/collection.interface.ts)` — fields: collectionID, customerID, leadID, loanNo, collectedAmount, collectedMode, collectedDate, referenceNo, discountAmount, settlemenAmount, status, remark, collectedBy, collectionStatus, orderID, opening_balance, closing_balance, total_interest, principal_amount
+
+`IOnlinePayment  (src/interfaces/onlinepayment.interface.ts)` — fields: pID, name, email, phone, service, typeProduct, toValue, message, razorpayOrderId, razorpayPaymentId, paymentStatus, makerstamp, status, paymentType, method, leadID, device
+
+**Step Control & Journey:**
+`IStepControlModel  (src/interfaces/step-control.interface.ts)` — fields: id, product_id, provider_id, instrument_id, step_name, step_display_name, pre_step_name, post_step_name, step_order, next_route, is_active, created_at, created_by, current_route, prev_route, should_recheck, referrer_step_order, required_steps, vendor
+
+`IStepTrackerModel  (src/interfaces/step-tracker.interface.ts)` — fields: id, step_id, is_completed, created_at, updated_at, is_skippable, customer_id, lead_id, stepName, provider_id, vendor
+
+**Lender & Config:**
+`ILender  (src/interfaces/lender.interface.ts)` — fields: lenderID, name, sanction_letter, kfs_letter, agreement_letter, gst_no, pan_no, credentials, created_date, iu_date, lender_info, status
+
+`ILentraCustomerMapping  (src/interfaces/lentra.interface.ts)` — fields: id, customerID, leadID, lms_id, los_id, loan_no, entity_id, bank_details_id, nachStatus, stpStatus, mandateCanceled, workflow_id, reference_id, stp_retries, nach_retries
+
+`IApiKey  (src/interfaces/bureau.interface.ts)` — fields: id, api_key, client_id, client_name, is_active, rate_limit_per_minute, rate_limit_per_hour, rate_limit_per_day, allowed_ips, metadata, blocked_until, blocked_reason, last_used_at
+
+**Notifications & Logs:**
+`INotification  (src/interfaces/notification.interface.ts)` — fields: notificationID, customerID, leadID, notification, type, subject, createdDate, mtype, uid
+
+`IThirdPartyLogsModel  (src/interfaces/thirdPartyLogs.interface.ts)` — fields: id, customerID, leadID, api_supplier, api_type, api_endpoint_url, api_method, api_request, api_response, status, created_at
+
+`IRazorpayLog  (src/interfaces/razorpay_logs.interface.ts)` — fields: id, customerID, leadID, req_url, api_request, api_response, type, created_at
+
+`IEventLogsModel  (src/interfaces/eventlogs.interface.ts)` — fields: id, mobile, customerId, leadId, utmSource, userType, requestedFrom, eventName, eventDate, status, ip, createdAt, method
+
+`IFraudgatorLog  (src/interfaces/fraudgator_log.interface.ts)` — fields: id, ip, api_type, lead_api_log_id, created_at, updated_at, customerID
+
+**Employer & References:**
+`IEmployer  (src/interfaces/employer.interface.ts)` — fields: employerID, customerID, employerName, empEmail, empDob, empSalary, empDesignation, empWorkIndustry, employment, totalExperience, currentCompany, address, city, state, pincode, status, verifiedBy, createdDate
+
+`IReferenceModel  (src/interfaces/reference.interface.ts)` — fields: referenceID, customerID, relation, name, address, city, state, pincode, contactNo, createdBy, createdDate
+
+**Other:**
+`IUserMetadata  (src/interfaces/user_metadata.interface.ts)` — fields: id, customerID, mobile, panVerify, aadharVerify, aadhar_mask, metaJSON, profile_image
+
+`IFeatureControl  (src/interfaces/feature_control.interface.ts)` — fields: id, feature_name, status, is_override, override_params, client_id, auth_token, base_url
+
+`IRewardTransaction  (src/interfaces/rewardTransaction.interface.ts)` — fields: id, customer_id, transaction_id, transaction_type, amount, tds_amount, net_amount, bank_account_id, payment_gateway, gateway_reference_id, gateway_response, description, status, failure_reason, metadata, created_at, updated_at, processed_at
+
+---
+
+### MongoDB (Mongoose)
+
+`IEventLogs  (src/database/mongo/EventLogs.ts)` — fields: _id, mobile, customerId, leadId, utmSource, userType, requestedFrom, eventName, eventDate, status, ip, createdAt — relationships: none
+
+`ILentraApiLogs  (src/interfaces/lentra.interface.ts)  (src/database/mongo/LentraLogs.ts)` — fields: _id, apiRequest, apiResponse, apiType, customerID, leadID, createdAt, updatedAt — relationships: none
+
+`OtpLogs  (src/database/mongo/OtpLogs.ts)` — fields: customerID, mobile, req_url, api_request, api_response, curl_error, created_at, type, iu_date, platform — relationships: none
+
+`IPaymentLogs  (src/interfaces/paymentLog.interface.ts)  (src/database/mongo/paymentLogs.ts)` — fields: _id, orderId, amount, status, processedBy, details (IRazorpayWebhook payload), createdAt, updatedAt — relationships: none
+
+`IRazorpayWebhookLogs  (src/database/mongo/RazorpayWeebhookLogs.ts)` — fields: id, subscriptionId, response, createdAt, updatedAt — relationships: none
+
+`IThirdPartyApiLogs  (src/interfaces/thirdPartylog.interface.ts)  (src/database/mongo/ThirdPartyLogs.ts)` — fields: mobile, reqUrl, apiRequest, apiResponse, apiHeaders, apiType, apiProvider, statusCode, success, createdAt, updatedAt — relationships: none
+
+---
+
+### Redis (in-memory/cache)
+
+`PennyFlow map  (src/redis/cacheService.ts)` — key: `penny_flow_map:{customerId}`, value: PennyFlow enum — TTL: midnight reset — purpose: sticky penny drop flow assignment per customer
+
+`Step control cache  (src/database/mysql/step-control.ts)` — key: step_control cache pattern — value: IStepControlModel[] — purpose: cache step control configurations to reduce DB reads
+
+`LMS Flow map  (src/utils/lmsFlowDecider.ts)` — key: `LMS_FLOW:{leadId}`, value: LmsFlow enum — TTL: daily midnight reset — purpose: deterministic LMS routing (Lentra vs System)
+
+`Email OTP  (src/utils/emailVerification.ts)` — key: `otp:email:{email}`, value: OTP string + expiry — purpose: temporary email OTP storage
+
+`Abridge token  (src/utils/experianAbridge.ts)` — key: `abridge_token`, value: access token — purpose: cache Experian Abridge API token
+
+`PAN provider  (src/helpers/flowDecider.ts)` — key: `pan_provider`, value: PanProvider enum — purpose: route PAN verification to Digitap or Surepass
+
+## ramfincorp-backend
+
+### MySQL (via Knex)
+
+`ICustomer`  (src/interfaces/customer.interface.ts / src/database/mysql/customer.ts)  — fields: customerID, name, firstName, middleName, lastName, gender, dob, mobile, email, pancard, aadharNo, password, marrital, profile, otp, kfs_otp, isVerified, employeeType, createdDate, industry, designation, working_since, salary_date, official_email, education, pan_cust_verified, dob_digit_match, is_pan_aadhar_linked, is_dob_match, status, emandate_required, email_verification_status, email_delivery_status  — table: customers
+
+`ILead`  (src/interfaces/lead.interface.ts / src/database/mysql/leads.ts)  — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, ip, em_id, step, kfs, productID, ipc, lenderID, isRestructure, plateform, lms_type, monthlyIncomeConsent, journey_type  — table: leads
+
+`IApproval`  (src/interfaces/approval.interface.ts / src/database/mysql/approval.ts)  — fields: approvalID, customerID, leadID, loanType, productType, branch, loanAmtApproved, tenure, roi, repayDate, adminFee, plateFormFee, GstOfAdminFee, alternateMobile, officialEmail, monthlyIncome, cibil, status, remark, rejectionReason, creditedBy, sanctionalloUID, employmentType, disbursalRemark  — table: approval
+
+`ILoan`  (src/interfaces/loan.interface.ts / src/database/mysql/loan.ts)  — fields: loanID, leadID, loanNo, customerID, disbursalAmount, disbursalDate, accountNo, accountType, bankIfsc, bank, status, utr, payout_status, lentra_push_status  — table: loan
+
+`ICredit`  (src/interfaces/credit.interface.ts / src/database/mysql/credit.ts)  — fields: creditID, customerID, leadID, productID, branch, foir, aqb, roi, tenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, status, principal, amountToBeRepayed, firstDueDate, brokenPeriodIntrest, gst, created_at, disbursalDate  — table: credit
+
+`IEmi`  (src/interfaces/emi.interface.ts / src/database/mysql/emi.ts)  — fields: emiID, creditID, productID, leadID, customerID, principal, interest, panelty, amountPayable, openingBalance, closingBalance, dueDate, actualPaymentDate, delayDays, paymentID, status, amountRemains, brokenPeriodIntrest, accessAmount, paymentReceived, waive_off_amount, is_deleted  — table: emi
+
+`ICustomerAccount`  (src/interfaces/customerAccount.interface.ts / src/database/mysql/customerAccount.ts)  — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, createdDate, bank_holder_name, is_credit, isAadharVerified, lentraCustomerBankDetailsId  — table: customerAccount
+
+`IAddress`  (src/interfaces/address.interface.ts / src/database/mysql/address.ts)  — fields: addressID, customerID, type, address, city, state, pincode, status, verifiedBy, createdDate, address2, landmark, area, region, fetchedBy  — table: address
+
+`IEmployer`  (src/interfaces/employer.interface.ts / src/database/mysql/employer.ts)  — fields: employerID, customerID, employerName, empEmail, empDob, empSalary, empDesignation, empWorkIndustry, employment, totalExperience, currentCompany, city, state, pincode, status, office_email_id, is_verified_email  — table: employer
+
+`IRazorpayMandate`  (src/interfaces/razorpay_mandate.interface.ts / src/database/mysql/razorpay_mandate.ts)  — fields: id, customerID, accountNo, accountType, bank, ifsc, leadID, inv_id, entity, receipt, status, short_url, type, uid, etype, token_id, emMaxamount, need_another_mandate, name_missmatch_reject, payment_id  — table: razorpay_mandate
+
+`IPennyDropModel`  (src/interfaces/penny_drop.interface.ts / src/database/mysql/penny_drop.ts)  — fields: id, customerID, p_id, leadID, name, ifsc, bank_name, account_number, account_status, registered_name, credated_date, logs, penny_status, uid, penny_drop_name_match, penny_type  — table: penny_drop
+
+`ITransection`  (src/interfaces/transections.interface.ts / src/database/mysql/transections.ts)  — fields: id, customerID, leadID, loanNo, status, type, mode, referenceNo, orderId, deleted, gateway, amount, collectionID, emiID, transactionDate, remarks, payment_transaction_status, waiver, discount_type  — table: transactions
+
+`ICollection`  (src/interfaces/collection.interface.ts / src/database/mysql/collection.ts)  — fields: collectionID, customerID, leadID, loanNo, collectedAmount, collectedMode, collectedDate, referenceNo, discountAmount, settlemenAmount, status, remark, collectedBy, collectionStatus, orderID, lenderID  — table: collection
+
+`IOnlinePayment`  (src/interfaces/onlinepayment.interface.ts / src/database/mysql/onlinepayment.ts)  — fields: pID, name, email, phone, service, typeProduct, toValue, message, razorpayOrderId, razorpayPaymentId, paymentStatus, status, paymentType, method, leadID, device  — table: onlinepayment
+
+`ILeadsApiLog`  (src/interfaces/lead_api_log.interface.ts / src/database/mysql/lead_api_log.ts)  — fields: id, leadID, api_supplier, api_type, api_endpoint_url, api_headers, api_method, api_request, api_response, created_at, status, customerID, mobile_no, pancard, aadharNo, code, state, entity_id  — table: lead_api_log (leads_api_log)
+
+`IApiKey`  (src/interfaces/bureau.interface.ts / src/database/mysql/apiKey.ts)  — fields: id, api_key, client_id, client_name, is_active, rate_limit_per_minute, rate_limit_per_hour, rate_limit_per_day, allowed_ips, metadata, blocked_until, blocked_reason, last_used_at  — table: api_keys
+
+`IRateLimit`  (src/interfaces/bureau.interface.ts / src/database/mysql/rateLimit.ts)  — fields: id, api_key, client_id, requests_count, window_start, window_type  — table: rate_limits
+
+`IBureauApiLog`  (src/interfaces/bureau.interface.ts / src/database/mysql/bureauApiLog.ts)  — fields: id, request_id, api_key, client_id, user_id, reference_id, endpoint, method, request_data, response_data, http_status_code, processing_status, processing_time_ms, error_code, error_message, client_ip  — table: bureau_api_logs
+
+`ILentraCustomerMapping`  (src/interfaces/lentra.interface.ts / src/database/mysql/lentra_customer_mappings.ts)  — fields: id, customerID, leadID, lms_id, los_id, loan_no, entity_id, bank_details_id, isNachNeeded, nachMandateId, nachStatus, stpStatus, mandateCanceled, workflow_id, reference_id, stp_retries, nach_retries  — table: lentra_customer_mappings
+
+`IUserMetadata`  (src/interfaces/user_metadata.interface.ts / src/database/mysql/user_metadata.ts)  — fields: id, customerID, mobile, panVerify, aadharVerify, aadhar_mask, metaJSON, profile_image  — table: user_metadata
+
+`IPageInstructions`  (src/interfaces/pageInstructions.interface.ts / src/database/mysql/pageInstructions.ts)  — fields: id, page_name, instruction, created_at, updated_at  — table: pageInstructions
+
+`IStepTrackerModel`  (src/interfaces/step-tracker.ts / src/database/mysql/step_tracker.ts)  — fields: id, step_id, is_completed, is_skippable, customer_id, lead_id, created_at, updated_at  — table: step_tracker
+
+`IStepControlModel`  (src/interfaces/step-control.interface.ts / src/database/mysql/step-control.ts)  — fields: id, product_id, provider_id, step_name, step_order, next_route, is_active, dashboard_message1-4, should_recheck, referrer_step_order, required_steps  — table: step_control
+
+`IRepayDateHolidayModel`  (src/interfaces/repayDateHoliday.interface.ts / src/database/mysql/repayDateHoliday.ts)  — fields: id, repaydate  — table: repayDateHoliday
+
+`IRestructureLoan`  (src/interfaces/loanRestructure.interface.ts / src/database/mysql/restructure_loan.ts)  — fields: id, parentLeadId, childLeadId, reason, status, loan_type  — table: restructure_loan
+
+`IPayuPaymentsSettledByCron`  (src/interfaces/payuPaymentsSettledByCron.interface.ts / src/database/mysql/payuPaymentsSettledByCron.ts)  — fields: id, transaction_id, status, leadID, createdAt  — table: payu_payments_settled_by_cron
+
+`ISMSLogModel`  (src/interfaces/smsLog.interface.ts / src/database/mysql/smsLog.ts)  — fields: id, message, leadId, customerId, status, type  — table: sms_log
+
+`IShortUrlModel`  (src/interfaces/shortUrl.interface.ts / src/database/mysql/shortUrl.ts)  — fields: id, code, long_url, lead_id, opened, opened_at, expires_at  — table: shortUrl (short_url)
+
+`IEmiProcessingFailureLog`  (src/interfaces/emiProcessingFailureLogs.interface.ts / src/database/mysql/emiProcessingFailureLogs.ts)  — fields: id, order_id, failure_type, error_message, status, created_at  — table: emi_processing_failure_logs
+
+`ICustomerKfsLocation`  (src/interfaces/customer_kfs_location.interface.ts / src/database/mysql/customer_kfs_location.ts)  — fields: id, customerID, leadID, latitude, longitude, city, location_source, location_captured_at  — table: customer_kfs_location
+
+### MongoDB (via Mongoose)
+
+`User`  (src/database/mongo/model/User.ts)  — fields: name, email, password  — collection: users
+
+`CustomerAssetData`  (src/database/mongo/model/CustomerAssetData.ts)  — fields: userId, leadId, shakey, customerAsset  — collection: customerassetdatas
+
+`IDocumentDispatch`  (src/database/mongo/model/documentDispatch.model.ts / src/interfaces/documentDispatch.interface.ts)  — fields: leadId, customerId, documents (agreement/disbursal/kfs with sent/sentAt/error), retryCount, lastError, createdAt, updatedAt  — collection: documentdispatches
+
+`IEmiAutoPaymentCronLog`  (src/database/mongo/model/EmiAutoPaymentCronLog.ts)  — fields: emiIDs, individualRecord (emiID, razorpay_mendate_id, status, errorMessage, step), createdAt, updatedAt  — collection: emiautopaymentcronlogs
+
+`IEventLogs`  (src/database/mongo/model/EventLogs.ts)  — fields: mobile, customerId, leadId, utmSource, userType, requestedFrom, eventName, eventDate, status, ip, createdAt  — collection: eventlogs
+
+`IKalyeraLog`  (src/database/mongo/model/KaleyraLogs.ts)  — fields: mobile, req_url, api_request, api_response, curl_error, type, created_at  — collection: kaleyralogs
+
+`ILentraApiLogs`  (src/database/mongo/model/LentraLogs.ts)  — fields: apiRequest, apiResponse, apiType, customerID, leadID, createdAt, updatedAt  — collection: lentraapilogs
+
+`IRazorpayWebhookLogs`  (src/database/mongo/model/RazorpayWeebhookLogs.ts)  — fields: id, subscriptionId, response, createdAt, updatedAt  — collection: razorpaywebhooklogs
+
+`ITrakierInstallInfo`  (src/database/mongo/model/TrakierInstallInfo.ts)  — fields: partner, evid, eval, ets, crtd, cuid, cname, cphone, cmail, inside  — collection: trakierinstallinfos
+
+### Prisma / MySQL (minimal)
+
+`User`  (src/database/prisma/schema.prisma)  — fields: id (Int PK), email (String unique), password (String)  — table: User
+
+## ramfincorp-backend.raw
+
+### MySQL (via Knex)
+
+`ICustomer`  (src/interfaces/customer.interface.ts / src/database/mysql/customer.ts)  — fields: customerID, name, firstName, middleName, lastName, gender, dob, mobile, email, pancard, aadharNo, password, marrital, profile, otp, kfs_otp, isVerified, employeeType, createdDate, industry, designation, working_since, salary_date, official_email, education, pan_cust_verified, dob_digit_match, is_pan_aadhar_linked, is_dob_match, status, emandate_required, email_verification_status, email_delivery_status  — table: customers
+
+`ILead`  (src/interfaces/lead.interface.ts / src/database/mysql/leads.ts)  — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, ip, em_id, step, kfs, productID, ipc, lenderID, isRestructure, plateform, lms_type, monthlyIncomeConsent, journey_type  — table: leads
+
+`IApproval`  (src/interfaces/approval.interface.ts / src/database/mysql/approval.ts)  — fields: approvalID, customerID, leadID, loanType, productType, branch, loanAmtApproved, tenure, roi, repayDate, adminFee, plateFormFee, GstOfAdminFee, alternateMobile, officialEmail, monthlyIncome, cibil, status, remark, rejectionReason, creditedBy, sanctionalloUID, employmentType, disbursalRemark  — table: approval
+
+`ILoan`  (src/interfaces/loan.interface.ts / src/database/mysql/loan.ts)  — fields: loanID, leadID, loanNo, customerID, disbursalAmount, disbursalDate, accountNo, accountType, bankIfsc, bank, status, utr, payout_status, lentra_push_status  — table: loan
+
+`ICredit`  (src/interfaces/credit.interface.ts / src/database/mysql/credit.ts)  — fields: creditID, customerID, leadID, productID, branch, foir, aqb, roi, tenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, status, principal, amountToBeRepayed, firstDueDate, brokenPeriodIntrest, gst, created_at, disbursalDate  — table: credit
+
+`IEmi`  (src/interfaces/emi.interface.ts / src/database/mysql/emi.ts)  — fields: emiID, creditID, productID, leadID, customerID, principal, interest, panelty, amountPayable, openingBalance, closingBalance, dueDate, actualPaymentDate, delayDays, paymentID, status, amountRemains, brokenPeriodIntrest, accessAmount, paymentReceived, waive_off_amount, is_deleted  — table: emi
+
+`ICustomerAccount`  (src/interfaces/customerAccount.interface.ts / src/database/mysql/customerAccount.ts)  — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, createdDate, bank_holder_name, is_credit, isAadharVerified, lentraCustomerBankDetailsId  — table: customerAccount
+
+`IAddress`  (src/interfaces/address.interface.ts / src/database/mysql/address.ts)  — fields: addressID, customerID, type, address, city, state, pincode, status, verifiedBy, createdDate, address2, landmark, area, region, fetchedBy  — table: address
+
+`IEmployer`  (src/interfaces/employer.interface.ts / src/database/mysql/employer.ts)  — fields: employerID, customerID, employerName, empEmail, empDob, empSalary, empDesignation, empWorkIndustry, employment, totalExperience, currentCompany, city, state, pincode, status, office_email_id, is_verified_email  — table: employer
+
+`IRazorpayMandate`  (src/interfaces/razorpay_mandate.interface.ts / src/database/mysql/razorpay_mandate.ts)  — fields: id, customerID, accountNo, accountType, bank, ifsc, leadID, inv_id, entity, receipt, status, short_url, type, uid, etype, token_id, emMaxamount, need_another_mandate, name_missmatch_reject, payment_id  — table: razorpay_mandate
+
+`IPennyDropModel`  (src/interfaces/penny_drop.interface.ts / src/database/mysql/penny_drop.ts)  — fields: id, customerID, p_id, leadID, name, ifsc, bank_name, account_number, account_status, registered_name, credated_date, logs, penny_status, uid, penny_drop_name_match, penny_type  — table: penny_drop
+
+`ITransection`  (src/interfaces/transections.interface.ts / src/database/mysql/transections.ts)  — fields: id, customerID, leadID, loanNo, status, type, mode, referenceNo, orderId, deleted, gateway, amount, collectionID, emiID, transactionDate, remarks, payment_transaction_status, waiver, discount_type  — table: transactions
+
+`ICollection`  (src/interfaces/collection.interface.ts / src/database/mysql/collection.ts)  — fields: collectionID, customerID, leadID, loanNo, collectedAmount, collectedMode, collectedDate, referenceNo, discountAmount, settlemenAmount, status, remark, collectedBy, collectionStatus, orderID, lenderID  — table: collection
+
+`IOnlinePayment`  (src/interfaces/onlinepayment.interface.ts / src/database/mysql/onlinepayment.ts)  — fields: pID, name, email, phone, service, typeProduct, toValue, message, razorpayOrderId, razorpayPaymentId, paymentStatus, status, paymentType, method, leadID, device  — table: onlinepayment
+
+`ILeadsApiLog`  (src/interfaces/lead_api_log.interface.ts / src/database/mysql/lead_api_log.ts)  — fields: id, leadID, api_supplier, api_type, api_endpoint_url, api_headers, api_method, api_request, api_response, created_at, status, customerID, mobile_no, pancard, aadharNo, code, state, entity_id  — table: lead_api_log (leads_api_log)
+
+`IApiKey`  (src/interfaces/bureau.interface.ts / src/database/mysql/apiKey.ts)  — fields: id, api_key, client_id, client_name, is_active, rate_limit_per_minute, rate_limit_per_hour, rate_limit_per_day, allowed_ips, metadata, blocked_until, blocked_reason, last_used_at  — table: api_keys
+
+`IRateLimit`  (src/interfaces/bureau.interface.ts / src/database/mysql/rateLimit.ts)  — fields: id, api_key, client_id, requests_count, window_start, window_type  — table: rate_limits
+
+`IBureauApiLog`  (src/interfaces/bureau.interface.ts / src/database/mysql/bureauApiLog.ts)  — fields: id, request_id, api_key, client_id, user_id, reference_id, endpoint, method, request_data, response_data, http_status_code, processing_status, processing_time_ms, error_code, error_message, client_ip  — table: bureau_api_logs
+
+`ILentraCustomerMapping`  (src/interfaces/lentra.interface.ts / src/database/mysql/lentra_customer_mappings.ts)  — fields: id, customerID, leadID, lms_id, los_id, loan_no, entity_id, bank_details_id, isNachNeeded, nachMandateId, nachStatus, stpStatus, mandateCanceled, workflow_id, reference_id, stp_retries, nach_retries  — table: lentra_customer_mappings
+
+`IUserMetadata`  (src/interfaces/user_metadata.interface.ts / src/database/mysql/user_metadata.ts)  — fields: id, customerID, mobile, panVerify, aadharVerify, aadhar_mask, metaJSON, profile_image  — table: user_metadata
+
+`IPageInstructions`  (src/interfaces/pageInstructions.interface.ts / src/database/mysql/pageInstructions.ts)  — fields: id, page_name, instruction, created_at, updated_at  — table: pageInstructions
+
+`IStepTrackerModel`  (src/interfaces/step-tracker.ts / src/database/mysql/step_tracker.ts)  — fields: id, step_id, is_completed, is_skippable, customer_id, lead_id, created_at, updated_at  — table: step_tracker
+
+`IStepControlModel`  (src/interfaces/step-control.interface.ts / src/database/mysql/step-control.ts)  — fields: id, product_id, provider_id, step_name, step_order, next_route, is_active, dashboard_message1-4, should_recheck, referrer_step_order, required_steps  — table: step_control
+
+`IRepayDateHolidayModel`  (src/interfaces/repayDateHoliday.interface.ts / src/database/mysql/repayDateHoliday.ts)  — fields: id, repaydate  — table: repayDateHoliday
+
+`IRestructureLoan`  (src/interfaces/loanRestructure.interface.ts / src/database/mysql/restructure_loan.ts)  — fields: id, parentLeadId, childLeadId, reason, status, loan_type  — table: restructure_loan
+
+`IPayuPaymentsSettledByCron`  (src/interfaces/payuPaymentsSettledByCron.interface.ts / src/database/mysql/payuPaymentsSettledByCron.ts)  — fields: id, transaction_id, status, leadID, createdAt  — table: payu_payments_settled_by_cron
+
+`ISMSLogModel`  (src/interfaces/smsLog.interface.ts / src/database/mysql/smsLog.ts)  — fields: id, message, leadId, customerId, status, type  — table: sms_log
+
+`IShortUrlModel`  (src/interfaces/shortUrl.interface.ts / src/database/mysql/shortUrl.ts)  — fields: id, code, long_url, lead_id, opened, opened_at, expires_at  — table: shortUrl (short_url)
+
+`IEmiProcessingFailureLog`  (src/interfaces/emiProcessingFailureLogs.interface.ts / src/database/mysql/emiProcessingFailureLogs.ts)  — fields: id, order_id, failure_type, error_message, status, created_at  — table: emi_processing_failure_logs
+
+`ICustomerKfsLocation`  (src/interfaces/customer_kfs_location.interface.ts / src/database/mysql/customer_kfs_location.ts)  — fields: id, customerID, leadID, latitude, longitude, city, location_source, location_captured_at  — table: customer_kfs_location
+
+### MongoDB (via Mongoose)
+
+`User`  (src/database/mongo/model/User.ts)  — fields: name, email, password  — collection: users
+
+`CustomerAssetData`  (src/database/mongo/model/CustomerAssetData.ts)  — fields: userId, leadId, shakey, customerAsset  — collection: customerassetdatas
+
+`IDocumentDispatch`  (src/database/mongo/model/documentDispatch.model.ts / src/interfaces/documentDispatch.interface.ts)  — fields: leadId, customerId, documents (agreement/disbursal/kfs with sent/sentAt/error), retryCount, lastError, createdAt, updatedAt  — collection: documentdispatches
+
+`IEmiAutoPaymentCronLog`  (src/database/mongo/model/EmiAutoPaymentCronLog.ts)  — fields: emiIDs, individualRecord (emiID, razorpay_mendate_id, status, errorMessage, step), createdAt, updatedAt  — collection: emiautopaymentcronlogs
+
+`IEventLogs`  (src/database/mongo/model/EventLogs.ts)  — fields: mobile, customerId, leadId, utmSource, userType, requestedFrom, eventName, eventDate, status, ip, createdAt  — collection: eventlogs
+
+`IKalyeraLog`  (src/database/mongo/model/KaleyraLogs.ts)  — fields: mobile, req_url, api_request, api_response, curl_error, type, created_at  — collection: kaleyralogs
+
+`ILentraApiLogs`  (src/database/mongo/model/LentraLogs.ts)  — fields: apiRequest, apiResponse, apiType, customerID, leadID, createdAt, updatedAt  — collection: lentraapilogs
+
+`IRazorpayWebhookLogs`  (src/database/mongo/model/RazorpayWeebhookLogs.ts)  — fields: id, subscriptionId, response, createdAt, updatedAt  — collection: razorpaywebhooklogs
+
+`ITrakierInstallInfo`  (src/database/mongo/model/TrakierInstallInfo.ts)  — fields: partner, evid, eval, ets, crtd, cuid, cname, cphone, cmail, inside  — collection: trakierinstallinfos
+
+### Prisma / MySQL (minimal)
+
+`User`  (src/database/prisma/schema.prisma)  — fields: id (Int PK), email (String unique), password (String)  — table: User
+

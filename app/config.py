@@ -15,6 +15,19 @@ from dotenv import load_dotenv
 load_dotenv(encoding="utf-8-sig")
 
 
+def _similar_ticket_match_threshold() -> float:
+    raw = os.getenv("SIMILAR_TICKET_MATCH_THRESHOLD", "0.68").strip()
+    if raw.endswith("%"):
+        raw = raw[:-1].strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 0.68
+    if value > 1:
+        value = value / 100
+    return min(max(value, 0.0), 1.0)
+
+
 @dataclass(frozen=True)
 class Settings:
     prompt_dir: str = os.getenv("PROMPT_DIR", "Prompt")
@@ -45,7 +58,7 @@ class Settings:
     repograph_base_url: str = os.getenv("REPOGRAPH_BASE_URL", "http://127.0.0.1:8088").rstrip("/")
     repo_tree_base_url: str = os.getenv(
         "REPO_TREE_BASE_URL",
-        os.getenv("REPOTREE_BASE_URL", "http://13.207.36.226:8001"),
+        os.getenv("REPOTREE_BASE_URL", ""),
     ).rstrip("/")
     repo_tree_timeout_seconds: int = int(os.getenv("REPO_TREE_TIMEOUT_SECONDS", "300"))
     external_request_timeout_seconds: int = int(os.getenv("EXTERNAL_REQUEST_TIMEOUT_SECONDS", "15"))
@@ -87,6 +100,7 @@ class Settings:
 
     # Jira ticket cache TTL in hours (0 = always re-fetch)
     jira_cache_ttl_hours: int = int(os.getenv("JIRA_CACHE_TTL_HOURS", "1"))
+    similar_ticket_match_threshold: float = _similar_ticket_match_threshold()
 
     @property
     def database_url(self) -> str:

@@ -1,0 +1,37 @@
+{
+  "ramfincorp-backend": {
+    "name": "ramfincorp-backend",
+    "last_sha": "68fe526ce4b19dbb6f99083315fea15d1d4d89ee",
+    "last_scanned_at": "2026-05-25T09:13:48.295103Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "node-crm": {
+    "name": "node-crm",
+    "last_sha": "396505ccf970cf91c2b320523e8d4965d686351d",
+    "last_scanned_at": "2026-05-25T07:31:52.057694Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "onboarding-service": {
+    "name": "onboarding-service",
+    "last_sha": "6512809eb2a7a36ac60233b39920b9df73c2a102",
+    "last_scanned_at": "2026-05-25T07:33:12.780863Z",
+    "last_status": "failed",
+    "last_error": "{'type': 'error', 'error': {'details': None, 'type': 'api_error', 'message': 'Internal server error'}, 'request_id': 'req_011CbNtzhMUowMR7YK3yPEbu'}"
+  },
+  "onboarding-service-frontend": {
+    "name": "onboarding-service-frontend",
+    "last_sha": "62ebe69e9ac3cceb21661610a0d15dbe76b82913",
+    "last_scanned_at": "2026-05-25T07:33:50.485842Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "aws-configs": {
+    "name": "aws-configs",
+    "last_sha": null,
+    "last_scanned_at": "2026-05-25T07:33:54.320265Z",
+    "last_status": "failed",
+    "last_error": "aws-configs packed to ~2080959 tokens, which exceeds the hard ceiling of 500000. This repo is too large to send in one call. Options: (1) add aggressive ignores to packer.py for this repo's noise, (2) enable use_skeleton if not already on, (3) split the repo or scan it directory-by-directory."
+  }
+}

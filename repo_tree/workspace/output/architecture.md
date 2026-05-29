@@ -1,0 +1,336 @@
+# Architecture Map
+
+## node-crm
+
+**Entry Points**
+- `src/server.ts` → instantiates `App` with all routes
+- `src/start.ts` → application bootstrapper
+- `src/app.ts` → Express app: middleware, routes, Swagger, error handling, cron jobs
+
+**Top-Level Modules**
+```
+src/
+├── app.ts                  # Express App class
+├── routes/index.ts         # Route aggregator (all route modules)
+├── controllers/            # Request handlers (~30 controllers)
+├── services/               # Business logic (~70 services)
+│   ├── cronJobs/           # Cron job services (bulk mandate, WebEngage, loan write-off)
+│   └── thirdParty/         # DigiLocker, Digitap, Finbox, S3, Surepass
+├── database/
+│   ├── mysql/              # Knex-based model classes (~80 tables)
+│   ├── mongo/              # Mongoose models (KaleyraLogs, EmiAutoPaymentCronLog, RazorpayRefundLogs, RazorpayWebhookLogs, User, CustomerAssetData)
+│   └── prisma/schema.prisma
+├── middlewares/            # Auth, error, validation, pagination, permission
+├── validations/            # Joi schemas
+├── interfaces/             # TypeScript interfaces
+├── enums/                  # Enums
+└── utils/                  # Logger, MySQL/Mongo connections, encryption, Razorpay client
+```
+
+**External Services**
+- **MySQL** (primary + replica) — via Knex (`src/utils/mysql.ts`)
+- **MongoDB** — via Mongoose (`src/utils/mongo.ts`)
+- **Redis** — via ioredis (`src/utils/ioredis.utils.ts`); also used for Bull queues (`src/queues/`)
+- **AWS S3 + SES** (`src/services/thirdParty/s3.service.ts`)
+- **Razorpay** (payments, mandates, payouts, subscriptions)
+- **Surepass** (PAN/Aadhaar verification)
+- **Digitap** (face liveness)
+- **Finbox** (bank connect / statement analysis)
+- **DigiLocker** (Aadhaar via DigiLocker)
+- **Firebase** (push notifications)
+- **MSG91 / Kaleyra / Sendinblue** (SMS/email)
+- **Sentry** (`src/sentry.ts`) — error monitoring
+
+**Request Lifecycle**
+`HTTP request → Express middleware (auth, pagination, validation) → Controller → Service → MySQL/MongoDB/External API → Response`
+
+**Cron Jobs** (started in `App.startCronJobs()`): bulk emandate, loan write-off, DSA cron, contact-us Excel, WebEngage sync.
+
+---
+
+## node-crm.raw
+
+**Entry Points**
+- `src/server.ts` → instantiates `App` with all routes
+- `src/start.ts` → application bootstrapper
+- `src/app.ts` → Express app: middleware, routes, Swagger, error handling, cron jobs
+
+**Top-Level Modules**
+```
+src/
+├── app.ts                  # Express App class
+├── routes/index.ts         # Route aggregator (all route modules)
+├── controllers/            # Request handlers (~30 controllers)
+├── services/               # Business logic (~70 services)
+│   ├── cronJobs/           # Cron job services (bulk mandate, WebEngage, loan write-off)
+│   └── thirdParty/         # DigiLocker, Digitap, Finbox, S3, Surepass
+├── database/
+│   ├── mysql/              # Knex-based model classes (~80 tables)
+│   ├── mongo/              # Mongoose models (KaleyraLogs, EmiAutoPaymentCronLog, RazorpayRefundLogs, RazorpayWebhookLogs, User, CustomerAssetData)
+│   └── prisma/schema.prisma
+├── middlewares/            # Auth, error, validation, pagination, permission
+├── validations/            # Joi schemas
+├── interfaces/             # TypeScript interfaces
+├── enums/                  # Enums
+└── utils/                  # Logger, MySQL/Mongo connections, encryption, Razorpay client
+```
+
+**External Services**
+- **MySQL** (primary + replica) — via Knex (`src/utils/mysql.ts`)
+- **MongoDB** — via Mongoose (`src/utils/mongo.ts`)
+- **Redis** — via ioredis (`src/utils/ioredis.utils.ts`); also used for Bull queues (`src/queues/`)
+- **AWS S3 + SES** (`src/services/thirdParty/s3.service.ts`)
+- **Razorpay** (payments, mandates, payouts, subscriptions)
+- **Surepass** (PAN/Aadhaar verification)
+- **Digitap** (face liveness)
+- **Finbox** (bank connect / statement analysis)
+- **DigiLocker** (Aadhaar via DigiLocker)
+- **Firebase** (push notifications)
+- **MSG91 / Kaleyra / Sendinblue** (SMS/email)
+- **Sentry** (`src/sentry.ts`) — error monitoring
+
+**Request Lifecycle**
+`HTTP request → Express middleware (auth, pagination, validation) → Controller → Service → MySQL/MongoDB/External API → Response`
+
+**Cron Jobs** (started in `App.startCronJobs()`): bulk emandate, loan write-off, DSA cron, contact-us Excel, WebEngage sync.
+
+---
+
+## onboarding-service-frontend
+
+**Entry Point:** `src/main.jsx` → mounts React app with Redux `<Provider>`, `<PersistGate>`, Google OAuth `<GoogleOAuthProvider>`, and registers PWA service worker.
+
+**Top-level modules:**
+```
+src/
+├── main.jsx                  # App bootstrap, Redux/Google/PWA init
+├── App.jsx                   # Root component, wraps AppRoutes
+├── routes/
+│   ├── AppRoutes.jsx         # React Router route definitions, InactivityLogout
+│   └── ProtectedRoutes.jsx   # Auth guard wrapper
+├── pages/                    # Full-page route components (20+ pages)
+├── components/               # Reusable UI components (forms, shared, modals)
+├── redux/
+│   ├── store.js              # Redux store with redux-persist (whitelist: user, app)
+│   └── slices/
+│       ├── appSlice.js       # Global loading state, stepper flags, PWA trigger
+│       └── userSlice.js      # Auth/session state (mobile, lead, customer, loan offer)
+├── services/
+│   └── userService.js        # All API call functions (axios via apiClient)
+├── utils/
+│   ├── apiClient.js          # Axios wrapper (callApi)
+│   ├── encryption.js         # AES decrypt utility
+│   ├── helper.js             # Delay, redirect, UTM, geolocation helpers
+│   ├── storage.js            # localStorage wrapper + KEYS constants
+│   └── validation.js         # Yup validation schemas
+├── events/
+│   └── clevertapEvents.js    # All CleverTap analytics event functions
+├── i18n/                     # i18next config + en/hi/ka locale JSONs
+├── lib/
+│   ├── clevertap.js          # CleverTap SDK init
+│   └── razorpay.js           # Razorpay e-mandate integration
+└── hooks/                    # Custom React hooks
+```
+
+**External Services:**
+- **Backend API** (`VITE_BASE_URL`) — Node.js onboarding API (loan journey steps)
+- **PHP API** (`VITE_PHP_BASE_URL`) — legacy PHP backend
+- **User Service** (`VITE_USER_SERVICE_BASE_URL`) — customer/auth service
+- **Razorpay** — e-mandate payment
+- **CleverTap** — analytics/event tracking
+- **Digilocker / HyperVerge** — KYC verification
+- **Finbox** — financial profile / bank statement analysis
+- **Google OAuth** — email sign-in
+- **AWS S3 + CloudFront** — static hosting (deployed via GitHub Actions)
+- **Google Tag Manager / Meta Pixel / Microsoft Clarity** — analytics tags in `index.html`
+
+**Core request lifecycle:** User action → Page component → `userService.js` function → `callApi()` (axios) → Backend API → Redux dispatch to update `userSlice`/`appSlice` → navigate to next route.
+
+---
+
+## onboarding-service-frontend.raw
+
+**Entry Point:** `src/main.jsx` → mounts React app with Redux `<Provider>`, `<PersistGate>`, Google OAuth `<GoogleOAuthProvider>`, and registers PWA service worker.
+
+**Top-level modules:**
+```
+src/
+├── main.jsx                  # App bootstrap, Redux/Google/PWA init
+├── App.jsx                   # Root component, wraps AppRoutes
+├── routes/
+│   ├── AppRoutes.jsx         # React Router route definitions, InactivityLogout
+│   └── ProtectedRoutes.jsx   # Auth guard wrapper
+├── pages/                    # Full-page route components (20+ pages)
+├── components/               # Reusable UI components (forms, shared, modals)
+├── redux/
+│   ├── store.js              # Redux store with redux-persist (whitelist: user, app)
+│   └── slices/
+│       ├── appSlice.js       # Global loading state, stepper flags, PWA trigger
+│       └── userSlice.js      # Auth/session state (mobile, lead, customer, loan offer)
+├── services/
+│   └── userService.js        # All API call functions (axios via apiClient)
+├── utils/
+│   ├── apiClient.js          # Axios wrapper (callApi)
+│   ├── encryption.js         # AES decrypt utility
+│   ├── helper.js             # Delay, redirect, UTM, geolocation helpers
+│   ├── storage.js            # localStorage wrapper + KEYS constants
+│   └── validation.js         # Yup validation schemas
+├── events/
+│   └── clevertapEvents.js    # All CleverTap analytics event functions
+├── i18n/                     # i18next config + en/hi/ka locale JSONs
+├── lib/
+│   ├── clevertap.js          # CleverTap SDK init
+│   └── razorpay.js           # Razorpay e-mandate integration
+└── hooks/                    # Custom React hooks
+```
+
+**External Services:**
+- **Backend API** (`VITE_BASE_URL`) — Node.js onboarding API (loan journey steps)
+- **PHP API** (`VITE_PHP_BASE_URL`) — legacy PHP backend
+- **User Service** (`VITE_USER_SERVICE_BASE_URL`) — customer/auth service
+- **Razorpay** — e-mandate payment
+- **CleverTap** — analytics/event tracking
+- **Digilocker / HyperVerge** — KYC verification
+- **Finbox** — financial profile / bank statement analysis
+- **Google OAuth** — email sign-in
+- **AWS S3 + CloudFront** — static hosting (deployed via GitHub Actions)
+- **Google Tag Manager / Meta Pixel / Microsoft Clarity** — analytics tags in `index.html`
+
+**Core request lifecycle:** User action → Page component → `userService.js` function → `callApi()` (axios) → Backend API → Redux dispatch to update `userSlice`/`appSlice` → navigate to next route.
+
+---
+
+## onboarding-service
+
+**Entry Points:**
+- `src/server.ts` → creates `App` instance, starts HTTP server (port from env)
+- `src/app.ts` → Express application setup, middleware registration, route mounting
+
+**Top-level Modules:**
+```
+src/
+├── routes/           → Route definitions (index.ts aggregates all routes)
+├── controllers/      → HTTP request handlers
+├── services/         → Business logic layer
+│   └── thirdParty/   → External API integrations
+├── database/
+│   ├── mysql/        → Knex-based MySQL models (~100+ tables)
+│   └── mongo/        → Mongoose models
+├── middlewares/      → Auth, logging, step-checking, validation
+├── config/           → DB, Redis, Sentry, env config
+├── bull/producers/   → BullMQ job producers
+├── redis/            → Redis client + cache service
+└── utils/            → Helpers, logger, notifications, etc.
+```
+
+**Module Dependencies:**
+- Controllers → Services → Database models
+- Services call each other (e.g., `OnboardingService` calls `FinboxService`, `DecentroService`, `SurepassService`, etc.)
+- Middlewares (auth, stepCheck) call services for validation before controllers execute
+
+**External Services:**
+- **Databases:** MySQL (Knex/Objection, primary + replica), MongoDB (Mongoose)
+- **Cache/Queue:** Redis (ioredis), BullMQ
+- **Payment:** Razorpay, PayU
+- **KYC/Bureau:** Surepass, Digilocker/Decentro, Digitap, CIBIL, Experian, Finbox, Hyperverge, CKYC
+- **Fraud Detection:** Fraudgator
+- **Lending Core (LMS):** Lentra
+- **Notifications:** Kaleyra (SMS/OTP), MSG91, AWS SES, Firebase, WhatsApp (Interakt)
+- **Storage:** AWS S3
+- **Monitoring:** Sentry, New Relic
+
+**Request Lifecycle:**
+1. Request → Express middleware (helmet, cors, body-parser, morgan)
+2. → `saveApiLog` middleware → `auth.middleware` (JWT validation, customer attachment)
+3. → `stepCheck2.middleware` (validates customer journey step)
+4. → Controller handler → Service layer → DB models
+5. → Response sent; `stepTrackerAfterResponse.middleware` saves step completion
+6. → `eventLogs.middleware` fires async event logging (MySQL + MongoDB)
+
+---
+
+## ramfincorp-backend
+
+**Entry Point:** `src/server.ts` → instantiates `App` class (`src/app.ts`) with all route modules → Express HTTP server on configurable port (default 8080).
+
+**Top-Level Modules:**
+- `src/app.ts` — Express app bootstrap: middleware, routes, Swagger, cron jobs, MongoDB/MySQL connections; graceful shutdown on SIGINT/SIGTERM/uncaughtException (destroys Knex pool, force-exits after 5s timeout)
+- `src/config.server.ts` — Config loading from env vars + defaults
+- `src/routes/index.ts` — Aggregates all route classes
+- `src/controllers/` — Request handlers (30+ controllers)
+- `src/services/` — Business logic layer (60+ services)
+- `src/database/` — Data access: `mongo/` (Mongoose models/repos), `mysql/` (Knex-based models), `prisma/` (unused/minimal)
+- `src/middlewares/` — Auth, error handling, validation, step-checking, event logging
+- `src/consumers/` — SQS/Kafka message consumers
+- `src/producers/` — SQS message producers
+- `src/workers/` — Worker thread wrappers
+- `src/services/cronJobs/` — Scheduled cron jobs
+- `src/utils/pushAdhar.ts` — Utility to backfill Aadhaar numbers into user_metadata from leads_api_log in batches
+
+**External Services:**
+- **MySQL** (via Knex) — primary relational store (customers, loans, EMIs, leads, approvals, etc.); connection pool with auto-reconnect (max 4 attempts, pool listeners for createFail/acquireFail)
+- **MongoDB** (via Mongoose) — logs, event logs, webhook logs, Kaleyra logs, Lentra logs
+- **Redis** (via ioredis) — caching, OTP storage, LMS flow decisions, queues (Bull), distributed lock for retryStpCron
+- **AWS S3** — document/file storage
+- **AWS SQS** — async job queues (Razorpay webhook settlement, missing payment, disbursal documents, Lentra STP)
+- **Kafka** (KafkaJS) — Razorpay payment event consumption
+- **Razorpay** — payment gateway (penny drop, e-mandate, repayments, payouts)
+- **PayU** — alternative payment gateway
+- **Firebase** — push notifications
+- **Decentro** — bank account validation, Aadhaar/DigiLocker KYC
+- **SurePass** — PAN/Aadhaar OTP verification
+- **Digitap** — face liveness, PAN verification
+- **Finbox** — bank statement analysis
+- **HyperVerge** — onboarding/KYC
+- **Lentra LMS** — external loan management system integration (STP, NACH, repayment webhook, fund-in, statement of accounts, due transaction details)
+- **CIBIL/Experian/Bureau** — credit bureau APIs
+- **Kaleyra/MSG91/TextNation/Acquirit** — SMS/OTP providers
+- **AWS SES / Brevo (SendinBlue)** — email delivery
+- **WebEngage** — marketing analytics
+
+**Core Request Lifecycle:** Client → Express middleware (auth, validation, step-check) → Controller → Service → DB model → Response
+
+---
+
+## ramfincorp-backend.raw
+
+**Entry Point:** `src/server.ts` → instantiates `App` class (`src/app.ts`) with all route modules → Express HTTP server on configurable port (default 8080).
+
+**Top-Level Modules:**
+- `src/app.ts` — Express app bootstrap: middleware, routes, Swagger, cron jobs, MongoDB/MySQL connections
+- `src/config.server.ts` — Config loading from env vars + defaults
+- `src/routes/index.ts` — Aggregates all route classes
+- `src/controllers/` — Request handlers (30+ controllers)
+- `src/services/` — Business logic layer (60+ services)
+- `src/database/` — Data access: `mongo/` (Mongoose models/repos), `mysql/` (Knex-based models), `prisma/` (unused/minimal)
+- `src/middlewares/` — Auth, error handling, validation, step-checking, event logging
+- `src/consumers/` — SQS/Kafka message consumers
+- `src/producers/` — SQS message producers
+- `src/workers/` — Worker thread wrappers
+- `src/services/cronJobs/` — Scheduled cron jobs
+
+**External Services:**
+- **MySQL** (via Knex) — primary relational store (customers, loans, EMIs, leads, approvals, etc.)
+- **MongoDB** (via Mongoose) — logs, event logs, webhook logs, Kaleyra logs, Lentra logs
+- **Redis** (via ioredis) — caching, OTP storage, LMS flow decisions, queues (Bull)
+- **AWS S3** — document/file storage
+- **AWS SQS** — async job queues (Razorpay webhook settlement, missing payment, disbursal documents, Lentra STP)
+- **Kafka** (KafkaJS) — Razorpay payment event consumption
+- **Razorpay** — payment gateway (penny drop, e-mandate, repayments, payouts)
+- **PayU** — alternative payment gateway
+- **Firebase** — push notifications
+- **Decentro** — bank account validation, Aadhaar/DigiLocker KYC
+- **SurePass** — PAN/Aadhaar OTP verification
+- **Digitap** — face liveness, PAN verification
+- **Finbox** — bank statement analysis
+- **HyperVerge** — onboarding/KYC
+- **Lentra LMS** — external loan management system integration
+- **CIBIL/Experian/Bureau** — credit bureau APIs
+- **Kaleyra/MSG91/TextNation/Acquirit** — SMS/OTP providers
+- **AWS SES / Brevo (SendinBlue)** — email delivery
+- **WebEngage** — marketing analytics
+
+**Core Request Lifecycle:** Client → Express middleware (auth, validation, step-check) → Controller → Service → DB model → Response
+
+---
+

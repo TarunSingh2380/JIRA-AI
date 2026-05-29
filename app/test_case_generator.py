@@ -1,8 +1,9 @@
-"""Test case generator client backed by the RepoTree service.
+"""Test case generator backed by RepoTree.
 
-This replaces the old Neo4j/CGC graph traversal in the test-case path. Qdrant
-is still used by RepoTree for semantic code hits, then combined with its
-Repomix-derived repository context.
+RepoTree is integrated in-process from JIRA-AI's bundled `repo_architect`
+package, so JIRA-AI does not need a second uvicorn service. The old HTTP client
+path is kept as a fallback for deployments that intentionally use a remote
+RepoTree service.
 """
 from __future__ import annotations
 
@@ -11,14 +12,16 @@ import logging
 from typing import Any, Dict, Optional
 
 import requests
+from fastapi import HTTPException
 
 from app.config import Settings
+from app.repo_tree_integration import generate_testcases_in_process, repo_tree_status
 
 log = logging.getLogger(__name__)
 
 
 class TestCaseGenerator:
-    """Proxy JIRA ticket testcase generation to RepoTree."""
+    """Generate JIRA ticket test cases through RepoTree."""
 
     def __init__(self, settings: Settings, llm_client: Any | None = None) -> None:
         self.settings = settings
@@ -49,9 +52,50 @@ class TestCaseGenerator:
             "include_semantic_context": True,
         }
 
+        status_payload = repo_tree_status()
+        if status_payload.get("mode") == "in_process":
+            log.info(
+                "Calling in-process RepoTree testcase generator ticket=%s repo=%s model=%s style=%s",
+                ticket_key,
+                repo,
+                embedding_model,
+                style,
+            )
+            try:
+                data = generate_testcases_in_process(payload)
+            except HTTPException as exc:
+                detail = exc.detail if isinstance(exc.detail, str) else json.dumps(exc.detail, default=str)
+                raise RuntimeError(f"RepoTree testcase generation failed: {detail}") from exc
+            except Exception as exc:
+                log.warning("In-process RepoTree testcase generation failed for %s: %s", ticket_key, exc)
+                raise RuntimeError(f"RepoTree testcase generation failed: {exc}") from exc
+            return _result_payload(data, style)
+
+        return self._generate_via_http(
+            payload,
+            ticket_key=ticket_key,
+            repo=repo,
+            embedding_model=embedding_model,
+            style=style,
+        )
+
+    def _generate_via_http(
+        self,
+        payload: dict[str, Any],
+        *,
+        ticket_key: str,
+        repo: Optional[str],
+        embedding_model: str,
+        style: str,
+    ) -> Dict[str, Any]:
+        if not self.settings.repo_tree_base_url:
+            raise RuntimeError(
+                "RepoTree in-process integration is unavailable and REPO_TREE_BASE_URL is not configured"
+            )
+
         url = f"{self.settings.repo_tree_base_url}/testcases/generate"
         log.info(
-            "Calling RepoTree testcase generator ticket=%s repo=%s model=%s style=%s",
+            "Calling remote RepoTree testcase generator ticket=%s repo=%s model=%s style=%s",
             ticket_key,
             repo,
             embedding_model,
@@ -73,17 +117,7 @@ class TestCaseGenerator:
             log.warning("RepoTree testcase generation failed for %s: %s", ticket_key, message)
             raise RuntimeError(f"RepoTree testcase generation failed: {message}") from exc
 
-        grounded_repos = data.get("grounded_repos") or []
-        return {
-            "test_cases": data.get("test_cases") or "",
-            "semantic_hits_count": int(data.get("semantic_hits_count") or 0),
-            "functions_found": len(grounded_repos),
-            "files_touched_count": int(data.get("files_touched_count") or 0),
-            "grounded_repos": grounded_repos,
-            "style": data.get("style") or style,
-            "architecture_context_chars": int(data.get("architecture_context_chars") or 0),
-            "repomix_context_chars": int(data.get("repomix_context_chars") or 0),
-        }
+        return _result_payload(data, style)
 
 
 def _ticket_payload(ticket_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,6 +149,20 @@ def _ticket_payload(ticket_data: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "labels": [_string_value(label) for label in labels] if isinstance(labels, list) else [],
         "components": _component_names(components),
+    }
+
+
+def _result_payload(data: dict[str, Any], style: str) -> dict[str, Any]:
+    grounded_repos = data.get("grounded_repos") or []
+    return {
+        "test_cases": data.get("test_cases") or "",
+        "semantic_hits_count": int(data.get("semantic_hits_count") or 0),
+        "functions_found": len(grounded_repos),
+        "files_touched_count": int(data.get("files_touched_count") or 0),
+        "grounded_repos": grounded_repos,
+        "style": data.get("style") or style,
+        "architecture_context_chars": int(data.get("architecture_context_chars") or 0),
+        "repomix_context_chars": int(data.get("repomix_context_chars") or 0),
     }
 
 
