@@ -6,8 +6,10 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
+
+from dateutil import parser as dateutil_parser
 
 from app.config import Settings
 from app.prompt_store import PromptStore
@@ -435,6 +437,13 @@ class Workflow1Reviewer:
         tracking_start = self._parse_jira_datetime_to_date(request.createdAt)
         due_date_parsed = self._parse_jira_date(request.dueDate)
         total_working_days = self._count_working_days(tracking_start, due_date_parsed)
+        LOGGER.info(
+            "workflow1 %s: tracking_start=%s, due_date=%s, total_working_days=%s",
+            request.issueKey,
+            tracking_start,
+            due_date_parsed,
+            total_working_days,
+        )
 
         cursor.execute(
             """
@@ -490,22 +499,18 @@ class Workflow1Reviewer:
         )
 
     def _parse_jira_datetime_to_date(self, value: str) -> date:
-        normalized = value.strip()
-        if normalized.endswith("Z"):
-            normalized = f"{normalized[:-1]}+00:00"
-        elif re.search(r"[+-]\d{4}$", normalized):
-            normalized = f"{normalized[:-2]}:{normalized[-2:]}"
-
-        return datetime.fromisoformat(normalized).date()
+        return dateutil_parser.parse(value.strip()).date()
 
     def _parse_jira_date(self, value: str) -> date:
         return date.fromisoformat(value.strip())
 
     def _count_working_days(self, start_date: date, end_date: date) -> int:
+        if start_date > end_date:
+            return 1
         count = 0
         current = start_date
         while current <= end_date:
-            if current.weekday() < 5:
+            if current.weekday() < 5:  # 0=Mon, 4=Fri
                 count += 1
             current += timedelta(days=1)
         return max(count, 1)
