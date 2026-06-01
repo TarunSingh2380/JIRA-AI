@@ -40,6 +40,10 @@ class Settings:
         "TESTCASE_CHAT_MODEL",
         os.getenv("ANTHROPIC_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-5")),
     )
+    test_case_comparison_model: str = os.getenv("TEST_CASE_COMPARISON_MODEL", "claude-opus-4-5")
+    test_case_comparison_max_tokens: int = int(os.getenv("TEST_CASE_COMPARISON_MAX_TOKENS", "6000"))
+    test_case_comparison_pipeline_limit: int = int(os.getenv("TEST_CASE_COMPARISON_PIPELINE_LIMIT", "5"))
+    test_case_comparison_pipeline_top_k: int = int(os.getenv("TEST_CASE_COMPARISON_PIPELINE_TOP_K", "15"))
     llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
     llm_test_case_timeout_seconds: int = int(os.getenv("LLM_TEST_CASE_TIMEOUT_SECONDS", "300"))
     database_url_override: str = os.getenv("DATABASE_URL", "")
@@ -54,6 +58,7 @@ class Settings:
     jira_email: str = os.getenv("JIRA_EMAIL", "")
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")
     jira_project_keys: str = os.getenv("JIRA_PROJECT_KEYS", "")
+    jira_excluded_project_keys: str = os.getenv("JIRA_EXCLUDED_PROJECT_KEYS", "AIGOV")
     jira_approved_transition_name: str = os.getenv("JIRA_APPROVED_TRANSITION_NAME", "")
     repograph_base_url: str = os.getenv("REPOGRAPH_BASE_URL", "http://127.0.0.1:8088").rstrip("/")
     repo_tree_base_url: str = os.getenv(

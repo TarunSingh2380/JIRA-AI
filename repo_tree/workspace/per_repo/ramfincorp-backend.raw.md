@@ -1,354 +1,374 @@
 ## ARCHITECTURE
 
-**Entry Point:** `src/server.ts` → instantiates `App` class (`src/app.ts`) with all route modules → Express HTTP server on configurable port (default 8080).
+**Entry Points**
+- `src/server.ts` — bootstraps Express app via `App` class
+- `src/app.ts` — registers middleware, routes, error handling, cron jobs, DB connections
 
-**Top-Level Modules:**
-- `src/app.ts` — Express app bootstrap: middleware, routes, Swagger, cron jobs, MongoDB/MySQL connections
-- `src/config.server.ts` — Config loading from env vars + defaults
-- `src/routes/index.ts` — Aggregates all route classes
-- `src/controllers/` — Request handlers (30+ controllers)
-- `src/services/` — Business logic layer (60+ services)
-- `src/database/` — Data access: `mongo/` (Mongoose models/repos), `mysql/` (Knex-based models), `prisma/` (unused/minimal)
-- `src/middlewares/` — Auth, error handling, validation, step-checking, event logging
-- `src/consumers/` — SQS/Kafka message consumers
-- `src/producers/` — SQS message producers
-- `src/workers/` — Worker thread wrappers
-- `src/services/cronJobs/` — Scheduled cron jobs
+**Top-Level Modules**
+```
+src/
+├── routes/         — Route definitions (25+ route files), registered in src/routes/index.ts
+├── controllers/    — HTTP request handlers (25+ controllers)
+├── services/       — Business logic layer (80+ services)
+│   ├── cronJobs/   — Scheduled cron job services
+│   ├── mongo/      — MongoDB-specific services
+│   └── thirdParty/ — External API integrations (Razorpay, Lentra, Finbox, SurePass, Decentro, HyperVerge, Digitap, S3, Digilocker)
+├── database/
+│   ├── mysql/      — Knex-based models/repositories (70+ tables)
+│   ├── mongo/      — Mongoose models (EventLogs, KaleyraLogs, LentraLogs, RazorpayWebhookLogs, etc.)
+│   └── prisma/     — Prisma schema (MySQL User model, minimal)
+├── consumers/      — SQS and Kafka consumers (missing payment, Razorpay)
+├── producers/      — SQS message producers (disbursal docs, Lentra STP push, Razorpay Kafka-to-SQS)
+├── middlewares/    — Auth, step checking, API key validation, logging, validation
+├── queues/         — Bull/Redis queue creation
+└── workers/        — Razorpay consumer worker thread
+```
 
-**External Services:**
-- **MySQL** (via Knex) — primary relational store (customers, loans, EMIs, leads, approvals, etc.)
-- **MongoDB** (via Mongoose) — logs, event logs, webhook logs, Kaleyra logs, Lentra logs
-- **Redis** (via ioredis) — caching, OTP storage, LMS flow decisions, queues (Bull)
-- **AWS S3** — document/file storage
-- **AWS SQS** — async job queues (Razorpay webhook settlement, missing payment, disbursal documents, Lentra STP)
-- **Kafka** (KafkaJS) — Razorpay payment event consumption
-- **Razorpay** — payment gateway (penny drop, e-mandate, repayments, payouts)
-- **PayU** — alternative payment gateway
+**External Services**
+- **MySQL** (primary DB via Knex) + replica read
+- **MongoDB** (Mongoose — event logs, Kaleyra logs, Lentra logs, Razorpay webhook logs)
+- **Redis** (ioredis — caching, LMS flow decisions, Bull queues)
+- **AWS SQS** — payment settlement, disbursal documents, Lentra STP push queues
+- **AWS S3** — document/image storage
+- **AWS SES** — email delivery
+- **Razorpay** — payments, e-mandate, penny drop, payouts
+- **PayU** — alternate payment gateway
+- **Lentra LMS** — loan management system integration
+- **Finbox** — bank connect, statement analysis
+- **SurePass / Digitap / Decentro** — PAN/Aadhaar KYC verification
+- **HyperVerge** — selfie/liveness verification
 - **Firebase** — push notifications
-- **Decentro** — bank account validation, Aadhaar/DigiLocker KYC
-- **SurePass** — PAN/Aadhaar OTP verification
-- **Digitap** — face liveness, PAN verification
-- **Finbox** — bank statement analysis
-- **HyperVerge** — onboarding/KYC
-- **Lentra LMS** — external loan management system integration
-- **CIBIL/Experian/Bureau** — credit bureau APIs
-- **Kaleyra/MSG91/TextNation/Acquirit** — SMS/OTP providers
-- **AWS SES / Brevo (SendinBlue)** — email delivery
-- **WebEngage** — marketing analytics
+- **Kafka** (KafkaJS) — Razorpay payment event streaming
+- **Msg91 / Kaleyra / TextNation / Acquirit** — OTP/SMS delivery
 
-**Core Request Lifecycle:** Client → Express middleware (auth, validation, step-check) → Controller → Service → DB model → Response
+**Request Lifecycle**
+1. Express middleware chain (CORS, helmet, compression, rate limiting, response handler, API log save)
+2. Route → validation middleware (Joi) → auth middleware (JWT/API key) → step checker middleware → controller
+3. Controller calls service(s) → Knex/Mongoose DB operations → third-party API calls
+4. Response via `ResponseService.serviceResponse()`
+
+**Cron Jobs** (`CronJobService`) — auto-disbursal coverage, EMI auto-pay, UTM tracking, Razorpay webhook settlement, referral rewards, document dispatch requeue, customer expiry, Lentra STP push
 
 ---
 
 ## ROUTES
 
 ### Index
-`GET /`  →  IndexController (src/routes/index.route.ts)
+`GET /  ->  IndexController  (src/routes/index.route.ts)  — health/root`
 
 ### Bureau Decision (`/api/v1/ramfincorp`)
-`GET /api/v1/ramfincorp/health`  →  BureauDecisionController.healthCheck  (src/routes/bureauDecision.route.ts)  — Health check
-`POST /api/v1/ramfincorp/bureau-decision`  →  BureauDecisionController.processBureauDecision  (src/routes/bureauDecision.route.ts)  — Process bureau decision with API key auth
-`POST /api/v1/ramfincorp/dsa-pan-verification`  →  BureauDecisionController.processDsaPanVerification  (src/routes/bureauDecision.route.ts)  — DSA PAN verification
-`POST /api/v1/ramfincorp/check-lead-status`  →  BureauDecisionController.checkLeadStatus  (src/routes/bureauDecision.route.ts)  — Check lead status by mobile
+`GET  /api/v1/ramfincorp/health  ->  BureauDecisionController.healthCheck  (src/routes/bureauDecision.route.ts)  — health check`
+`POST /api/v1/ramfincorp/bureau-decision  ->  BureauDecisionController.processBureauDecision  (src/routes/bureauDecision.route.ts)  — process bureau decision (API key auth)`
+`POST /api/v1/ramfincorp/dsa-pan-verification  ->  BureauDecisionController.processDsaPanVerification  (src/routes/bureauDecision.route.ts)  — DSA PAN verification`
+`POST /api/v1/ramfincorp/check-lead-status  ->  BureauDecisionController.checkLeadStatus  (src/routes/bureauDecision.route.ts)  — check lead status by mobile`
 
-### CIBIL Score (`/cibil`)
-`GET /cibil/terms-and-conditions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get T&C
-`POST /cibil/update-journey`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Update user journey step
-`POST /cibil/create-checkout`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Create Razorpay subscription checkout
-`GET /cibil/payment-status`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get subscription payment status
-`POST /cibil/experian-pull`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Pull Experian credit report
-`POST /cibil/answer-questions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Submit Experian auth questions
-`POST /cibil/payment-checkout`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Process subscription payment
-`GET /cibil/journey-step`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get current journey step
-`GET /cibil/subscriptions`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — List subscriptions
-`GET /cibil/subscription-payments`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — List subscription payments
-`GET /cibil/subscription-process`  →  CibilScoreController (src/routes/cibilscore.route.ts)  — Get subscription process
-`POST /cibil/report-summary`  →  CibilScoreController.reportSummary  (src/routes/cibilscore.route.ts)  — Get credit report summary
-`POST /cibil/account-details`  →  CibilScoreController.accountDetails  (src/routes/cibilscore.route.ts)  — Get account details
-`POST /cibil/view-impact`  →  CibilScoreController.viewImpactDetails  (src/routes/cibilscore.route.ts)  — View credit impact
-`GET /cibil/fetch-order-details`  →  CibilScoreController.fetchRazorpayOrder  (src/routes/cibilscore.route.ts)  — Fetch Razorpay order
+### Cibil Score (`/cibil-score` or similar)
+`GET  /terms-and-conditions  ->  CibilScoreController.getTermsAndConditions  (src/routes/cibilscore.route.ts)  — get T&C`
+`POST /update-journeys  ->  CibilScoreController.updateJourneys  (src/routes/cibilscore.route.ts)  — update credit journey step`
+`POST /create-checkout  ->  CibilScoreController.createCheckout  (src/routes/cibilscore.route.ts)  — create Razorpay subscription checkout`
+`GET  /payment-status  ->  CibilScoreController.getPaymentStatus  (src/routes/cibilscore.route.ts)  — get subscription payment status`
+`POST /experian-pull  ->  CibilScoreController.experianPull  (src/routes/cibilscore.route.ts)  — pull Experian credit report`
+`POST /answer-questions  ->  CibilScoreController.answerQuestions  (src/routes/cibilscore.route.ts)  — answer Experian auth questions`
+`POST /payment-checkout  ->  CibilScoreController.paymentCheckout  (src/routes/cibilscore.route.ts)  — initiate payment checkout`
+`POST /update-subscription-payment  ->  CibilScoreController.updateSubscriptionPayment  (src/routes/cibilscore.route.ts)  — webhook for subscription payment`
+`GET  /journey-step  ->  CibilScoreController.getJourneyStep  (src/routes/cibilscore.route.ts)  — get current journey step`
+`GET  /subscriptions  ->  CibilScoreController.getSubscription  (src/routes/cibilscore.route.ts)  — list subscriptions`
+`GET  /subscription-payments  ->  CibilScoreController.getSubscriptionPayments  (src/routes/cibilscore.route.ts)  — list subscription payments`
+`GET  /subscription-process  ->  CibilScoreController.getSubscriptionProcess  (src/routes/cibilscore.route.ts)  — get subscription process steps`
+`GET  /report-summary  ->  CibilScoreController.reportSummary  (src/routes/cibilscore.route.ts)  — get credit report summary`
+`GET  /account-details  ->  CibilScoreController.accountDetails  (src/routes/cibilscore.route.ts)  — get credit account details`
+`GET  /view-impact  ->  CibilScoreController.viewImpactDetails  (src/routes/cibilscore.route.ts)  — view credit impact details`
+`GET  /fetch-order-details  ->  CibilScoreController.fetchRazorpayOrder  (src/routes/cibilscore.route.ts)  — fetch Razorpay order details`
 
-### Collection CRM (`/collection-crm`)
-`POST /collection-crm/add`  →  CollectionCrmController (src/routes/collectionCrm.route.ts)  — Add collection entry
-`GET /collection-crm/all`  →  CollectionCrmController (src/routes/collectionCrm.route.ts)  — Get all collections
+### Collection CRM
+`POST /collection-crm/add  ->  CollectionCrmController.addCollection  (src/routes/collectionCrm.route.ts)  — add CRM collection entry`
+`GET  /collection-crm/all  ->  CollectionCrmController.getAllCollections  (src/routes/collectionCrm.route.ts)  — get all collection entries`
 
-### Common (`/common`)
-`POST /common/ivr-menu-one`  →  CommonController (src/routes/common.route.ts)  — IVR menu 1 handler
-`POST /common/ivr-menu-two`  →  CommonController (src/routes/common.route.ts)  — IVR menu 2 handler
-`POST /common/customer-details`  →  CommonController (src/routes/common.route.ts)  — Get customer details
-`GET /common/bank-details`  →  CommonController (src/routes/common.route.ts)  — Get bank details by IFSC
-`GET /common/aadhar-down`  →  CommonController (src/routes/common.route.ts)  — Check Aadhaar service status
+### Common
+`POST /common/ivr-menu-one  ->  CommonController.ivrMenuOne  (src/routes/common.route.ts)  — IVR menu 1 (mobile lookup)`
+`POST /common/ivr-menu-two  ->  CommonController.ivrMenuTwo  (src/routes/common.route.ts)  — IVR menu 2 (action by keypress)`
+`POST /common/customer-details  ->  CommonController.customerDetails  (src/routes/common.route.ts)  — get customer details`
+`POST /common/get-bank-details  ->  CommonController.getBankDetails  (src/routes/common.route.ts)  — lookup bank by IFSC`
+`GET  /common/aadhar-down  ->  CommonController.aadharDown  (src/routes/common.route.ts)  — check Aadhaar service downtime`
+`POST /common/lead-status  ->  CommonController.leadStatus  (src/routes/common.route.ts)  — get lead status by mobile`
 
-### CRM (`/crm`)
-`PUT /crm/lead-update`  →  CRMController (src/routes/crm.route.ts)  — Update lead
-`POST /crm/emi-calculator`  →  CRMController (src/routes/crm.route.ts)  — Calculate EMI
-`POST /crm/credit-details`  →  CRMController (src/routes/crm.route.ts)  — Save credit details
-`GET /crm/amount-to-disburse`  →  CRMController (src/routes/crm.route.ts)  — Get disbursable amount
-`POST /crm/generate-emi`  →  CRMController (src/routes/crm.route.ts)  — Generate EMI schedule
-`POST /crm/update-payment`  →  CRMController (src/routes/crm.route.ts)  — Update payment
-`POST /crm/apply-penalty`  →  CRMController (src/routes/crm.route.ts)  — Apply penalty
-`GET /crm/emis`  →  CRMController (src/routes/crm.route.ts)  — Get EMIs
-`GET /crm/docs-requirements`  →  CRMController (src/routes/crm.route.ts)  — Get document requirements
-`GET /crm/emi-loan-details`  →  CRMController (src/routes/crm.route.ts)  — Get EMI loan details
-`POST /crm/payday-to-emi`  →  CRMController (src/routes/crm.route.ts)  — Convert payday to EMI
-`POST /crm/upload-bulk-mandate`  →  CRMController (src/routes/crm.route.ts)  — Upload bulk mandate CSV
-`GET /crm/mandates`  →  CRMController (src/routes/crm.route.ts)  — Get mandates
-`GET /crm/mandate-file-url`  →  CRMController (src/routes/crm.route.ts)  — Get mandate file URL
-`POST /crm/verify-payment`  →  CRMController (src/routes/crm.route.ts)  — Verify Razorpay payment range
-`POST /crm/verify-payu-payment`  →  CRMController (src/routes/crm.route.ts)  — Verify PayU payment range
+### CRM
+`POST /crm/lead-update  ->  CRMController.leadUpdate  (src/routes/crm.route.ts)  — update lead status`
+`POST /crm/emi-calculator  ->  CRMController.emiCalculator  (src/routes/crm.route.ts)  — calculate EMI`
+`POST /crm/credit-details  ->  CRMController.creditDetails  (src/routes/crm.route.ts)  — save credit details`
+`POST /crm/get-amount-to-disburse  ->  CRMController.getAmountToDisbursed  (src/routes/crm.route.ts)  — get disbursable amount`
+`POST /crm/generate-emi  ->  CRMController.generateEMI  (src/routes/crm.route.ts)  — generate EMI schedule`
+`POST /crm/update-payment  ->  CRMController.updatePayment  (src/routes/crm.route.ts)  — update payment record`
+`POST /crm/apply-penalty  ->  CRMController.applyPanelty  (src/routes/crm.route.ts)  — apply penalty to EMI`
+`GET  /crm/get-emis  ->  CRMController.getEmis  (src/routes/crm.route.ts)  — get EMI list for customer`
+`POST /crm/docs-requirements  ->  CRMController.getDocsRequirements  (src/routes/crm.route.ts)  — get KFS/sanction doc data`
+`GET  /crm/emi-loan-details  ->  CRMController.getEmiLoanDetails  (src/routes/crm.route.ts)  — get EMI loan details`
+`POST /crm/payday-to-emi  ->  CRMController.paydayToEmiConversion  (src/routes/crm.route.ts)  — convert payday to EMI loan`
+`POST /crm/upload-bulk-mandate  ->  CRMController.uploadBulkMandateFile  (src/routes/crm.route.ts)  — upload bulk mandate CSV`
+`GET  /crm/bulk-mandate-data  ->  CRMController.getBulkMandateData  (src/routes/crm.route.ts)  — get bulk mandate data`
+`GET  /crm/bulk-mandate-file-url  ->  CRMController.getUrlforBulkMandateFile  (src/routes/crm.route.ts)  — get bulk mandate file URL`
+`POST /crm/payment-verification  ->  CRMController.paymentVerification  (src/routes/crm.route.ts)  — verify Razorpay payment`
+`POST /crm/payu-payment-verification  ->  CRMController.payUPaymentVerification  (src/routes/crm.route.ts)  — verify PayU payment`
 
-### Customers (`/customers`)
-`POST /customers/login`  →  CustomersController (src/routes/customer.route.ts)  — Customer login / send OTP
-`POST /customers/verify-otp`  →  CustomersController (src/routes/customer.route.ts)  — Verify OTP
-`GET /customers/dashboard`  →  CustomersController (src/routes/customer.route.ts)  — Customer dashboard data
-`POST /customers/incompleteDetailsUpdate`  →  CustomersController (src/routes/customer.route.ts)  — Update incomplete customer details + BRE
-`POST /customers/partial-incomplete-update`  →  CustomersController (src/routes/customer.route.ts)  — Partial incomplete details update
-`GET /customers/check-repeat-case/:leadID`  →  CustomersController (src/routes/customer.route.ts)  — Check repeat case / one-page reloan
-`POST /customers/updateEMIPayment`  →  CustomersController (src/routes/customer.route.ts)  — Update EMI payment (Razorpay)
-`POST /customers/updatePayUPayment`  →  CustomersController (src/routes/customer.route.ts)  — Update PayU payment
-`GET /customers/emi-soa`  →  CustomersController (src/routes/customer.route.ts)  — EMI statement of account
-`GET /customers/one-page-view`  →  CustomersController (src/routes/customer.route.ts)  — One-page loan view
-`GET /customers/repayment-page`  →  CustomersController (src/routes/customer.route.ts)  — Repayment page data
-`POST /customers/check-pdf`  →  CustomersController (src/routes/customer.route.ts)  — Check/generate PDF
-`GET /customers/loans`  →  CustomersController (src/routes/customer.route.ts)  — Customer loan list
-`POST /customers/dsa-lead-creation`  →  CustomersController (src/routes/customer.route.ts)  — DSA lead creation (API key auth)
-`POST /customers/create-otp`  →  CustomersController (src/routes/customer.route.ts)  — New OTP creation
-`POST /customers/verify-otp-service`  →  CustomersController (src/routes/customer.route.ts)  — New OTP verification
-`POST /customers/attributions`  →  CustomersController (src/routes/customer.route.ts)  — Save UTM attributions
-`GET /customers/lead-bulk`  →  CustomersController (src/routes/customer.route.ts)  — Bulk lead operations
-`POST /customers/update-emi-transactions`  →  CustomersController (src/routes/customer.route.ts)  — Update EMI transactions
-`POST /customers/update-payout`  →  CustomersController (src/routes/customer.route.ts)  — Update payout status
-`POST /customers/update-lead-status`  →  CustomersController (src/routes/customer.route.ts)  — Update lead status
-`POST /customers/update-job-status`  →  CustomersController (src/routes/customer.route.ts)  — Update job status
-`GET /customers/auto-login`  →  CustomersController (src/routes/customer.route.ts)  — Auto login via JWT
-`POST /customers/send-disbursal-document`  →  CustomersController (src/routes/customer.route.ts)  — Send disbursal document to SQS
-`GET /customers/get-journey`  →  CustomersController (src/routes/customer.route.ts)  — Get customer journey
-`POST /customers/check-pancard-dpd`  →  CustomersController (src/routes/customer.route.ts)  — Check PAN DPD status
+### Customer
+`POST /customers/login  ->  CustomersController.customerLogin  (src/routes/customer.route.ts)  — customer OTP login`
+`POST /customers/verify-otp  ->  CustomersController.verifyOtp  (src/routes/customer.route.ts)  — verify OTP`
+`POST /customers/create-otp  ->  CustomersController.createOtpService  (src/routes/customer.route.ts)  — create/send OTP`
+`POST /customers/verify-otp-service  ->  CustomersController.verifyOtpService  (src/routes/customer.route.ts)  — verify OTP (service)`
+`GET  /customers/dashboard  ->  CustomersController.customerCheckForDashboard  (src/routes/customer.route.ts)  — get dashboard state`
+`POST /customers/incompleteDetailsUpdate  ->  CustomersController.onePageReloan  (src/routes/customer.route.ts)  — submit loan details (BRE trigger)`
+`POST /customers/check-repeat-case/:leadID  ->  CustomersController.onePageReloanv2  (src/routes/customer.route.ts)  — repeat loan application`
+`GET  /customers/get-customer-journey  ->  CustomersController.getCustomerJourney  (src/routes/customer.route.ts)  — get next step for customer`
+`POST /customers/update-emi-transactions  ->  CustomersController.updateEmiTransactions  (src/routes/customer.route.ts)  — update EMI transaction status`
+`POST /customers/update-payout  ->  CustomersController.updatePayout  (src/routes/customer.route.ts)  — update payout/disbursal status`
+`POST /customers/update-lead-status  ->  CustomersController.updateLeadStatus  (src/routes/customer.route.ts)  — update lead status`
+`POST /customers/update-job-status  ->  CustomersController.updateJobStatus  (src/routes/customer.route.ts)  — update job/lead status`
+`GET  /customers/repayment-page  ->  CustomersController.repaymentPage  (src/routes/customer.route.ts)  — get repayment page data`
+`POST /customers/payday-repayment  ->  CustomersController.razorpayPaydayRepayment  (src/routes/customer.route.ts)  — initiate payday repayment`
+`POST /customers/emi-repayment  ->  CustomersController.createOrderRepayment  (src/routes/customer.route.ts)  — initiate EMI repayment`
+`POST /customers/payu-repayment-callback  ->  CustomersController.payUCallbackResponse  (src/routes/customer.route.ts)  — PayU repayment callback`
+`POST /customers/payu-repayment-verify  ->  CustomersController.validatePayUTransaction  (src/routes/customer.route.ts)  — verify PayU transaction`
+`GET  /customers/check-pdf  ->  CustomersController.checkPdf  (src/routes/customer.route.ts)  — generate/check sanction PDF`
+`GET  /customers/emi-soa  ->  CustomersController.emiSoa  (src/routes/customer.route.ts)  — get EMI statement of account`
+`GET  /customers/one-page-view  ->  CustomersController.getOnePageView  (src/routes/customer.route.ts)  — get one-page loan view`
+`POST /customers/dsa-lead-creation  ->  CustomersController.dsaLeadCreation  (src/routes/customer.route.ts)  — DSA partner lead creation`
+`POST /customers/dsa-pan-verification  ->  CustomersController.dsaPanVerification  (src/routes/customer.route.ts)  — DSA PAN verification (API key auth)`
+`GET  /customers/loans  ->  CustomersController.customerLoans  (src/routes/customer.route.ts)  — list customer loans`
+`POST /customers/save-name-email  ->  CustomersController.saveNameEmail  (src/routes/customer.route.ts)  — save customer name/email`
+`POST /customers/auto-login  ->  CustomersController.autoLogin  (src/routes/customer.route.ts)  — auto login by JWT`
+`POST /customers/pancard-dpd  ->  CustomersController.checkPancardDpd  (src/routes/customer.route.ts)  — check PAN DPD status`
+`POST /customers/missing-payments  ->  CustomersController.getMissingPayments  (src/routes/customer.route.ts)  — trigger missing payment settlement`
+`POST /customers/send-disbursal-document  ->  CustomersController.sendDisbursalDocument  (src/routes/customer.route.ts)  — send disbursal docs to SQS`
+`POST /customers/partial-incomplete-update  ->  CustomersController.partialIncompleteDetailsUpdate  (src/routes/customer.route.ts)  — partial loan details update`
+`GET  /customers/payment-status  ->  CustomersController.updatePaymentStatus  (src/routes/customer.route.ts)  — update payment status`
 
-### Customer Bank Account (`/customer-bank-account`)
-`GET /customer-bank-account/list`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Get bank account list for emandate
-`POST /customer-bank-account/confirm`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Confirm bank account
-`POST /customer-bank-account/save`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Save bank details
-`GET /customer-bank-account/referrer-list`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Get referrer bank accounts
-`POST /customer-bank-account/save-referrer`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Save referrer bank details
-`POST /customer-bank-account/confirm-referrer`  →  CustomerBankAccountController (src/routes/customerBankAccount.route.ts)  — Confirm referrer bank account
+### Customer Bank Account
+`GET  /customer-bank-account/list  ->  CustomerBankAccountController.getCustomerBankAccounts  (src/routes/customerBankAccount.route.ts)  — list bank accounts`
+`POST /customer-bank-account/save  ->  CustomerBankAccountController.saveBankAccount  (src/routes/customerBankAccount.route.ts)  — save bank account`
+`POST /customer-bank-account/confirm  ->  CustomerBankAccountController.confirmBankAccount  (src/routes/customerBankAccount.route.ts)  — confirm bank account`
+`GET  /customer-bank-account/referrer-list  ->  CustomerBankAccountController.getReferrerBankAccounts  (src/routes/customerBankAccount.route.ts)  — list referrer bank accounts`
+`POST /customer-bank-account/save-referrer  ->  CustomerBankAccountController.saveReferrerBankAccount  (src/routes/customerBankAccount.route.ts)  — save referrer bank account`
+`POST /customer-bank-account/confirm-referrer  ->  CustomerBankAccountController.confirmReferrerBankAccount  (src/routes/customerBankAccount.route.ts)  — confirm referrer bank account`
 
-### Document Dispatch (`/document-dispatch`)
-`POST /document-dispatch/init`  →  DocumentDispatchController.init  (src/routes/documentDispatch.route.ts)  — Initialize document dispatch
-`POST /document-dispatch/mark-sent`  →  DocumentDispatchController.markSent  (src/routes/documentDispatch.route.ts)  — Mark document as sent
-`POST /document-dispatch/error`  →  DocumentDispatchController.markError  (src/routes/documentDispatch.route.ts)  — Mark document dispatch error
+### Document Dispatch
+`POST /document-dispatch/init  ->  DocumentDispatchController.init  (src/routes/documentDispatch.route.ts)  — initialize document dispatch`
+`POST /document-dispatch/mark-sent  ->  DocumentDispatchController.markSent  (src/routes/documentDispatch.route.ts)  — mark document as sent`
+`POST /document-dispatch/error  ->  DocumentDispatchController.markError  (src/routes/documentDispatch.route.ts)  — mark document dispatch error`
 
-### Event Funnel (`/event-funnel`)
-`GET /event-funnel/report`  →  EventFunnelController (src/routes/eventFunnel.route.ts)  — Get event funnel report
+### Event Funnel
+`GET  /event-funnel/report  ->  EventFunnelController.getFunnelReport  (src/routes/eventFunnel.route.ts)  — get event funnel report`
+`GET  /event-funnel/kfs-not-disbursed  ->  EventFunnelController.getKFSDoneNotDisbursed  (src/routes/eventFunnel.route.ts)  — get KFS done but not disbursed`
 
-### Lender (`/lender`)
-`POST /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Add lender credentials
-`PUT /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Update lender credentials
-`GET /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Get lender credentials
+### Lender
+`POST /lender/add-credentials  ->  LenderController.AddCredentials  (src/routes/lender.route.ts)  — add lender credentials`
+`PUT  /lender/update-credentials  ->  LenderController.updateCredentials  (src/routes/lender.route.ts)  — update lender credentials`
+`GET  /lender/get-credentials  ->  LenderController.getCredentials  (src/routes/lender.route.ts)  — get lender credentials by lead`
 
-### Lentra (`/lentra`)
-`POST /lentra/stp`  →  LentraController (src/routes/lentra.route.ts)  — Lentra STP (straight-through processing)
-`GET /lentra/repayment-page`  →  LentraController (src/routes/lentra.route.ts)  — Lentra repayment page data
-`GET /lentra/repayment-data`  →  LentraController (src/routes/lentra.route.ts)  — Lentra repayment data
+### Lentra
+`POST /lentra/stp  ->  LentraController.lentraStp  (src/routes/lentra.route.ts)  — trigger Lentra STP workflow`
+`GET  /lentra/repayment-data  ->  LentraController.getRepaymentData  (src/routes/lentra.route.ts)  — get Lentra repayment data`
+`POST /lentra/payment-fund-in  ->  LentraController.paymentFundIn  (src/routes/lentra.route.ts)  — Lentra fund-in payment`
+`POST /lentra/stp-fallback  ->  LentraController.retryStpProcess  (src/routes/lentra.route.ts)  — retry Lentra STP`
+`POST /lentra/send-disbursal-docs  ->  LentraController.sendDisbursalDocs  (src/routes/lentra.route.ts)  — send disbursal documents`
 
-### Loan Restructure (`/loan-restructure`)
-`GET /loan-restructure/charges/:leadID`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — Get restructure charges
-`POST /loan-restructure/reason`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — Submit restructure reason
-`POST /loan-restructure/kfs`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — KFS acceptance for restructure
-`GET /loan-restructure/kfs-view`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — View restructure KFS
+### Loan Restructure
+`GET  /loan-restructure/charges  ->  LoanRestructureController.loanRestructureCharges  (src/routes/loanRestructure.route.ts)  — get restructure charges`
+`POST /loan-restructure/reason  ->  LoanRestructureController.loanRestructureReason  (src/routes/loanRestructure.route.ts)  — submit restructure reason`
+`POST /loan-restructure/kfs  ->  LoanRestructureController.loanRestructureKfsAcceptance  (src/routes/loanRestructure.route.ts)  — accept restructure KFS`
+`GET  /loan-restructure/kfs-view  ->  LoanRestructureController.loanRestructureKfsView  (src/routes/loanRestructure.route.ts)  — view restructure KFS`
 
-### Logs (`/logs`)
-`PUT /logs/sms`  →  LogsController.updateSMSLogs  (src/routes/logs.routes.ts)  — Update SMS delivery logs
+### Logs
+`POST /logs/update-sms  ->  LogsController.updateSMSLogs  (src/routes/logs.routes.ts)  — update Kaleyra SMS logs`
 
-### Customer Onboarding (`/customer_onboarding`)
-`POST /customer_onboarding/pan-verification`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — PAN verification (SurePass/Digitap)
-`POST /customer_onboarding/pan-confirmation`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — PAN confirmation
-`POST /customer_onboarding/aadhar-otp-send`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Send Aadhaar OTP (SurePass)
-`POST /customer_onboarding/aadhar-otp-verify`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Verify Aadhaar OTP (SurePass)
-`POST /customer_onboarding/aadhar-verification-initiate-digilocker`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Initiate DigiLocker Aadhaar
-`GET /customer_onboarding/aadhar-verification-webhook-digilocker`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — DigiLocker webhook callback
-`POST /customer_onboarding/name-email`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Save name and email
-`POST /customer_onboarding/email`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Update email
-`POST /customer_onboarding/selfie-verification`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Selfie liveness verification
-`POST /customer_onboarding/hyperverge-onboard`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge onboarding start
-`POST /customer_onboarding/hyperverge-result`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge result fetch
-`POST /customer_onboarding/finbox-create-url`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Create Finbox bank connect URL
-`POST /customer_onboarding/finbox-bank-connect`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Finbox bank connect callback
-`POST /customer_onboarding/penny-drop-initiate`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Initiate penny drop
-`POST /customer_onboarding/emandate`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Create emandate
-`POST /customer_onboarding/emandate-callback`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Emandate Razorpay callback
-`POST /customer_onboarding/reference-details`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Save reference details
-`PUT /customer_onboarding/reference-details`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Update reference details
-`GET /customer_onboarding/states`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Get state suggestions
-`GET /customer_onboarding/approval-view`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view data
-`GET /customer_onboarding/approval-view-v2`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view v2
-`POST /customer_onboarding/key-fact`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Generate KFS document
-`POST /customer_onboarding/key-fact-acceptance`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Accept KFS
-`POST /customer_onboarding/send-kfs`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Send KFS document
-`GET /customer_onboarding/fetch-credit-score`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Fetch credit score
+### Onboarding
+`POST /onboarding/pan-verification  ->  CustomerOnboardingController.panVerification  (src/routes/onboarding.routes.ts)  — verify PAN card`
+`POST /onboarding/pan-confirmation  ->  CustomerOnboardingController.panConfirmation  (src/routes/onboarding.routes.ts)  — confirm PAN card`
+`POST /onboarding/aadhar-otp-surepass  ->  CustomerOnboardingController.aadharOtpSurepass  (src/routes/onboarding.routes.ts)  — send Aadhaar OTP (SurePass)`
+`POST /onboarding/verify-aadhar-otp-surepass  ->  CustomerOnboardingController.verifyAadharOtpSurepass  (src/routes/onboarding.routes.ts)  — verify Aadhaar OTP (SurePass)`
+`POST /onboarding/initiate-digilocker  ->  CustomerOnboardingController.initiateDigilocker  (src/routes/onboarding.routes.ts)  — initiate DigiLocker Aadhaar`
+`GET  /onboarding/digilocker-callback  ->  CustomerOnboardingController.digilockerCallback  (src/routes/onboarding.routes.ts)  — DigiLocker OAuth callback`
+`POST /onboarding/verify-aadhar-digilocker  ->  CustomerOnboardingController.verifyAadharDigilocker  (src/routes/onboarding.routes.ts)  — verify Aadhaar via DigiLocker`
+`POST /onboarding/name-email  ->  CustomerOnboardingController.nameAndEmail  (src/routes/onboarding.routes.ts)  — save name and email`
+`POST /onboarding/email  ->  CustomerOnboardingController.email  (src/routes/onboarding.routes.ts)  — save email`
+`POST /onboarding/finbox-create-url  ->  CustomerOnboardingController.finboxCreateUrl  (src/routes/onboarding.routes.ts)  — create Finbox bank connect URL`
+`POST /onboarding/finbox-bank-connect  ->  CustomerOnboardingController.finboxBankConnect  (src/routes/onboarding.routes.ts)  — process Finbox bank connect`
+`POST /onboarding/penny-drop  ->  CustomerOnboardingController.pennyDrop  (src/routes/onboarding.routes.ts)  — initiate penny drop`
+`POST /onboarding/emandate  ->  CustomerOnboardingController.emandate  (src/routes/onboarding.routes.ts)  — initiate e-mandate`
+`POST /onboarding/emandate-callback  ->  CustomerOnboardingController.emandateCallback  (src/routes/onboarding.routes.ts)  — e-mandate payment callback`
+`GET  /onboarding/approval-view  ->  CustomerOnboardingController.approvalView  (src/routes/onboarding.routes.ts)  — get approval/offer view`
+`POST /onboarding/reference-details  ->  CustomerOnboardingController.referenceDetails  (src/routes/onboarding.routes.ts)  — save reference contacts`
+`PUT  /onboarding/reference-details  ->  CustomerOnboardingController.updateReferenceDetails  (src/routes/onboarding.routes.ts)  — update reference contacts`
+`GET  /onboarding/states  ->  CustomerOnboardingController.getStates  (src/routes/onboarding.routes.ts)  — get state auto-suggestions`
+`POST /onboarding/key-facts  ->  CustomerOnboardingController.keyFacts  (src/routes/onboarding.routes.ts)  — get KFS document`
+`POST /onboarding/key-facts-acceptance  ->  CustomerOnboardingController.keyFactsAcceptance  (src/routes/onboarding.routes.ts)  — accept KFS`
+`POST /onboarding/hyperverge-start  ->  CustomerOnboardingController.hypervergeStart  (src/routes/onboarding.routes.ts)  — start HyperVerge onboarding`
+`POST /onboarding/hyperverge-result  ->  CustomerOnboardingController.hypervergeResult  (src/routes/onboarding.routes.ts)  — get HyperVerge result`
+`POST /onboarding/selfie-verify  ->  CustomerOnboardingController.selfieVerify  (src/routes/onboarding.routes.ts)  — verify selfie`
+`POST /onboarding/referrar-penny-drop  ->  CustomerOnboardingController.referrarPennyDrop  (src/routes/onboarding.routes.ts)  — referrer penny drop`
+`POST /onboarding/send-kfs  ->  CustomerOnboardingController.sendKfs  (src/routes/onboarding.routes.ts)  — send KFS document`
 
-### Page Instruction (`/page-instruction`)
-`GET /page-instruction`  →  PageInstructionController (src/routes/pageInstruction.route.ts)  — Get page instruction by name
-`POST /page-instruction`  →  PageInstructionController (src/routes/pageInstruction.route.ts)  — Add page instruction
+### Page Instructions
+`GET  /page-instructions  ->  PageInstructionController.getPageInstruction  (src/routes/pageInstruction.route.ts)  — get instructions by page name`
+`POST /page-instructions  ->  PageInstructionController.addPageInstruction  (src/routes/pageInstruction.route.ts)  — add page instruction`
 
-### Payment (`/payment`)
-`POST /payment/initiate`  →  PaymentController (src/routes/payment.route.ts)  — Initiate payment (PayU/Razorpay)
-`POST /payment/verify-payu`  →  PaymentController (src/routes/payment.route.ts)  — Verify PayU payment response
-`POST /payment/verify-razorpay`  →  PaymentController (src/routes/payment.route.ts)  — Verify Razorpay payment
+### Payment
+`POST /payment/initiate  ->  PaymentController.makePayment  (src/routes/payment.route.ts)  — initiate payment (PayU/Razorpay)`
+`POST /payment/validate-payu  ->  PaymentController.validatePayuPayment  (src/routes/payment.route.ts)  — validate PayU payment response`
+`POST /payment/validate-rpay  ->  PaymentController.validateRazorpayPayment  (src/routes/payment.route.ts)  — validate Razorpay payment`
 
-### Referral (`/referral`)
-`POST /referral/create`  →  ReferralController.createAndGenerateReferrer  (src/routes/referral.route.ts)  — Create referral link
-`GET /referral/url`  →  ReferralController.getReferrarUrl  (src/routes/referral.route.ts)  — Get referral URL
-`GET /referral/invite-status`  →  ReferralController.getInviteStatus  (src/routes/referral.route.ts)  — Get invite status list
-`GET /referral/invite-status/:id`  →  ReferralController.getInviteStatusById  (src/routes/referral.route.ts)  — Get single invite status
-`POST /referral/tracking`  →  ReferralController.tracking  (src/routes/referral.route.ts)  — Track referral
+### Referral
+`POST /referral/create  ->  ReferralController.createAndGenerateReferrer  (src/routes/referral.route.ts)  — create referral and generate code`
+`GET  /referral/url  ->  ReferralController.getReferrarUrl  (src/routes/referral.route.ts)  — get referral URL`
+`GET  /referral/invite-status  ->  ReferralController.getInviteStatus  (src/routes/referral.route.ts)  — list invite statuses`
+`GET  /referral/invite-status/:id  ->  ReferralController.getInviteStatusById  (src/routes/referral.route.ts)  — get invite status by ID`
+`GET  /referral/tracking  ->  ReferralController.tracking  (src/routes/referral.route.ts)  — get referral tracking data`
 
-### Report Summary (`/report`)
-`GET /report/summary`  →  reportSummary (src/routes/reportSummary.route.ts)  — Credit score report summary
-`GET /report/score-history`  →  scoreHistory (src/routes/reportSummary.route.ts)  — Score history
+### Report Summary
+`GET  /report-summary  ->  reportSummary  (src/routes/reportSummary.route.ts)  — get report summary`
+`GET  /score-history  ->  scoreHistory  (src/routes/reportSummary.route.ts)  — get credit score history`
 
-### SMS Delivery Log (`/sms-delivery`)
-`POST /sms-delivery/textnation`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — TextNation SMS delivery webhook
-`POST /sms-delivery/msg91`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — MSG91 SMS delivery webhook
-`POST /sms-delivery/acquirit`  →  SmsDelieryLogController (src/routes/smsDelieryLog.route.ts)  — Acquirit SMS delivery webhook
+### SMS Delivery Log
+`POST /sms-delivery/textnation  ->  SmsDelieryLogController.textNationSmsVerify  (src/routes/smsDelieryLog.route.ts)  — TextNation SMS delivery webhook`
+`POST /sms-delivery/msg91  ->  SmsDelieryLogController.msg91SmsVerify  (src/routes/smsDelieryLog.route.ts)  — MSG91 SMS delivery webhook`
+`POST /sms-delivery/acquirit  ->  SmsDelieryLogController.aquiritSmsVerify  (src/routes/smsDelieryLog.route.ts)  — Acquirit SMS delivery webhook`
 
-### SOA (`/soa`)
-`POST /soa/generate`  →  SoaController (src/routes/soa.route.ts)  — Generate statement of account PDF
-`GET /soa/sanction-data`  →  SoaController (src/routes/soa.route.ts)  — Get sanction data
-`GET /soa/sanction-pdf`  →  SoaController (src/routes/soa.route.ts)  — Generate sanction PDF
+### SOA
+`POST /soa/generate  ->  SoaController.generatePdf  (src/routes/soa.route.ts)  — generate statement of account PDF`
+`POST /soa/sanction-data  ->  SoaController.sectionData  (src/routes/soa.route.ts)  — get sanction letter data`
+`POST /soa/sanction-pdf  ->  SoaController.generateSectionPdf  (src/routes/soa.route.ts)  — generate sanction letter PDF`
 
-### Step (`/step`)
-`GET /step/next`  →  StepController (src/routes/step.route.ts)  — Get user's next onboarding step
-`GET /step/referrer-next`  →  StepController (src/routes/step.route.ts)  — Get referrer next step
+### Step
+`GET  /step/next-step  ->  StepController.getUserNextStep  (src/routes/step.route.ts)  — get user's next onboarding step`
+`GET  /step/referrar-next-step  ->  StepController.getReferrarNextStep  (src/routes/step.route.ts)  — get referrer's next step`
 
-### Webhooks (`/webhooks`)
-`POST /webhooks/razorpay`  →  WebhookController (src/routes/webhooks.routes.ts)  — Razorpay payment webhook
-`POST /webhooks/emandate`  →  WebhookController (src/routes/webhooks.routes.ts)  — Razorpay emandate webhook
-`POST /webhooks/decentro`  →  WebhookController (src/routes/webhooks.routes.ts)  — Decentro reverse penny webhook
+### Webhooks
+`POST /webhooks/razorpay-repayment  ->  WebhookController.repaymentWebhook  (src/routes/webhooks.routes.ts)  — Razorpay repayment webhook`
+`POST /webhooks/razorpay-verification  ->  WebhookController.repaymentVerificationWebhook  (src/routes/webhooks.routes.ts)  — Razorpay e-mandate verification webhook`
+`POST /webhooks/lentra-repayment  ->  WebhookController.lentraRepaymentWebhook  (src/routes/webhooks.routes.ts)  — Lentra repayment webhook`
+`POST /webhooks/decentro-payment  ->  WebhookController.decTransactionStatus  (src/routes/webhooks.routes.ts)  — Decentro payment status webhook`
 
-### WhatsApp (`/whatsapp`)
-`POST /whatsapp/identify`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Identify customer via WhatsApp
-`POST /whatsapp/verify-pan`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Verify PAN via WhatsApp
-`POST /whatsapp/confirm-pan`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Confirm PAN via WhatsApp
-`POST /whatsapp/customer-type`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Check customer type
-`POST /whatsapp/bre-eligibility`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Check BRE eligibility
+### WhatsApp
+`POST /whatsapp/identify  ->  WhatsAppController.identifyCustomer  (src/routes/whatsApp.route.ts)  — identify customer via WhatsApp`
+`POST /whatsapp/verify-pan  ->  WhatsAppController.verifyPanCard  (src/routes/whatsApp.route.ts)  — verify PAN via WhatsApp`
+`POST /whatsapp/confirm-pan  ->  WhatsAppController.confirmPanCard  (src/routes/whatsApp.route.ts)  — confirm PAN via WhatsApp`
+`POST /whatsapp/handle-existing  ->  WhatsAppController.handleExistingCustomer  (src/routes/whatsApp.route.ts)  — handle existing customer WhatsApp flow`
+`POST /whatsapp/bre-eligibility  ->  WhatsAppController.checkBreEligibility  (src/routes/whatsApp.route.ts)  — check BRE eligibility via WhatsApp`
 
-### Withdrawal (`/withdrawal`)
-`POST /withdrawal/request`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Process withdrawal request
-`GET /withdrawal/eligibility`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Check withdrawal eligibility
-`GET /withdrawal/history`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get withdrawal transaction history
-`GET /withdrawal/balance`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get available balance
-`GET /withdrawal/limits`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get withdrawal limits
-`GET /withdrawal/transaction/:transactionId`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Get transaction details
-`GET /withdrawal/receipt/:transactionId`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Download PDF receipt
-`GET /withdrawal/preview-receipt`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Preview receipt template
-`POST /withdrawal/webhook`  →  WithdrawalController (src/routes/withdrawal.routes.ts)  — Handle payment gateway webhook
+### Withdrawal
+`POST /withdrawal/request  ->  WithdrawalController.processWithdrawal  (src/routes/withdrawal.routes.ts)  — process withdrawal request`
+`GET  /withdrawal/eligibility  ->  WithdrawalController.checkEligibility  (src/routes/withdrawal.routes.ts)  — check withdrawal eligibility`
+`GET  /withdrawal/history  ->  WithdrawalController.getTransactionHistory  (src/routes/withdrawal.routes.ts)  — get withdrawal transaction history`
+`GET  /withdrawal/balance  ->  WithdrawalController.getAvailableBalance  (src/routes/withdrawal.routes.ts)  — get available balance`
+`GET  /withdrawal/limits  ->  WithdrawalController.getWithdrawalLimits  (src/routes/withdrawal.routes.ts)  — get withdrawal limits`
+`GET  /withdrawal/transaction/:transactionId  ->  WithdrawalController.getTransactionDetails  (src/routes/withdrawal.routes.ts)  — get transaction details`
+`GET  /withdrawal/receipt/:transactionId  ->  WithdrawalController.generateReceipt  (src/routes/withdrawal.routes.ts)  — generate PDF receipt`
+`GET  /withdrawal/preview-receipt  ->  WithdrawalController.previewReceipt  (src/routes/withdrawal.routes.ts)  — preview receipt template (dev)`
+`POST /withdrawal/webhook  ->  WithdrawalController.handleWebhook  (src/routes/withdrawal.routes.ts)  — payment gateway webhook`
 
-### SQS Consumers (message handlers)
-`SQS queue: razorpaySqsQueueUrl`  →  startSqsConsumer  (src/consumers/razorpay.sqs.consumer.ts)  — Process Razorpay webhook messages from SQS
-`SQS queue: missingPaymentSettleQueueUrl`  →  consumerLoop  (src/consumers/missing.payment.settlement.consumer.ts)  — Settle missing normal payments
-`SQS queue: emandateMissingPaymentSettleQueueUrl`  →  consumerLoop  (src/consumers/emandate.missing.payment.consumer.ts)  — Settle missing emandate payments
+### Scheduled Jobs (CronJobService)
+`CRON autoDisbursalCoverage  ->  CronJobService.autoDisbursalCoverage  (src/services/cronJobs/cronJobs.service.ts)  — auto approve repeat customers`
+`CRON fetchEMIPayments  ->  CronJobService.fetchEMIPayments  (src/services/cronJobs/cronJobs.service.ts)  — run EMI auto-payment (e-mandate)`
+`CRON checkUtm  ->  CronJobService.checkUtm  (src/services/cronJobs/cronJobs.service.ts)  — update UTM sources on leads`
+`CRON managePaymentCron  ->  CronJobService.managePaymentCron  (src/services/cronJobs/cronJobs.service.ts)  — settle pending payments`
+`CRON razorpayWebhookSettlement  ->  RazorPayPaymentSettlementCronService  (src/services/cronJobs/razorpayPaymentSettlementCron.ts)  — settle unprocessed Razorpay payments`
+`CRON setReferralRewardsProcessing  ->  ReferralRewardsCronService  (src/services/cronJobs/referralRewards.cron.service.ts)  — process referral rewards`
+`CRON requeuePendingDocumentsCron  ->  requeuePendingDocumentsCron  (src/services/cronJobs/documentDispatch.cron.ts)  — requeue pending document dispatches`
+`CRON customerExpiredON30Days  ->  CustomerExpiryCron.leadExpiredOn30Days  (src/services/cronJobs/customerExpiryCron.ts)  — expire 30-day-old incomplete leads`
+`CRON pushLentraToSQS  ->  CronJobService.pushLentraToSQS  (src/services/cronJobs/cronJobs.service.ts)  — push disbursed leads to Lentra STP queue`
+`CRON updateLeadStatusAfterCheckCollection  ->  CronJobService.updateLeadStatusAfterCheckCollection  (src/services/cronJobs/cronJobs.service.ts)  — update lead status after collection check (every 15 min)`
+`CRON updateLeadStatusAfterCheckCollectionEmi  ->  CronJobService.updateLeadStatusAfterCheckCollectionEmi  (src/services/cronJobs/cronJobs.service.ts)  — update EMI lead status (every 30 min)`
 
-### Cron Jobs (scheduled)
-`CronJob`  →  CronJobService.autoDisbursalCoverage  (src/services/cronJobs/cronJobs.service.ts)  — Auto-approve repeat customers
-`CronJob`  →  CronJobService.fetchEMIPayments  (src/services/cronJobs/cronJobs.service.ts)  — Auto-pay EMIs via emandate
-`CronJob`  →  CronJobService.managePaymentCron  (src/services/cronJobs/cronJobs.service.ts)  — Settle pending Razorpay payments
-`CronJob`  →  CronJobService.updateLeadStatusAfterCheckCOllection  (src/services/cronJobs/cronJobs.service.ts)  — Update lead statuses post collection
-`CronJob`  →  CronJobService.updateLeadStatusAfterCheckCOllectionEmi  (src/services/cronJobs/cronJobs.service.ts)  — Update EMI lead statuses
-`CronJob`  →  CronJobService.setReferralRewardsProcessing  (src/services/cronJobs/cronJobs.service.ts)  — Process referral rewards daily 6PM IST
-`CronJob`  →  CronJobService.checkHourlyDisbursalThreshold  (src/services/cronJobs/cronJobs.service.ts)  — Alert on disbursal anomalies
-`CronJob`  →  CronJobService.requeuePendingDocumentsCron  (src/services/cronJobs/cronJobs.service.ts)  — Requeue pending document dispatches
-`CronJob`  →  CronJobService.customerExpiredON30Days  (src/services/cronJobs/cronJobs.service.ts)  — Expire 30-day incomplete leads
-`CronJob`  →  CronJobService.checkUtm  (src/services/cronJobs/cronJobs.service.ts)  — Process UTM attribution cleanup
-`CronJob`  →  RazorPayPaymentSettlementCronService.razorpayWebhookSettlement  (src/services/cronJobs/razorpayPaymentSettlementCron.ts)  — Razorpay SQS-based payment settlement
-`CronJob`  →  EventLogsCronJobervice  (src/services/cronJobs/eventLogsCronJob.service.ts)  — Save KFS-done-non-disbursed events
+### SQS Consumers
+`SQS missingPaymentSettleQueueUrl  ->  consumerLoop  (src/consumers/missing.payment.settlement.consumer.ts)  — settle missing payments`
+`SQS emandateMissingPaymentSettleQueueUrl  ->  consumerLoop  (src/consumers/emandate.missing.payment.consumer.ts)  — settle e-mandate missing payments`
+`SQS razorpaySqsQueueUrl  ->  startSqsConsumer  (src/consumers/razorpay.sqs.consumer.ts)  — process Razorpay SQS messages`
 
 ---
 
 ## DATA_MODELS
 
-### MySQL (via Knex)
+### MySQL (Knex)
 
-`ICustomer`  (src/interfaces/customer.interface.ts / src/database/mysql/customer.ts)  — fields: customerID, name, firstName, middleName, lastName, gender, dob, mobile, email, pancard, aadharNo, password, marrital, profile, otp, kfs_otp, isVerified, employeeType, createdDate, industry, designation, working_since, salary_date, official_email, education, pan_cust_verified, dob_digit_match, is_pan_aadhar_linked, is_dob_match, status, emandate_required, email_verification_status, email_delivery_status  — table: customers
+`Customer  (src/database/mysql/customer.ts)  — fields: customerID, name, firstName, middleName, lastName, gender, dob, mobile, email, pancard, aadharNo, password, marrital, profile, otp, kfs_otp, isVerified, employeeType, createdDate, industry, designation, working_since, salary_date, official_email, education, pan_cust_verified, dob_digit_match, is_pan_aadhar_linked, is_dob_match, status  — relationships: has many Lead, has many CustomerAccount`
 
-`ILead`  (src/interfaces/lead.interface.ts / src/database/mysql/leads.ts)  — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, ip, em_id, step, kfs, productID, ipc, lenderID, isRestructure, plateform, lms_type, monthlyIncomeConsent, journey_type  — table: leads
+`Lead  (src/database/mysql/leads.ts)  — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, ip, callAssign, creditAssign, createdDate, em_id, step, kfs, bureauVersion, productID, ipc, lenderID, isRestructure, plateform, lms_type, journey_type`
 
-`IApproval`  (src/interfaces/approval.interface.ts / src/database/mysql/approval.ts)  — fields: approvalID, customerID, leadID, loanType, productType, branch, loanAmtApproved, tenure, roi, repayDate, adminFee, plateFormFee, GstOfAdminFee, alternateMobile, officialEmail, monthlyIncome, cibil, status, remark, rejectionReason, creditedBy, sanctionalloUID, employmentType, disbursalRemark  — table: approval
+`Loan  (src/database/mysql/loan.ts)  — fields: loanID, leadID, loanNo, customerID, disbursalAmount, disbursalDate, disbursalTime, disbursalRefrenceNo, accountNo, accountType, bankIfsc, bank, bankBranch, status, utr, payout_status, lentra_push_status  — relationships: belongs to Lead`
 
-`ILoan`  (src/interfaces/loan.interface.ts / src/database/mysql/loan.ts)  — fields: loanID, leadID, loanNo, customerID, disbursalAmount, disbursalDate, accountNo, accountType, bankIfsc, bank, status, utr, payout_status, lentra_push_status  — table: loan
+`Credit  (src/database/mysql/credit.ts)  — fields: creditID, customerID, leadID, productID, branch, foir, aqb, roi, tenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, status, principal, amountToBeRepayed, firstDueDate, gst, disbursalDate`
 
-`ICredit`  (src/interfaces/credit.interface.ts / src/database/mysql/credit.ts)  — fields: creditID, customerID, leadID, productID, branch, foir, aqb, roi, tenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, status, principal, amountToBeRepayed, firstDueDate, brokenPeriodIntrest, gst, created_at, disbursalDate  — table: credit
+`Emi  (src/database/mysql/emi.ts)  — fields: emiID, creditID, productID, leadID, customerID, principal, interest, panelty, amountPayable, openingBalance, closingBalance, dueDate, actualPaymentDate, delayDays, status, amountRemains, brokenPeriodIntrest, accessAmount, paymentReceived, waive_off_amount, is_deleted`
 
-`IEmi`  (src/interfaces/emi.interface.ts / src/database/mysql/emi.ts)  — fields: emiID, creditID, productID, leadID, customerID, principal, interest, panelty, amountPayable, openingBalance, closingBalance, dueDate, actualPaymentDate, delayDays, paymentID, status, amountRemains, brokenPeriodIntrest, accessAmount, paymentReceived, waive_off_amount, is_deleted  — table: emi
+`Approval  (src/database/mysql/approval.ts)  — fields: approvalID, customerID, leadID, branch, loanAmtApproved, tenure, roi, repayDate, adminFee, GstOfAdminFee, alternateMobile, officialEmail, monthlyIncome, cibil, status, creditedBy, rejectionReason, employmentType`
 
-`ICustomerAccount`  (src/interfaces/customerAccount.interface.ts / src/database/mysql/customerAccount.ts)  — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, createdDate, bank_holder_name, is_credit, isAadharVerified, lentraCustomerBankDetailsId  — table: customerAccount
+`CustomerAccount  (src/database/mysql/customerAccount.ts)  — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, bank_holder_name, isAadharVerified, isSelfieVerified, lentraCustomerBankDetailsId`
 
-`IAddress`  (src/interfaces/address.interface.ts / src/database/mysql/address.ts)  — fields: addressID, customerID, type, address, city, state, pincode, status, verifiedBy, createdDate, address2, landmark, area, region, fetchedBy  — table: address
+`Address  (src/database/mysql/address.ts)  — fields: addressID, customerID, type, address, city, state, pincode, status, verifiedBy, createdDate, address2, landmark, area, region, fetchedBy`
 
-`IEmployer`  (src/interfaces/employer.interface.ts / src/database/mysql/employer.ts)  — fields: employerID, customerID, employerName, empEmail, empDob, empSalary, empDesignation, empWorkIndustry, employment, totalExperience, currentCompany, city, state, pincode, status, office_email_id, is_verified_email  — table: employer
+`Employer  (src/database/mysql/employer.ts)  — fields: employerID, customerID, employerName, empEmail, empDob, empSalary, empDesignation, empWorkIndustry, employment, totalExperience, currentCompany, address, city, state, pincode, status`
 
-`IRazorpayMandate`  (src/interfaces/razorpay_mandate.interface.ts / src/database/mysql/razorpay_mandate.ts)  — fields: id, customerID, accountNo, accountType, bank, ifsc, leadID, inv_id, entity, receipt, status, short_url, type, uid, etype, token_id, emMaxamount, need_another_mandate, name_missmatch_reject, payment_id  — table: razorpay_mandate
+`RazorpayMandate  (src/database/mysql/razorpay_mandate.ts)  — fields: id, customerID, accountNo, accountType, bank, ifsc, leadID, inv_id, entity, receipt, invoice_number, customer_id, cust_name, cust_email, cust_contact, order_id, status, short_url, type, token_id, emMaxamount, need_another_mandate, name_missmatch_reject`
 
-`IPennyDropModel`  (src/interfaces/penny_drop.interface.ts / src/database/mysql/penny_drop.ts)  — fields: id, customerID, p_id, leadID, name, ifsc, bank_name, account_number, account_status, registered_name, credated_date, logs, penny_status, uid, penny_drop_name_match, penny_type  — table: penny_drop
+`PennyDrop  (src/database/mysql/penny_drop.ts)  — fields: id, customerID, p_id, leadID, name, ifsc, bank_name, account_number, account_status, registered_name, logs, penny_status, uid, penny_drop_name_match, penny_type`
 
-`ITransection`  (src/interfaces/transections.interface.ts / src/database/mysql/transections.ts)  — fields: id, customerID, leadID, loanNo, status, type, mode, referenceNo, orderId, deleted, gateway, amount, collectionID, emiID, transactionDate, remarks, payment_transaction_status, waiver, discount_type  — table: transactions
+`Transaction/Transection  (src/database/mysql/transections.ts)  — fields: id, customerID, leadID, loanNo, status, type, mode, referenceNo, orderId, deleted, gateway, createdAt, updatedAt, createdBy, updatedBy, amount, collectionID, emiID, transactionDate, remarks, payment_transaction_status, waiver, discount_type`
 
-`ICollection`  (src/interfaces/collection.interface.ts / src/database/mysql/collection.ts)  — fields: collectionID, customerID, leadID, loanNo, collectedAmount, collectedMode, collectedDate, referenceNo, discountAmount, settlemenAmount, status, remark, collectedBy, collectionStatus, orderID, lenderID  — table: collection
+`Collection  (src/database/mysql/collection.ts)  — fields: collectionID, customerID, leadID, loanNo, collectedAmount, penaltyAmount, collectedMode, collectedDate, referenceNo, discountAmount, settlemenAmount, status, remark, collectedBy, collectionStatus, orderID, lenderID`
 
-`IOnlinePayment`  (src/interfaces/onlinepayment.interface.ts / src/database/mysql/onlinepayment.ts)  — fields: pID, name, email, phone, service, typeProduct, toValue, message, razorpayOrderId, razorpayPaymentId, paymentStatus, status, paymentType, method, leadID, device  — table: onlinepayment
+`OnlinePayment  (src/database/mysql/onlinepayment.ts)  — fields: pID, name, email, phone, service, typeProduct, toValue, message, razorpayOrderId, razorpayPaymentId, paymentStatus, makerstamp, updatestamp, status, approved_id, paymentType, method, leadID, device`
 
-`ILeadsApiLog`  (src/interfaces/lead_api_log.interface.ts / src/database/mysql/lead_api_log.ts)  — fields: id, leadID, api_supplier, api_type, api_endpoint_url, api_headers, api_method, api_request, api_response, created_at, status, customerID, mobile_no, pancard, aadharNo, code, state, entity_id  — table: lead_api_log (leads_api_log)
+`StepTracker  (src/database/mysql/step_tracker.ts)  — fields: id, step_id, is_completed, created_at, updated_at, is_skippable, customer_id, lead_id  — relationships: belongs to StepControl`
 
-`IApiKey`  (src/interfaces/bureau.interface.ts / src/database/mysql/apiKey.ts)  — fields: id, api_key, client_id, client_name, is_active, rate_limit_per_minute, rate_limit_per_hour, rate_limit_per_day, allowed_ips, metadata, blocked_until, blocked_reason, last_used_at  — table: api_keys
+`StepControl  (src/database/mysql/step-control.ts)  — fields: id, product_id, provider_id, step_name, step_display_name, step_order, next_route, is_active, current_route, dashboard_message1-4, should_recheck, referrer_step_order, required_steps`
 
-`IRateLimit`  (src/interfaces/bureau.interface.ts / src/database/mysql/rateLimit.ts)  — fields: id, api_key, client_id, requests_count, window_start, window_type  — table: rate_limits
+`LeadApiLog  (src/database/mysql/lead_api_log.ts)  — fields: id, leadID, api_supplier, api_type, api_endpoint_url, api_headers, api_method, api_request, api_response, created_at, status, customerID, mobile_no, pancard, aadharNo`
 
-`IBureauApiLog`  (src/interfaces/bureau.interface.ts / src/database/mysql/bureauApiLog.ts)  — fields: id, request_id, api_key, client_id, user_id, reference_id, endpoint, method, request_data, response_data, http_status_code, processing_status, processing_time_ms, error_code, error_message, client_ip  — table: bureau_api_logs
+`Lender  (src/database/mysql/lender.ts)  — fields: lenderID, name, sanction_letter, kfs_letter, agreement_letter, gst_no, pan_no, credentials, lender_info, status`
 
-`ILentraCustomerMapping`  (src/interfaces/lentra.interface.ts / src/database/mysql/lentra_customer_mappings.ts)  — fields: id, customerID, leadID, lms_id, los_id, loan_no, entity_id, bank_details_id, isNachNeeded, nachMandateId, nachStatus, stpStatus, mandateCanceled, workflow_id, reference_id, stp_retries, nach_retries  — table: lentra_customer_mappings
+`LentraCustomerMapping  (src/database/mysql/lentra_customer_mappings.ts)  — fields: id, customerID, leadID, lms_id, los_id, loan_no, entity_id, bank_details_id, isNachNeeded, nachMandateId, nachStatus, stpStatus, mandateCanceled, workflow_id, reference_id, stp_retries, nach_retries`
 
-`IUserMetadata`  (src/interfaces/user_metadata.interface.ts / src/database/mysql/user_metadata.ts)  — fields: id, customerID, mobile, panVerify, aadharVerify, aadhar_mask, metaJSON, profile_image  — table: user_metadata
+`Referrer  (src/database/mysql/referrer.ts)  — fields: id, referrer, mobile, created_at, updated_at`
 
-`IPageInstructions`  (src/interfaces/pageInstructions.interface.ts / src/database/mysql/pageInstructions.ts)  — fields: id, page_name, instruction, created_at, updated_at  — table: pageInstructions
+`Reference  (src/database/mysql/reference.ts)  — fields: referenceID, customerID, relation, name, address, city, state, pincode, contactNo, createdBy, createdDate, reference_verify, is_verified`
 
-`IStepTrackerModel`  (src/interfaces/step-tracker.ts / src/database/mysql/step_tracker.ts)  — fields: id, step_id, is_completed, is_skippable, customer_id, lead_id, created_at, updated_at  — table: step_tracker
+`UserMetadata  (src/database/mysql/user_metadata.ts)  — fields: id, customerID, mobile, panVerify, aadharVerify, aadhar_mask, metaJSON, profile_image, created_at, updated_at`
 
-`IStepControlModel`  (src/interfaces/step-control.interface.ts / src/database/mysql/step-control.ts)  — fields: id, product_id, provider_id, step_name, step_order, next_route, is_active, dashboard_message1-4, should_recheck, referrer_step_order, required_steps  — table: step_control
+`ApiKey  (src/database/mysql/apiKey.ts)  — fields: id, api_key, client_id, client_name, is_active, rate_limit_per_minute, rate_limit_per_hour, rate_limit_per_day, allowed_ips, metadata, blocked_until, blocked_reason, last_used_at`
 
-`IRepayDateHolidayModel`  (src/interfaces/repayDateHoliday.interface.ts / src/database/mysql/repayDateHoliday.ts)  — fields: id, repaydate  — table: repayDateHoliday
+`RateLimit  (src/database/mysql/rateLimit.ts)  — fields: id, api_key, client_id, requests_count, window_start, window_type`
 
-`IRestructureLoan`  (src/interfaces/loanRestructure.interface.ts / src/database/mysql/restructure_loan.ts)  — fields: id, parentLeadId, childLeadId, reason, status, loan_type  — table: restructure_loan
+`BureauApiLog  (src/database/mysql/bureauApiLog.ts)  — fields: id, request_id, api_key, client_id, user_id, reference_id, endpoint, method, request_data, response_data, http_status_code, processing_status, processing_time_ms, error_code, error_message, client_ip`
 
-`IPayuPaymentsSettledByCron`  (src/interfaces/payuPaymentsSettledByCron.interface.ts / src/database/mysql/payuPaymentsSettledByCron.ts)  — fields: id, transaction_id, status, leadID, createdAt  — table: payu_payments_settled_by_cron
+`PayuPaymentsSettledByCron  (src/database/mysql/payuPaymentsSettledByCron.ts)  — fields: id, transaction_id, status, leadID, createdAt`
 
-`ISMSLogModel`  (src/interfaces/smsLog.interface.ts / src/database/mysql/smsLog.ts)  — fields: id, message, leadId, customerId, status, type  — table: sms_log
+`ShortUrl  (src/database/mysql/shortUrl.ts)  — fields: id, code, long_url, lead_id, opened, opened_at, expires_at`
 
-`IShortUrlModel`  (src/interfaces/shortUrl.interface.ts / src/database/mysql/shortUrl.ts)  — fields: id, code, long_url, lead_id, opened, opened_at, expires_at  — table: shortUrl (short_url)
+`SMSLog  (src/database/mysql/smsLog.ts)  — fields: id, message, leadId, customerId, status, type, created_at, updated_at`
 
-`IEmiProcessingFailureLog`  (src/interfaces/emiProcessingFailureLogs.interface.ts / src/database/mysql/emiProcessingFailureLogs.ts)  — fields: id, order_id, failure_type, error_message, status, created_at  — table: emi_processing_failure_logs
+`RestructureLoan  (src/database/mysql/restructure_loan.ts)  — fields: id, parentLeadId, childLeadId, reason, status, loan_type, createdAt, updatedAt`
 
-`ICustomerKfsLocation`  (src/interfaces/customer_kfs_location.interface.ts / src/database/mysql/customer_kfs_location.ts)  — fields: id, customerID, leadID, latitude, longitude, city, location_source, location_captured_at  — table: customer_kfs_location
+`EmiProcessingFailureLog  (src/database/mysql/emiProcessingFailureLogs.ts)  — fields: id, order_id, failure_type, error_message, status, created_at`
 
-### MongoDB (via Mongoose)
+### MongoDB (Mongoose)
 
-`User`  (src/database/mongo/model/User.ts)  — fields: name, email, password  — collection: users
+`EventLogs  (src/database/mongo/model/EventLogs.ts)  — fields: mobile, customerId, leadId, utmSource, userType, requestedFrom, eventName, eventDate, status, ip, createdAt`
 
-`CustomerAssetData`  (src/database/mongo/model/CustomerAssetData.ts)  — fields: userId, leadId, shakey, customerAsset  — collection: customerassetdatas
+`KaleyraLogs  (src/database/mongo/model/KaleyraLogs.ts)  — fields: mobile, req_url, api_request, api_response, curl_error, type, created_at`
 
-`IDocumentDispatch`  (src/database/mongo/model/documentDispatch.model.ts / src/interfaces/documentDispatch.interface.ts)  — fields: leadId, customerId, documents (agreement/disbursal/kfs with sent/sentAt/error), retryCount, lastError, createdAt, updatedAt  — collection: documentdispatches
+`LentraApiLogs  (src/database/mongo/model/LentraLogs.ts)  — fields: apiRequest, apiResponse, apiType, customerID, leadID, createdAt, updatedAt`
 
-`IEmiAutoPaymentCronLog`  (src/database/mongo/model/EmiAutoPaymentCronLog.ts)  — fields: emiIDs, individualRecord (emiID, razorpay_mendate_id, status, errorMessage, step), createdAt, updatedAt  — collection: emiautopaymentcronlogs
+`RazorpayWebhookLogs  (src/database/mongo/model/RazorpayWeebhookLogs.ts)  — fields: id, subscriptionId, response, createdAt, updatedAt`
 
-`IEventLogs`  (src/database/mongo/model/EventLogs.ts)  — fields: mobile, customerId, leadId, utmSource, userType, requestedFrom, eventName, eventDate, status, ip, createdAt  — collection: eventlogs
+`EmiAutoPaymentCronLog  (src/database/mongo/model/EmiAutoPaymentCronLog.ts)  — fields: emiIDs, individualRecord (emiID, razorpay_mendate_id, status, errorMessage, step), createdAt, updatedAt`
 
-`IKalyeraLog`  (src/database/mongo/model/KaleyraLogs.ts)  — fields: mobile, req_url, api_request, api_response, curl_error, type, created_at  — collection: kaleyralogs
+`CustomerAssetData  (src/database/mongo/model/CustomerAssetData.ts)  — fields: userId, leadId, shakey, customerAsset`
 
-`ILentraApiLogs`  (src/database/mongo/model/LentraLogs.ts)  — fields: apiRequest, apiResponse, apiType, customerID, leadID, createdAt, updatedAt  — collection: lentraapilogs
+`DocumentDispatch  (src/database/mongo/model/documentDispatch.model.ts)  — fields: leadId, customerId, documents (agreement, disbursal, kfs each with sent/sentAt/error), retryCount, lastError, createdAt, updatedAt`
 
-`IRazorpayWebhookLogs`  (src/database/mongo/model/RazorpayWeebhookLogs.ts)  — fields: id, subscriptionId, response, createdAt, updatedAt  — collection: razorpaywebhooklogs
+`TrakierInstallInfo  (src/database/mongo/model/TrakierInstallInfo.ts)  — fields: partner, evid, eval, ets, crtd, cuid, cname, cphone, cmail, inside`
 
-`ITrakierInstallInfo`  (src/database/mongo/model/TrakierInstallInfo.ts)  — fields: partner, evid, eval, ets, crtd, cuid, cname, cphone, cmail, inside  — collection: trakierinstallinfos
+`User (Mongo)  (src/database/mongo/model/User.ts)  — fields: name, email, password`
 
-### Prisma / MySQL (minimal)
+### Prisma (MySQL)
 
-`User`  (src/database/prisma/schema.prisma)  — fields: id (Int PK), email (String unique), password (String)  — table: User
+`User  (src/database/prisma/schema.prisma)  — fields: id (Int, PK), email (String, unique), password (String)`

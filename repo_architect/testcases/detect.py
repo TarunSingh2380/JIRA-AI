@@ -1,16 +1,15 @@
 """Repo auto-detection for JIRA tickets.
 
-Strategy (cheap → expensive):
+Strategy:
 
 1. Keyword match: tokenize the ticket text, score each repo by how many of
    its name/description tokens appear in the ticket. This catches obvious
    cases ("Fix order sync for Newme brand" -> order-sync-workers) without
    any LLM call.
 
-2. If keyword scoring is ambiguous (top 2 repos within a small margin) or
-   produces no clear winner, fall back to an LLM call that ranks all repos
-   given just their one-line descriptions and section headers from each
-   architecture map. This is much cheaper than including full maps.
+2. Ask the LLM to rank repos using one-line descriptions, architecture
+   previews, and Repomix directory previews. Keyword matches are retained as a
+   deterministic fallback if the LLM returns no valid repo.
 
 The selected repo(s) are then used to ground the test-generation prompt.
 """
@@ -132,7 +131,7 @@ def keyword_match_repos(
 
 _LLM_RANK_SYSTEM = """You are routing a JIRA ticket to the most relevant repository.
 You will see a ticket and a list of repos with one-line descriptions and the
-first 5 lines of their architecture map.
+first lines of their architecture map plus Repomix directory previews when available.
 
 Output ONLY the repo names you think are most likely to need code changes for
 this ticket, one per line, most-relevant first. Maximum 2 repos. If no repo
@@ -145,8 +144,10 @@ def llm_rank_repos(
     ticket_text: str, repos: List[RepoConfig], per_repo_dir: Path, llm: LLMClient,
 ) -> List[str]:
     """Ask the LLM to rank repos by relevance to the ticket. Cheap: only sends
-    one-line descriptions + section headers, not the full architecture maps."""
+    one-line descriptions + section headers + Repomix directory previews, not
+    the full architecture maps or packed files."""
     summaries = []
+    packed_dir = per_repo_dir.parent / "packed"
     for repo in repos:
         md_file = per_repo_dir / f"{repo.name}.md"
         head = ""
@@ -159,10 +160,12 @@ def llm_rank_repos(
                     head = "\n".join(lines[arch_start + 1: arch_start + 6])
             except Exception:
                 pass
+        repomix_preview = _repomix_directory_preview(packed_dir / f"{repo.name}.xml")
 
         summaries.append(
             f"- {repo.name}: {repo.description or '(no description)'}\n"
             f"  arch preview:\n  {head[:300] if head else '(no map)'}"
+            f"\n  repomix directory preview:\n  {repomix_preview[:700] if repomix_preview else '(no packed preview)'}"
         )
 
     user_prompt = (
@@ -182,6 +185,20 @@ def llm_rank_repos(
     return [line.strip() for line in out.splitlines() if line.strip() in valid_names]
 
 
+def _repomix_directory_preview(packed_file: Path) -> str:
+    if not packed_file.exists():
+        return ""
+    try:
+        text = packed_file.read_text(errors="ignore")
+    except OSError:
+        return ""
+    match = re.search(r"<directory_structure>\s*(.*?)\s*</directory_structure>", text, re.S)
+    if not match:
+        return ""
+    lines = [line.rstrip() for line in match.group(1).strip().splitlines() if line.strip()]
+    return "\n  ".join(lines[:40])
+
+
 # ============================================================
 # Public entry point
 # ============================================================
@@ -194,8 +211,8 @@ def detect_relevant_repos(
 ) -> List[str]:
     """Return up to `max_repos` repo names most likely relevant to the ticket.
 
-    Uses keyword matching first; falls back to LLM ranking only when the
-    keyword signal is weak or ambiguous.
+    Uses keyword matching as a deterministic fallback, but lets the LLM make
+    the routing decision from repository summaries and Repomix previews.
     """
     keyword_matches = keyword_match_repos(ticket_text, cfg.repos, cfg.per_repo_dir)
     log.info(
@@ -203,19 +220,13 @@ def detect_relevant_repos(
         [(m.repo_name, m.score) for m in keyword_matches[:5]] or "none",
     )
 
-    if not keyword_matches:
-        log.info("no keyword matches — falling back to LLM ranking")
-        return llm_rank_repos(ticket_text, cfg.repos, cfg.per_repo_dir, llm)[:max_repos]
+    ranked = llm_rank_repos(ticket_text, cfg.repos, cfg.per_repo_dir, llm)
+    if ranked:
+        log.info("LLM-ranked relevant repos: %s", ranked[:max_repos])
+        return ranked[:max_repos]
 
-    top = keyword_matches[0]
-    runner_up = keyword_matches[1] if len(keyword_matches) > 1 else None
-
-    # Confident winner: top scores well above the runner-up
-    if runner_up is None or top.score >= runner_up.score * 1.5:
+    if keyword_matches:
+        log.info("LLM returned no valid repo — falling back to keyword matches")
         return [m.repo_name for m in keyword_matches[:max_repos]]
 
-    # Ambiguous: let the LLM break the tie
-    log.info("keyword scores ambiguous (%s vs %s) — using LLM ranking",
-             top.score, runner_up.score)
-    ranked = llm_rank_repos(ticket_text, cfg.repos, cfg.per_repo_dir, llm)
-    return ranked[:max_repos] if ranked else [m.repo_name for m in keyword_matches[:max_repos]]
+    return []

@@ -557,17 +557,17 @@ No ORM or database models exist in this frontend repository. All persistent stat
 
 `ICustomer`  (src/interfaces/customer.interface.ts / src/database/mysql/customer.ts)  — fields: customerID, name, firstName, middleName, lastName, gender, dob, mobile, email, pancard, aadharNo, password, marrital, profile, otp, kfs_otp, isVerified, employeeType, createdDate, industry, designation, working_since, salary_date, official_email, education, pan_cust_verified, dob_digit_match, is_pan_aadhar_linked, is_dob_match, status, emandate_required, email_verification_status, email_delivery_status  — table: customers
 
-`ILead`  (src/interfaces/lead.interface.ts / src/database/mysql/leads.ts)  — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, ip, em_id, step, kfs, productID, ipc, lenderID, isRestructure, plateform, lms_type, monthlyIncomeConsent, journey_type  — table: leads
+`ILead`  (src/interfaces/lead.interface.ts / src/database/mysql/leads.ts)  — fields: leadID, customerID, userID, purpose, loanRequeried, tenure, monthlyIncome, salaryMode, city, state, pincode, status, utmSource, fbLeads, domainName, ip, em_id, step, kfs, productID, ipc, lenderID, isRestructure, plateform, lms_type, monthlyIncomeConsent, journey_type, isLmsFlowDecided  — table: leads
 
 `IApproval`  (src/interfaces/approval.interface.ts / src/database/mysql/approval.ts)  — fields: approvalID, customerID, leadID, loanType, productType, branch, loanAmtApproved, tenure, roi, repayDate, adminFee, plateFormFee, GstOfAdminFee, alternateMobile, officialEmail, monthlyIncome, cibil, status, remark, rejectionReason, creditedBy, sanctionalloUID, employmentType, disbursalRemark  — table: approval
 
 `ILoan`  (src/interfaces/loan.interface.ts / src/database/mysql/loan.ts)  — fields: loanID, leadID, loanNo, customerID, disbursalAmount, disbursalDate, accountNo, accountType, bankIfsc, bank, status, utr, payout_status, lentra_push_status  — table: loan
 
-`ICredit`  (src/interfaces/credit.interface.ts / src/database/mysql/credit.ts)  — fields: creditID, customerID, leadID, productID, branch, foir, aqb, roi, tenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, status, principal, amountToBeRepayed, firstDueDate, brokenPeriodIntrest, gst, created_at, disbursalDate  — table: credit
+`ICredit`  (src/interfaces/credit.interface.ts / src/database/mysql/credit.ts)  — fields: creditID (optional), customerID, leadID, productID, branch, foir, aqb, roi, tenure, interest, repaymentAmount, totalEMIs, emiLeft, processingFee, paidAmount, status, principal, amountToBeRepayed, firstDueDate, brokenPeriodIntrest, gst, created_at, disbursalDate  — table: credit
 
 `IEmi`  (src/interfaces/emi.interface.ts / src/database/mysql/emi.ts)  — fields: emiID, creditID, productID, leadID, customerID, principal, interest, panelty, amountPayable, openingBalance, closingBalance, dueDate, actualPaymentDate, delayDays, paymentID, status, amountRemains, brokenPeriodIntrest, accessAmount, paymentReceived, waive_off_amount, is_deleted  — table: emi
 
-`ICustomerAccount`  (src/interfaces/customerAccount.interface.ts / src/database/mysql/customerAccount.ts)  — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, createdDate, bank_holder_name, is_credit, isAadharVerified, lentraCustomerBankDetailsId  — table: customerAccount
+`ICustomerAccount`  (src/interfaces/customerAccount.interface.ts / src/database/mysql/customerAccount.ts)  — fields: accountID, leadID, customerID, accountNo, accountType, bankIfsc, bank, bankBranch, ip, credatedBy, status, createdDate, bank_holder_name, is_credit, isAadharVerified, lentraCustomerBankDetailsId, isSelfieVerified  — table: customerAccount
 
 `IAddress`  (src/interfaces/address.interface.ts / src/database/mysql/address.ts)  — fields: addressID, customerID, type, address, city, state, pincode, status, verifiedBy, createdDate, address2, landmark, area, region, fetchedBy  — table: address
 

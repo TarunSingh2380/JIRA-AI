@@ -1,8 +1,8 @@
 {
   "ramfincorp-backend": {
     "name": "ramfincorp-backend",
-    "last_sha": "68fe526ce4b19dbb6f99083315fea15d1d4d89ee",
-    "last_scanned_at": "2026-05-25T09:13:48.295103Z",
+    "last_sha": "750db1665974f953c1d9c1cbff6085d881ecd2a5",
+    "last_scanned_at": "2026-06-01T08:19:51.231257Z",
     "last_status": "ok",
     "last_error": null
   },
@@ -33,5 +33,103 @@
     "last_scanned_at": "2026-05-25T07:33:54.320265Z",
     "last_status": "failed",
     "last_error": "aws-configs packed to ~2080959 tokens, which exceeds the hard ceiling of 500000. This repo is too large to send in one call. Options: (1) add aggressive ignores to packer.py for this repo's noise, (2) enable use_skeleton if not already on, (3) split the repo or scan it directory-by-directory."
+  },
+  "node_crm": {
+    "name": "node_crm",
+    "last_sha": "396505ccf970cf91c2b320523e8d4965d686351d",
+    "last_scanned_at": "2026-06-01T08:24:14.013659Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "onboarding_service": {
+    "name": "onboarding_service",
+    "last_sha": null,
+    "last_scanned_at": "2026-06-01T08:25:35.656926Z",
+    "last_status": "failed",
+    "last_error": "{'type': 'error', 'error': {'details': None, 'type': 'api_error', 'message': 'Internal server error'}, 'request_id': 'req_011CbcDejCZj5aQLqLjvKqDs'}"
+  },
+  "onboarding_service_frontend": {
+    "name": "onboarding_service_frontend",
+    "last_sha": "62ebe69e9ac3cceb21661610a0d15dbe76b82913",
+    "last_scanned_at": "2026-06-01T08:26:20.919625Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "AWS": {
+    "name": "AWS",
+    "last_sha": null,
+    "last_scanned_at": "2026-06-01T08:26:24.642197Z",
+    "last_status": "failed",
+    "last_error": "AWS packed to ~1685112 tokens, which exceeds the hard ceiling of 500000. This repo is too large to send in one call. Options: (1) add aggressive ignores to packer.py for this repo's noise, (2) enable use_skeleton if not already on, (3) split the repo or scan it directory-by-directory."
+  },
+  "crm-react": {
+    "name": "crm-react",
+    "last_sha": "0d777b4162151a727a51dbbd2d10366d2cdc5706",
+    "last_scanned_at": "2026-06-01T08:27:48.712865Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "devOpsStack": {
+    "name": "devOpsStack",
+    "last_sha": "c21790731e883edb2e98515d4feabf8316f47312",
+    "last_scanned_at": "2026-06-01T08:28:42.029543Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "stored-procedure-RamFin": {
+    "name": "stored-procedure-RamFin",
+    "last_sha": "5165b1e87c992737dbfbd26eaa7a673f3d47aa67",
+    "last_scanned_at": "2026-06-01T08:29:44.041453Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "crm-kamakshimoney-frontend": {
+    "name": "crm-kamakshimoney-frontend",
+    "last_sha": "9eafc69c5a0e9169281c49a109e76f0d4b483bb1",
+    "last_scanned_at": "2026-06-01T08:31:01.185582Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "ramfincorp-notification": {
+    "name": "ramfincorp-notification",
+    "last_sha": "b59b1274385cf2957d0b19e0506614e67920c9f6",
+    "last_scanned_at": "2026-06-01T08:31:55.675293Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "ramfin_userservice": {
+    "name": "ramfin_userservice",
+    "last_sha": "b25bff63986eb54360c12577589500ee175043f4",
+    "last_scanned_at": "2026-06-01T08:33:26.460751Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "ramfin-report": {
+    "name": "ramfin-report",
+    "last_sha": "3c57a0f43f90547a52654464f22b81bea80b2f3a",
+    "last_scanned_at": "2026-06-01T08:34:46.558571Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "Kamakshimoney-onboarding": {
+    "name": "Kamakshimoney-onboarding",
+    "last_sha": "6661c6313bd433655a56cfb34eacfb1643e19b24",
+    "last_scanned_at": "2026-06-01T08:35:30.914253Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "DSA-Backend": {
+    "name": "DSA-Backend",
+    "last_sha": "6739ceee73895129ac36df3426e1993f123b2c13",
+    "last_scanned_at": "2026-06-01T08:36:28.436500Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "kanakloans-webview": {
+    "name": "kanakloans-webview",
+    "last_sha": "0310b75ec762e717c4397d7d53b2f544a82463d4",
+    "last_scanned_at": "2026-06-01T08:37:12.530281Z",
+    "last_status": "ok",
+    "last_error": null
   }
 }

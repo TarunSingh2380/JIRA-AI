@@ -39,6 +39,15 @@ def _is_retryable(exc: BaseException) -> bool:
         status = getattr(exc, "status_code", None)
         if status is not None and 500 <= status < 600:
             return True
+        body = getattr(exc, "body", None)
+        if isinstance(body, dict):
+            error = body.get("error") if isinstance(body.get("error"), dict) else {}
+            error_type = str(error.get("type") or body.get("type") or "").lower()
+            message = str(error.get("message") or body.get("message") or "").lower()
+            if error_type in {"api_error", "overloaded_error"}:
+                return True
+            if "internal server error" in message or "overloaded" in message:
+                return True
     return False
 
 

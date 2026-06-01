@@ -448,5 +448,86 @@
     },
     "error": null,
     "progress": null
+  },
+  "cb56113f-923a-4bd9-a0fb-b98834393757": {
+    "id": "cb56113f-923a-4bd9-a0fb-b98834393757",
+    "kind": "repomix_reindex",
+    "status": "succeeded",
+    "created_at": "2026-05-29T21:14:19.671048Z",
+    "started_at": "2026-05-29T21:14:19.673777Z",
+    "finished_at": "2026-05-29T21:14:19.683428Z",
+    "result": {
+      "selected": [
+        "ramfincorp-backend"
+      ],
+      "packed": [],
+      "skipped": [
+        "ramfincorp-backend"
+      ],
+      "failed": [],
+      "details": [
+        {
+          "repo": "ramfincorp-backend",
+          "status": "skipped",
+          "sha": "750db1665974f953c1d9c1cbff6085d881ecd2a5",
+          "git_pull_status": "failed: Command '['git', 'fetch', '--all', '--prune']' returned non-zero exit status 128.",
+          "output_file": "/app/repo_tree/workspace/packed/ramfincorp-backend.xml",
+          "reason": "already packed for current HEAD"
+        }
+      ]
+    },
+    "error": null,
+    "progress": null
+  },
+  "76128beb-5e5a-4d5c-b5b3-23a494ebc36d": {
+    "id": "76128beb-5e5a-4d5c-b5b3-23a494ebc36d",
+    "kind": "nightly_sync",
+    "status": "succeeded",
+    "created_at": "2026-05-29T21:14:21.080849Z",
+    "started_at": "2026-05-29T21:14:21.082545Z",
+    "finished_at": "2026-05-29T21:17:23.467053Z",
+    "result": {
+      "full_scanned": [],
+      "patched": [
+        "ramfincorp-backend"
+      ],
+      "skipped": [],
+      "failed": []
+    },
+    "error": null,
+    "progress": null
+  },
+  "23eef4dd-0047-4bd9-9b62-595069306c86": {
+    "id": "23eef4dd-0047-4bd9-9b62-595069306c86",
+    "kind": "initial_scan",
+    "status": "succeeded",
+    "created_at": "2026-06-01T08:16:47.916617Z",
+    "started_at": "2026-06-01T08:16:47.918053Z",
+    "finished_at": "2026-06-01T08:37:12.539693Z",
+    "result": {
+      "total_repos": 15,
+      "succeeded": [
+        "ramfincorp-backend",
+        "node_crm",
+        "onboarding_service_frontend",
+        "crm-react",
+        "devOpsStack",
+        "stored-procedure-RamFin",
+        "crm-kamakshimoney-frontend",
+        "ramfincorp-notification",
+        "ramfin_userservice",
+        "ramfin-report",
+        "Kamakshimoney-onboarding",
+        "DSA-Backend",
+        "kanakloans-webview"
+      ],
+      "failed": [
+        "onboarding_service",
+        "AWS"
+      ],
+      "output_dir": "/app/repo_tree/workspace/output"
+    },
+    "error": null,
+    "progress": null
   }
 }

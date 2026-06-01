@@ -56,7 +56,7 @@ EXTRA_IGNORES = [
     "**/cdk.out/**", "**/.serverless/**",
 
     # ---- Generic vendored / third-party ----
-    "**/third_party/**", "**/third-party/**",
+    "**/third_party/**", "**/third-party/**", "**/thirdparty/**",
 
     # ---- Assets, statics, anything served as-is ----
     "**/assets/**", "**/static/**", "**/public/**",
@@ -71,11 +71,12 @@ EXTRA_IGNORES = [
     # ---- Binary / data blobs ----
     "**/*.csv", "**/*.parquet", "**/*.pkl", "**/*.h5", "**/*.onnx",
     "**/*.bin", "**/*.tar", "**/*.gz", "**/*.zip", "**/*.7z",
+    "**/*.apk", "**/*.map",
     "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif", "**/*.svg",
     "**/*.pdf", "**/*.ico", "**/*.woff", "**/*.woff2", "**/*.ttf", "**/*.eot",
     "**/*.mp3", "**/*.mp4", "**/*.mov", "**/*.avi",
     # Big text dumps that aren't code
-    "**/sitemap.xml", "**/sitemap-*.xml",
+    "**/error_log", "**/sitemap.xml", "**/sitemap-*.xml",
 ]
 
 
@@ -83,6 +84,7 @@ def pack_repo(
     repo_path: Path,
     output_file: Path,
     use_skeleton: bool = True,
+    extra_ignores: list[str] | None = None,
 ) -> Path:
     """Pack a single repo into `output_file`. Returns the output path.
 
@@ -94,13 +96,15 @@ def pack_repo(
     _ensure_repomix()
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
+    ignore_patterns = EXTRA_IGNORES + [p for p in (extra_ignores or []) if p]
+
     cmd = [
         "repomix",
         str(repo_path),
         "--style", "xml",                # Claude handles XML cleanly
         "--output", str(output_file),
         "--no-file-summary",             # skip the per-file token count summary
-        "--ignore", ",".join(EXTRA_IGNORES),
+        "--ignore", ",".join(ignore_patterns),
     ]
     if use_skeleton:
         cmd.append("--compress")

@@ -1,0 +1,2193 @@
+<directory_structure>
+.github/
+  workflows/
+    deploy-master.yml
+    deploy-preprod.yml
+src/
+  components/
+    forms/
+      ActionButton.jsx
+      ErrorMessage.jsx
+      Label.jsx
+      SubmitButton.jsx
+    shared/
+      Header.jsx
+      Layout.jsx
+      Loader.jsx
+      PageTtile.jsx
+      ProcessLoader.jsx
+      ProgressStepper.jsx
+      SafeAndSecure.jsx
+    AadhaarOTPVerify.jsx
+    BankAccounts.jsx
+    CompleteEmandate.jsx
+    EmandateAuth.jsx
+    EMILoanDetails.jsx
+    EnterAadhaar.jsx
+    GoogleSignIn.jsx
+    InactivityLogout.jsx
+    Logo.jsx
+    MandateStatusModal.jsx
+    Month12LoanRejectModal.jsx
+    OfferBanner.jsx
+    PANConfirmation.jsx
+    SpecialOfferTimer.jsx
+    UserConsent.jsx
+    VerifyOTP.jsx
+  events/
+    clevertapEvents.js
+  hooks/
+    useBackButtonLogout.jsx
+    usePageTracking.jsx
+    useStepper.jsx
+    useToast.jsx
+  lib/
+    clevertap.js
+    razorpay.js
+  pages/
+    AadhaarVerification.jsx
+    AddBankAccount.jsx
+    AutoLogin.jsx
+    CameraPermission.jsx
+    ConfirmBankAccount.jsx
+    DigilockerVerify.jsx
+    Disbursed.jsx
+    Emandate.jsx
+    EmploymentDetails.jsx
+    Finbox.jsx
+    FinboxError.jsx
+    FinboxStatus.jsx
+    KFS.jsx
+    LoanApproval.jsx
+    LoanRejected.jsx
+    Login.jsx
+    Logout.jsx
+    NotFound.jsx
+    PANVerify.jsx
+    PennyDrop.jsx
+    ProcessToBank.jsx
+    SelectTenure.jsx
+    Selfie.jsx
+    SelfieHyperVerge.jsx
+    SelfieHyperVergeResult.jsx
+    Stepper.jsx
+    YourEmail.jsx
+  redux/
+    slices/
+      appSlice.js
+      userSlice.js
+    store.js
+  routes/
+    AppRoutes.jsx
+    ProtectedRoutes.jsx
+  services/
+    dashboardService.js
+    userService.js
+  styles/
+    global.css
+  utils/
+    apiClient.js
+    encryption.js
+    env.js
+    helper.js
+    lazyWithRetry.js
+    storage.js
+    validation.js
+  App.jsx
+  index.css
+  main.jsx
+.cgcignore
+.gitignore
+eslint.config.js
+index.html
+package.json
+README.md
+tailwind.config.js
+vite.config.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".github/workflows/deploy-master.yml">
+name: Deploy to master
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, self-hosted-kamakshimoney]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy latest code
+        run: |
+          echo ">>> Switching to project directory"
+          cd /home/ubuntu/api_code/Kamakshimoney-onboarding
+
+          echo ">>> Load NVM and use Node 20"
+          export NVM_DIR="/home/ubuntu/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+          nvm use 20.20.0
+
+          echo ">>> Node version"
+          node -v
+          npm -v
+          which node
+
+          echo ">>> Fetching latest code from master branch"
+          git fetch origin
+          git reset --hard origin/master
+
+          echo ">>> Install dependency"
+          npm install --legacy-peer-deps
+
+          echo ">>> Build project"
+          CI=false npm run build
+
+          echo ">>> Remove old files from S3"
+          aws s3 rm s3://loan.kamakshimoney.com --recursive
+
+          echo ">>> Upload new build to S3"
+          aws s3 cp dist/ s3://loan.kamakshimoney.com/ --recursive
+
+          echo ">>> CloudFront cache invalidation"
+          aws cloudfront create-invalidation \
+            --distribution-id EHN3KH6MXJSMZ \
+            --paths "/*"
+
+          echo ">>> Showing last 10 commits"
+          git log -10 --oneline
+
+          echo ">>> Deployment completed successfully!"
+</file>
+
+<file path=".github/workflows/deploy-preprod.yml">
+name: Deploy to kamakshimoney-onboarding-preprod
+
+on:
+  push:
+    branches:
+      - preprod
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, self-hosted-kamakshimoney]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+
+      - name: Run remote script
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@13.232.129.191 << 'EOF'
+            #!/bin/bash
+            set -e  # Exit immediately if a command exits with a non-zero status
+            set -x  # Print commands and their arguments as they are executed
+           
+            echo "Starting deployment to pre-prod environment"
+
+            echo "Navigating to Kamakshimoney-onboarding directory"
+            cd /var/www/preprod/Kamakshimoney-onboarding
+            echo "Pulling latest changes from preprod branch"
+            git reset --hard origin/preprod
+            git pull origin preprod
+            echo "Installing npm dependencies"
+            npm install
+            npm run build
+            
+            echo "Deployment to kamakshi-pre-prod completed successfully"
+          EOF
+</file>
+
+<file path="src/components/forms/ActionButton.jsx">
+export default function ActionButton(
+</file>
+
+<file path="src/components/forms/ErrorMessage.jsx">
+export default function ErrorMessage(
+</file>
+
+<file path="src/components/forms/Label.jsx">
+export default function Label(
+</file>
+
+<file path="src/components/forms/SubmitButton.jsx">
+export default function SubmitButton(
+</file>
+
+<file path="src/components/shared/Header.jsx">
+export default function Header(
+⋮----
+{/* Back Icon */}
+⋮----
+{/* Title */}
+⋮----
+{/* Help Icon */}
+⋮----
+{/* Skip */}
+</file>
+
+<file path="src/components/shared/Layout.jsx">
+export default function Layout(
+</file>
+
+<file path="src/components/shared/Loader.jsx">
+export default function Loader()
+</file>
+
+<file path="src/components/shared/PageTtile.jsx">
+export const PageTitle = (
+</file>
+
+<file path="src/components/shared/ProcessLoader.jsx">
+export default function ProcessLoader(
+⋮----
+{/* Loader Animation */}
+⋮----
+{/* Rotating ring */}
+⋮----
+{/* Outer ripple */}
+⋮----
+{/* Center icon */}
+⋮----
+{/* Text message */}
+⋮----
+{/* Loading dots */}
+</file>
+
+<file path="src/components/shared/ProgressStepper.jsx">
+// import { PROGRESS_STEP } from "@/static/constants";
+⋮----
+export default function ProgressStepper(
+</file>
+
+<file path="src/components/shared/SafeAndSecure.jsx">
+const SafeAndSecure = (
+⋮----
+{/* <img src={safeAndSecure} alt="Safe and Secure" className="safe-and-secure-icon" /> */}
+</file>
+
+<file path="src/components/AadhaarOTPVerify.jsx">
+// import Storage, { KEYS } from "../utils/storage";
+⋮----
+export default function AadhaarOTPVerify(
+⋮----
+function convertSecondsToMinutes()
+⋮----
+const handleVerifyOTP = async () =>
+⋮----
+// await aadhaarPANVerifyAPI();
+⋮----
+// navigate("/camera-permission");
+⋮----
+const handleResentAPI = async () =>
+⋮----
+const handleCloseAndReset = () =>
+⋮----
+{/* Buttons */}
+</file>
+
+<file path="src/components/BankAccounts.jsx">
+// import { delay } from "@/utils/helper";
+⋮----
+export default function BankAccounts(
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Active Bank */}
+⋮----
+{/* Hidden Edit Button */}
+⋮----
+{/* Drawer */}
+⋮----
+{/* Header inside Drawer */}
+⋮----
+{/* Bank List */}
+</file>
+
+<file path="src/components/CompleteEmandate.jsx">
+export default function CompleteEmandate(
+⋮----
+{/* Buttons */}
+</file>
+
+<file path="src/components/EmandateAuth.jsx">
+const EmanDateAuth = ({
+  open = false,
+  setOpen = (state) => { },
+  callbackUrl,
+  isBankConfirmationRequired = true,
+}) =>
+⋮----
+const handaleAfterEmandate = () =>
+⋮----
+{/* Buttons */}
+</file>
+
+<file path="src/components/EMILoanDetails.jsx">
+export default function EMILoanDetails(
+⋮----
+const toggleItems = (index) =>
+⋮----
+{/* EMI row */}
+⋮----
+{/* Expanded details */}
+</file>
+
+<file path="src/components/EnterAadhaar.jsx">
+// Aadhaar validation schema
+⋮----
+export default function EnterAadhaar(
+⋮----
+const formatAadhaar = (val) =>
+</file>
+
+<file path="src/components/GoogleSignIn.jsx">
+export default function GoogleSignIn()
+⋮----
+const handleGoogleSuccess = async (credentialResponse) =>
+</file>
+
+<file path="src/components/InactivityLogout.jsx">
+export default function InactivityLogout()
+⋮----
+const logout = () =>
+⋮----
+const resetTimer = () =>
+⋮----
+// 30 minutes = 1800000 ms
+⋮----
+// Events that reset the timer
+⋮----
+resetTimer(); // start timer on mount
+</file>
+
+<file path="src/components/Logo.jsx">
+export default function Logo(
+</file>
+
+<file path="src/components/MandateStatusModal.jsx">
+const MandateStatusModal = ({
+    open,
+    setOpen,
+    title = "All Set!",
+    massage = <>E-mandate completed<br />successfully</>,
+    type = "success",
+}) =>
+⋮----
+const handleClose = () =>
+</file>
+
+<file path="src/components/Month12LoanRejectModal.jsx">
+export default function Month12LoanRejectModal(
+</file>
+
+<file path="src/components/OfferBanner.jsx">
+// import { Icon } from 'rsuite';
+// import CalendarIcon from '@rsuite/icons/Calendar';
+// import ClockIcon from '@rsuite/icons/Clock';
+// import CheckIcon from '@rsuite/icons/Check';
+⋮----
+export default function OfferBanner()
+⋮----
+{/* Left content */}
+⋮----
+{/* Right icon */}
+</file>
+
+<file path="src/components/PANConfirmation.jsx">
+export default function PANConfirmation(
+⋮----
+const handlePANVerify = async () =>
+⋮----
+{/* Info Section */}
+</file>
+
+<file path="src/components/SpecialOfferTimer.jsx">
+// import { useEffect, useState } from "react";
+⋮----
+// export default function SpecialOfferTimer({ expiryDate }) {
+//   const [timeLeft, setTimeLeft] = useState(() => {
+//     const diff = new Date(expiryDate) - new Date();
+//     return Math.max(0, Math.floor(diff / 1000)); // seconds
+//   });
+⋮----
+//   useEffect(() => {
+//     if (timeLeft <= 0) return;
+⋮----
+//     const timer = setInterval(() => {
+//       setTimeLeft((prev) => {
+//         if (prev <= 1) {
+//           clearInterval(timer);
+//           return 0;
+//         }
+//         return prev - 1;
+//       });
+//     }, 1000);
+⋮----
+//     return () => clearInterval(timer);
+//   }, [timeLeft]);
+⋮----
+//   // Convert seconds → days, hours, minutes, seconds
+//   const days = Math.floor(timeLeft / (3600 * 24));
+//   const hours = Math.floor((timeLeft % (3600 * 24)) / 3600);
+//   const minutes = Math.floor((timeLeft % 3600) / 60);
+//   const seconds = timeLeft % 60;
+⋮----
+//   return (
+//     <div className="text-center py-1 text-base/loose">
+//       Special Offer! <span className="font-light">Only For You</span>{" "}
+//       <span className="text-green-500 block">
+//         <span className="font-light">Ends in</span> {days}d : {hours.toString().padStart(2, "0")}h : {minutes.toString().padStart(2, "0")}m :{" "}
+//         {seconds.toString().padStart(2, "0")}s
+//       </span>
+//     </div>
+//   );
+// }
+⋮----
+export default function SpecialOfferTimer(
+⋮----
+// Convert number of days → future date
+const getFinalExpiryDate = () =>
+⋮----
+const calculateTimeLeft = () =>
+⋮----
+return Math.max(0, Math.floor(diff / 1000)); // seconds
+⋮----
+// const calculateTimeLeft = () => {
+//   const diff = new Date(expiryDate) - new Date();
+//   return Math.max(0, Math.floor(diff / 1000));
+// };
+⋮----
+// Convert seconds → days, hours, minutes, seconds
+</file>
+
+<file path="src/components/UserConsent.jsx">
+const UserConsent = (
+</file>
+
+<file path="src/components/VerifyOTP.jsx">
+export default function VerifyOTP(
+⋮----
+const handleVerifyOTP = async () =>
+⋮----
+const handleResentAPI = async () =>
+⋮----
+const handleCloseAndReset = () =>
+⋮----
+{/* Buttons */}
+</file>
+
+<file path="src/events/clevertapEvents.js">
+// Profile Push Identity
+export async function profilePushIdentity(user)
+⋮----
+// optional fields
+"MSG-email": true, // Enable email notifications
+"MSG-push": true, // Enable push notifications
+"MSG-sms": true, // Enable sms notifications
+"MSG-whatsapp": true, // Enable WhatsApp notifications
+⋮----
+// Profile Push Name & Gender
+export async function profilePushNameAndGender(data)
+⋮----
+// Profile Push Email
+export async function profilePushEmail(email)
+⋮----
+//****************** Registration Flow *******************************
+⋮----
+// Event Push - 2 : sv_enter_mobile
+export async function clevertap__sv_enter_mobile()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 3 : enter_mobile_number_fill
+export async function clevertap__enter_mobile_number_fill(mobile)
+// Event Push - 4 : enter_mobile_number_del
+export async function clevertap__enter_mobile_number_del()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 5 : enter_mobile_get_otp_clk
+export async function clevertap__enter_mobile_get_otp_clk(mobile)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 6 : enter_mobile_err_blank_num_vw
+export async function clevertap__enter_mobile_err_blank_num_vw()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 7 : btmsld_enter_otp
+export async function clevertap__btmsld_enter_otp(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 8 : btmsld_enter_otp_man_otp_fill
+export async function clevertap__btmsld_enter_otp_man_otp_fill(mobile)
+⋮----
+// Event Push - 9 : btmsld_enter_otp_auto_otp_fill
+export async function clevertap__btmsld_enter_otp_auto_otp_fill(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 10 : btmsld_enter_otp_resend_otp_clk
+export async function clevertap__btmsld_enter_otp_resend_otp_clk(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 11 : btmsld_enter_otp_verify_otp_clk
+export async function clevertap__btmsld_enter_otp_verify_otp_clk(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 12 : btmsld_enter_otp_err_wrong_otp_vw
+export async function clevertap__btmsld_enter_otp_err_wrong_otp_vw(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 13 : enter_mobile_err_wrong_num_vw
+export async function clevertap__enter_mobile_err_wrong_num_vw()
+⋮----
+//****************** Loan Journey Flow *******************************
+⋮----
+// Event Push - 1 : sv_basic_details
+export async function clevertap__sv_basic_details()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 2 : basic_details_pancard_fill
+export async function clevertap__basic_details_pancard_fill()
+⋮----
+// Event Push - 78 : basic_details_wrong_pancard_fill
+export async function clevertap__basic_details_wrong_pancard_fill()
+⋮----
+// Event Push - 3 : basic_details_pincode_fill
+export async function clevertap__basic_details_pincode_fill()
+⋮----
+// Event Push - 4 : basic_details_loan_purpose_sel
+export async function clevertap__basic_details_loan_purpose_sel(loan_pupose)
+⋮----
+// Event Push - 5 : basic_details_continue_clk
+export async function clevertap__basic_details_continue_clk(user_pancard, loan_pupose)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 6 : btmsld_pan_confirmation
+export async function clevertap__btmsld_pan_confirmation(user_pancard, loan_pupose)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 7 : btmsld_pan_confirmation_back_clk
+export async function clevertap__btmsld_pan_confirmation_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 8 : btmsld_pan_confirmation_continue_clk
+export async function clevertap__btmsld_pan_confirmation_continue_clk(user_pancard)
+⋮----
+// Event Push - 9 : sv_employ_details
+export async function clevertap__sv_employ_details()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 10 : employ_details_employment_type_sel
+export async function clevertap__employ_details_employment_type_sel(employment)
+⋮----
+// Event Push - 11 : employ_details_payment_mode_sel
+export async function clevertap__employ_details_payment_mode_sel(payment_mode)
+⋮----
+// Event Push - 12 : employ_details_sal_date_sel
+export async function clevertap__employ_details_sal_date_sel(salary_date)
+⋮----
+// Event Push - 13 : employ_details_continue_clk
+export async function clevertap__employ_details_continue_clk(employment, payment_mode, salary_date)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 14 : sv_brd_employ_details
+export async function clevertap__sv_brd_employ_details(payment_mode, employment, salary_date)
+⋮----
+// Event Push - 15 : sv_sel_your_loan
+export async function clevertap__sv_sel_your_loan()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 16 : sel_your_loan_emi_plan_vw
+export async function clevertap__sel_your_loan_emi_plan_vw()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 17 : sel_your_loan_emi_plan_automan_sel
+export async function clevertap__sel_your_loan_emi_plan_automan_sel(type, emi_plan)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 18 : sel_your_loan_continue_clk
+export async function clevertap__sel_your_loan_continue_clk(emi_plan)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 19 : sel_your_loan_upgrade_amount_clk
+export async function clevertap__sel_your_loan_upgrade_amount_clk()
+⋮----
+// Event Push - 20 : sv_loan_approved
+export async function clevertap__sv_loan_approved()
+⋮----
+// 16,17,18,19,26,27
+⋮----
+// Event Push - 21 : loan_approved_back_clk
+export async function clevertap__loan_approved_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 22 : loan_approved_continue_clk
+export async function clevertap__loan_approved_continue_clk()
+⋮----
+// Event Push - 23 : sv_emailid
+export async function clevertap__sv_emailid()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 24 : emailid_email_filled
+export async function clevertap__emailid_email_filled()
+⋮----
+// Event Push - 25 : emailid_email_delete
+export async function clevertap__emailid_email_delete()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 26 : emailid_google_email_sel
+export async function clevertap__emailid_google_email_sel()
+⋮----
+// Event Push - 27 : emailid_back_clk
+export async function clevertap__emailid_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 28 : emailid_continue_clk
+export async function clevertap__emailid_continue_clk(user_email)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 29 : sv_kyc_verification
+export async function clevertap__sv_kyc_verification()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 30 : kyc_verification_digilocker_clk
+export async function clevertap__kyc_verification_digilocker_clk()
+⋮----
+// Event Push - 31 : kyc_verification_aadhar_clk
+export async function clevertap__kyc_verification_aadhar_clk()
+⋮----
+// Event Push - 32 : btmsld_aadhar_num
+export async function clevertap__btmsld_aadhar_num()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 33 : btmsld_aadhar_num_filled
+export async function clevertap__btmsld_aadhar_num_filled()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 34 : btmsld_aadhar_num_del
+export async function clevertap__btmsld_aadhar_num_del()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 35 : btmsld_aadhar_send_otp_clk
+export async function clevertap__btmsld_aadhar_send_otp_clk(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 36 : btmsld_aadhar_otp
+export async function clevertap__btmsld_aadhar_otp(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 37 : btmsld_aadhar_otp_filled
+export async function clevertap__btmsld_aadhar_otp_filled(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 38 : btmsld_aadhar_otp_del
+export async function clevertap__btmsld_aadhar_otp_del(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 39 : btmsld_aadhar_otp_resend_otp_clk
+export async function clevertap__btmsld_aadhar_otp_resend_otp_clk(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 40 : btmsld_aadhar_otp_verify_otp_clk
+export async function clevertap__btmsld_aadhar_otp_verify_otp_clk(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 41 : sv_allow_camera_permission
+export async function clevertap__sv_allow_camera_permission()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 42 : allow_camera_permission_allow_clk
+export async function clevertap__allow_camera_permission_allow_clk()
+⋮----
+// Event Push - 43 : sv_selfie
+export async function clevertap__sv_selfie()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 44 : selfie_clk
+export async function clevertap__selfie_clk()
+⋮----
+// Event Push - 45 : btmsld_selfie_attempt_1
+export async function clevertap__btmsld_selfie_attempt_1()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 46 : btmsld_selfie_attempt_2
+export async function clevertap__btmsld_selfie_attempt_2()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 47 : sv_add_bank_details
+export async function clevertap__sv_add_bank_details()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 48 : add_bank_details_act_num_filled
+export async function clevertap__add_bank_details_act_num_filled()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 49 : add_bank_details_re_act_num_filled
+export async function clevertap__add_bank_details_re_act_num_filled()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 50 : add_bank_details_ifsc_filled
+export async function clevertap__add_bank_details_ifsc_filled()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 51 : add_bank_details_act_holder_chkuchk
+export async function clevertap__add_bank_details_act_holder_chkuchk(check)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 52 : add_bank_details_submit_clk
+export async function clevertap__add_bank_details_submit_clk()
+⋮----
+// Event Push - 53 : btmsld_emandate
+export async function clevertap__btmsld_emandate()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 54 : btmsld_emandate_man_continue_clk
+export async function clevertap__btmsld_emandate_man_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 55 : btmsld_emandate_auto_continue_clk
+export async function clevertap__btmsld_emandate_auto_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 56 : sv_penny_drop
+export async function clevertap__sv_penny_drop()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 57 : penny_drop_continue_clk
+export async function clevertap__penny_drop_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 58 : sv_key_fct_stat
+export async function clevertap__sv_key_fct_stat()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 59 : key_fct_stat_back_clk
+export async function clevertap__key_fct_stat_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 60 : key_fct_stat_consent_chkuchk
+export async function clevertap__key_fct_stat_consent_chkuchk(check)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 61 : key_fct_stat_accept_clk
+export async function clevertap__key_fct_stat_accept_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 62 : sv_loan_disbursement
+export async function clevertap__sv_loan_disbursement()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 63 : loan_disbursement_okgotit_clk
+export async function clevertap__loan_disbursement_okgotit_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 64 : sv_loan_amount
+export async function clevertap__sv_loan_amount()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 65 : loan_amount_back_clk
+export async function clevertap__loan_amount_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 66 : loan_amount_enter
+export async function clevertap__loan_amount_enter()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 67 : loan_amount_next_clk
+export async function clevertap__loan_amount_next_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 68 : sv_one_page
+export async function clevertap__sv_one_page()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 69 : one_page_back_clk
+export async function clevertap__one_page_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 70 : one_page_tilename_edit_sel
+export async function clevertap__one_page_tilename_edit_sel()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 71 : one_page_continue_clk
+export async function clevertap__one_page_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 72 : sv_brd_one_page
+export async function clevertap__sv_brd_one_page()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 73 : sv_bank_details_fetched
+export async function clevertap__sv_bank_details_fetched()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 74 : bank_details_fetch_bank_sel
+export async function clevertap__bank_details_fetch_bank_sel()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 75 : bank_details_fetch_add_bank_clk
+export async function clevertap__bank_details_fetch_add_bank_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 76 : bank_details_fetch_continue_clk
+export async function clevertap__bank_details_fetch_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 77 : bank_details_fetch_back_clk
+export async function clevertap__bank_details_fetch_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+</file>
+
+<file path="src/hooks/useBackButtonLogout.jsx">
+export function useBackButtonLogout()
+⋮----
+const handleBackButton = (event) =>
+⋮----
+// window.history.forward();
+⋮----
+// Add dummy history entry so back press triggers popstate
+</file>
+
+<file path="src/hooks/usePageTracking.jsx">
+function usePageTracking()
+</file>
+
+<file path="src/hooks/useStepper.jsx">
+export function useStepper(
+</file>
+
+<file path="src/hooks/useToast.jsx">
+export function useToast()
+⋮----
+const showToast = (message, type = "info", options =
+</file>
+
+<file path="src/lib/clevertap.js">
+// const ACCOUNT_ID = import.meta.env.VITE_CLEVERTAP_ACCOUNT_ID;
+⋮----
+const initializeCleverTap = () =>
+⋮----
+// Optional: Set privacy controls (optOut and useIP) before initialization
+// clevertap.privacy.push({ optOut: false }); // Set to true if the user opts out
+clevertap.privacy.push({ useIP: true }); // Set to true if the user agrees to share their IP
+⋮----
+// Initialize CleverTap with your account ID, region, and optional target domain
+⋮----
+// For SPA apps
+⋮----
+// Log initialization for debugging
+</file>
+
+<file path="src/lib/razorpay.js">
+// Rozarpay Mandate
+export const razorpayEmandate = async (data, callback_url = "") =>
+⋮----
+script.onload = () =>
+⋮----
+// callback_url: host[0] + "//" + host[2] + callback_url,
+⋮----
+// window.location.href = callbackUrl;
+⋮----
+// Redirect if user closes the Razorpay modal
+</file>
+
+<file path="src/pages/AadhaarVerification.jsx">
+export default function AadhaarVerification()
+⋮----
+const fetchEvent = async () =>
+⋮----
+const fetchAPI = async () =>
+⋮----
+const handleDigilocker = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* Enter Aadhaar */}
+⋮----
+{/* Aadhaar OTP Verify */}
+</file>
+
+<file path="src/pages/AddBankAccount.jsx">
+// import { razorpayEmandate } from "@/lib/razorpay";
+⋮----
+// import { delay } from "@/utils/helper";
+⋮----
+export default function AddBankAccount()
+⋮----
+const fetchBankData = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* Account Number */}
+⋮----
+// onPaste={(e) => e.preventDefault()}
+⋮----
+{/* Confirm Account Number */}
+⋮----
+// onPaste={(e) => e.preventDefault()}
+⋮----
+{/* IFSC Code */}
+⋮----
+{/* Amount Info */}
+{/* <div className="flex gap-2 p-3 bg-gray-100/80 rounded-lg">
+                <div>
+                  <Info color="#333333" size={18} />
+                </div>
+                <div className="text-xs">
+                  <span className="font-semibold">₹{data?.finalAmountReceived?.toLocaleString("en-IN")}</span> will be transferred to this bank account after completion of all the steps
+                </div>
+              </div> */}
+⋮----
+{/* Submit Button */}
+⋮----
+{/* Emandate Loader */}
+</file>
+
+<file path="src/pages/AutoLogin.jsx">
+export default function AutoLogin()
+⋮----
+const handleAutoLogin = async () =>
+</file>
+
+<file path="src/pages/CameraPermission.jsx">
+export default function CameraPermission()
+⋮----
+const handleCameraAccess = async () =>
+⋮----
+// Stop the camera stream immediately after permission granted
+⋮----
+{/* <div className="flex p-5 justify-center gap-3 items-center">
+          <div className="flex">
+            <img src={noHat} className="px-2" alt="" />
+            No hat
+          </div>
+
+          <div className="flex">
+            <img src={noGlass} className="px-2" alt="" />
+            No glasses
+          </div>
+        </div> */}
+</file>
+
+<file path="src/pages/ConfirmBankAccount.jsx">
+export default function ConfirmBankAccount()
+</file>
+
+<file path="src/pages/DigilockerVerify.jsx">
+export default function DigilockerVerify()
+⋮----
+// const handleVerifyDigilocker = async () => {
+//   const params = {};
+//   const urlParams = new URLSearchParams(window.location.search);
+⋮----
+//   urlParams.forEach((value, key) => {
+//     params[key] = value;
+//   });
+⋮----
+//   const webhookResponse = await webhookDigilockerAPI(params);
+⋮----
+//   if (webhookResponse?.success) {
+//     navigate("/camera-permission");
+//     // const verifyRes = await aadhaarPANVerifyAPI();
+//     // if (verifyRes?.success) {
+//     //   navigate("/camera-permission");
+//     // } else {
+//     //   showToast("Aadhaar-PAN verification failed. Please try again.", "error");
+//     //   navigate("/aadhaar-verification");
+//     // }
+//   } else {
+//     showToast("Aadhaar-PAN verification failed. Please try again.", "error");
+//     navigate("/aadhaar-verification");
+//   }
+// };
+⋮----
+const handleVerifyDigilocker = async () =>
+⋮----
+// const params = {};
+// const urlParams = new URLSearchParams(window.location.search);
+⋮----
+// urlParams.forEach((value, key) => {
+//   params[key] = value;
+// });
+⋮----
+// navigate("/camera-permission", { replace: true });
+</file>
+
+<file path="src/pages/Disbursed.jsx">
+export default function Disbursed()
+⋮----
+const fetchEvent = async () =>
+⋮----
+const handleRedirect = async () =>
+⋮----
+{/* <div className="fixed-button bg-transparent!">
+          <ActionButton text="Ok, Got it" onClick={handleRedirect} />
+        </div> */}
+</file>
+
+<file path="src/pages/Emandate.jsx">
+// import { pennyDropAPI } from "../services/userService";
+⋮----
+// import Storage, { KEYS } from "../utils/storage";
+⋮----
+export default function Emandate()
+⋮----
+const handlePennyDrop = async () =>
+⋮----
+// if (!accountId) {
+//   navigate("/select-tenure");
+//   return;
+// }
+⋮----
+// try {
+//   const res = await pennyDropAPI(accountId);
+⋮----
+//   if (res?.data?.pennyStatus === "completed") {
+//     navigate("/loan-approval", {
+//       state: {
+//         leadID: selectedLoanOffer.leadID,
+//         productID: selectedLoanOffer.productID,
+//         amount: selectedLoanOffer.amount,
+//         tenureDays: selectedLoanOffer.tenureDays,
+//         roi: selectedLoanOffer.roi,
+//       },
+//     });
+⋮----
+//     return;
+//   }
+⋮----
+//   if (res?.data?.pennyStatus === "created") {
+//     await delay(5000);
+//     setResendTrigger((prev) => prev + 1);
+//   }
+// } catch (error) {
+//   console.error("Penny Drop Failed:", error);
+// }
+</file>
+
+<file path="src/pages/EmploymentDetails.jsx">
+// Validation schema
+⋮----
+// loanAmount: Yup.string().required("Loan amount is required"),
+⋮----
+export default function EmploymentDetails()
+⋮----
+const handleSelectTenure = async () =>
+⋮----
+// Initial Values
+⋮----
+// loanAmount: data?.LEAD?.loanRequeried || "",
+⋮----
+// dispatch(setLoading({ status: true, message: LOADER_MESSAGE.EMPLOYMENT_DETAILS_CLICK }));
+⋮----
+// dispatch(resetLoading());
+⋮----
+{/* Loan Amount */}
+{/* <div className="mb-3">
+                  <Label text="Loan Amount (₹)" htmlFor="loanAmount" />
+                  <Input
+                    id="loanAmount"
+                    placeholder="Enter Your Loan Amount"
+                    value={values.loanAmount}
+                    onChange={(value) => {
+                      if (/^\d*$/.test(value)) setFieldValue("loanAmount", value);
+                    }}
+                    size="lg"
+                    className="input-base"
+                    autoComplete="off"
+                  />
+                  <ErrorMessage touched={touched.loanAmount} error={errors.loanAmount} />
+                </div> */}
+⋮----
+{/* Monthly Income */}
+⋮----
+{/* Employment Type */}
+⋮----
+{/* Mode Of Income */}
+⋮----
+{/* Salary Date */}
+⋮----
+{/* Submit Button */}
+⋮----
+{/* Offer Generating  */}
+</file>
+
+<file path="src/pages/Finbox.jsx">
+export default function Finbox()
+⋮----
+const handleFinboxCreate = async () =>
+</file>
+
+<file path="src/pages/FinboxError.jsx">
+export default function FinboxError()
+⋮----
+const handleLoader = async () =>
+</file>
+
+<file path="src/pages/FinboxStatus.jsx">
+export default function FinboxStatus()
+⋮----
+const handleBankingSurrogateAPI = async () =>
+⋮----
+const handleFinboxConnect = async () =>
+</file>
+
+<file path="src/pages/KFS.jsx">
+export default function KFS()
+⋮----
+// const {selectedLoanOffer: {amount}} = useSelector((state) => state.user);
+⋮----
+const handleAcceptKFS = async () =>
+⋮----
+const handleKfsModalToggle = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* Bank Details */}
+⋮----
+{/* Fixed Button */}
+⋮----
+{/* Accept Terms */}
+</file>
+
+<file path="src/pages/LoanApproval.jsx">
+// import SpecialOfferTimer from "@/components/SpecialOfferTimer";
+⋮----
+export default function LoanApproval()
+⋮----
+const fetchLoanApproval = async () =>
+⋮----
+const handlePaydayToEMIConversion = async () =>
+⋮----
+const handleConfirmBankAccount = async () =>
+⋮----
+const processingAndGst = () =>
+⋮----
+{/* Offer Tags */}
+{/* {data?.expiryDate && <SpecialOfferTimer expiryDate={data?.expiryDate} />} */}
+⋮----
+{/* Approved Amount */}
+⋮----
+{/* Loan Details */}
+⋮----
+{/* Bank Accounts */}
+⋮----
+{/* Repayment Plan */}
+⋮----
+{/* Payday Details */}
+⋮----
+{/* EMI Details */}
+⋮----
+{/* Action Button */}
+</file>
+
+<file path="src/pages/LoanRejected.jsx">
+// import { Input, SelectPicker } from "rsuite";
+// import { Formik } from "formik";
+// import * as Yup from "yup";
+// import Label from "../components/forms/Label";
+// import ErrorMessage from "../components/forms/ErrorMessage";
+// import SubmitButton from "../components/forms/SubmitButton";
+// import { BANK_NAME } from "../static/constants";
+// import ProgressStepper from "../components/shared/ProgressStepper";
+⋮----
+export default function LoanRejected()
+⋮----
+const handleLoader = async () =>
+</file>
+
+<file path="src/pages/Login.jsx">
+// Validation schema
+⋮----
+export default function Login()
+⋮----
+{/* Verify OTP */}
+</file>
+
+<file path="src/pages/Logout.jsx">
+export default function Logout()
+⋮----
+// useEffect(() => {
+//   localStorage.clear();
+⋮----
+//   dispatch(clearUserData());
+//   dispatch(clearAppData());
+⋮----
+//   const timer = setTimeout(() => {
+//     window.location.href = "/";
+//   }, 2000);
+⋮----
+//   return () => clearTimeout(timer);
+// }, [dispatch]);
+⋮----
+// Delete only non-WZRK keys
+// Object.keys(localStorage).forEach((key) => {
+//   if (!key.toUpperCase().startsWith("WZRK_")) {
+//     localStorage.removeItem(key);
+//   }
+// });
+⋮----
+// Clear Redux state
+⋮----
+// Remove Local Storage
+</file>
+
+<file path="src/pages/NotFound.jsx">
+export default function NotFound()
+</file>
+
+<file path="src/pages/PANVerify.jsx">
+// Validation schema to match field names
+⋮----
+export default function PANVerify()
+⋮----
+// const [address, setAddress] = useState("");
+⋮----
+const fetchPanData = async () =>
+⋮----
+const fetchAddressDetails = async (pinCode) =>
+⋮----
+await delay(1000); // Debounce API call
+⋮----
+{/* Stepper */}
+⋮----
+{/* Title */}
+⋮----
+{/* PAN Number */}
+⋮----
+{/* PIN Code */}
+⋮----
+// Invalid repeated-digit PIN
+⋮----
+// Valid Pin
+⋮----
+{/* Loan Purpose */}
+⋮----
+{/* Submit Button */}
+⋮----
+{/* <div className="w-[50px]">
+                  <Button appearance="ghost" block size="lg" onClick={() => navigate(-1)}>
+                    <ArrowLeft />
+                  </Button>
+                </div> */}
+⋮----
+{/* PAN Confirmation Drawer */}
+</file>
+
+<file path="src/pages/PennyDrop.jsx">
+// import { Input, SelectPicker } from "rsuite";
+// import { Formik } from "formik";
+// import * as Yup from "yup";
+// import Label from "@/components/forms/Label";
+// import ErrorMessage from "@/components/forms/ErrorMessage";
+// import SubmitButton from "@/components/forms/SubmitButton";
+// import { BANK_NAME } from "@/static/constants";
+⋮----
+export default function PennyDrop()
+⋮----
+const handlePennyDrop = async () =>
+⋮----
+// if (resendTrigger > 0) handlePennyDrop();
+⋮----
+{/* Title */}
+⋮----
+{/* Submit Button */}
+</file>
+
+<file path="src/pages/ProcessToBank.jsx">
+export default function ProcessToBank()
+</file>
+
+<file path="src/pages/SelectTenure.jsx">
+export default function SelectTenure()
+⋮----
+const handleSelectTenure = async () =>
+⋮----
+// 12 month plan status
+⋮----
+// 12 month plan approved
+⋮----
+// 12 month plan not eligible
+⋮----
+{/* Title */}
+⋮----
+{/* Loan Offers */}
+⋮----
+{/* Month 12 Plan */}
+⋮----
+{/* Other Plans */}
+⋮----
+{/* <Slider
+                      progress
+                      defaultValue={11000}
+                      onChange={(value) => {
+                        console.log(value);
+                      }}
+                      min={1000}
+                      max={12000}
+                      className="!text-blue-900"
+                    />
+                    <div className="flex justify-between mt-2">
+                      <span className="text-xs text-gray-500">Min. 1k</span>
+                      <span className="text-xs text-gray-500">Min. 12k</span>
+                    </div> */}
+⋮----
+{/* Submit Button */}
+⋮----
+{/* Month 12 Loan Rejected Modal */}
+</file>
+
+<file path="src/pages/Selfie.jsx">
+export default function Selfie()
+⋮----
+const checkHyperVergeFeature = async () =>
+⋮----
+const capture = async () =>
+⋮----
+// capture images
+⋮----
+// set image & call selfie liveness api
+⋮----
+const retake = () =>
+⋮----
+const handleVerifySelfie = async (screenshot) =>
+⋮----
+// const file = base64ToFile(screenshot, "selfie.jpg");
+⋮----
+const checkPermissionDenied = async (error) =>
+⋮----
+const fetchEvent = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* <div className="absolute w-full top-0 left-0 z-1 flex items-center justify-center">
+            <img src={webCamBg} alt="webcam background" className="max-w-full mt-[-87px]" />
+          </div> */}
+⋮----
+{/* Capture / Retake Buttons */}
+</file>
+
+<file path="src/pages/SelfieHyperVerge.jsx">
+// import { delay } from "@/utils/helper";
+⋮----
+export default function SelfieHyperVerge()
+⋮----
+const hypervergeOnboarding = async () =>
+</file>
+
+<file path="src/pages/SelfieHyperVergeResult.jsx">
+export default function SelfieHyperVergeResult()
+⋮----
+const hypervergeOnboarding = async () =>
+</file>
+
+<file path="src/pages/Stepper.jsx">
+export default function Stepper()
+⋮----
+// const { fetchStepperOnReload } = useStepper();
+⋮----
+// useEffect(() => {
+//   fetchStepperOnReload();
+// }, []);
+</file>
+
+<file path="src/pages/YourEmail.jsx">
+export default function YourEmail()
+⋮----
+const fetchEvent = async () =>
+⋮----
+// Validation schema
+⋮----
+{/* Title */}
+⋮----
+{/* Email Field */}
+⋮----
+{/* Divider */}
+⋮----
+{/* Google Login */}
+⋮----
+{/* Submit Button */}
+</file>
+
+<file path="src/redux/slices/appSlice.js">
+setLoading: (state, action) =>
+⋮----
+resetLoading: (state) =>
+⋮----
+setStepperDisable: (state, action) =>
+⋮----
+setTriggerInstallOnce: (state, action) =>
+⋮----
+clearAppData: ()
+</file>
+
+<file path="src/redux/slices/userSlice.js">
+setMobile: (state, action) =>
+⋮----
+setRequestId: (state, action) =>
+⋮----
+setCustomer: (state, action) =>
+⋮----
+setLead: (state, action) =>
+⋮----
+setEmployment: (state, action) =>
+⋮----
+setAccountId: (state, action) =>
+⋮----
+setSelectedLoanOffer: (state, action) =>
+⋮----
+setHasLoanOffer: (state, action) =>
+⋮----
+setUpgradeLoanAmount: (state, action) =>
+⋮----
+setMonth12Clicked: (state, action) =>
+⋮----
+clearUserData: ()
+</file>
+
+<file path="src/redux/store.js">
+// Combine reducers
+⋮----
+// Redux Persist configuration
+⋮----
+whitelist: ["user", "app"], // Persist only these reducers
+⋮----
+// Create persisted reducer
+⋮----
+// Create store
+⋮----
+middleware: (getDefaultMiddleware)
+⋮----
+serializableCheck: false, // Needed to avoid warnings with redux-persist
+⋮----
+// Create persistor
+</file>
+
+<file path="src/routes/AppRoutes.jsx">
+// import Loader from "@/components/shared/Loader";
+⋮----
+// Lazy load all page components with retry capability
+⋮----
+export default function AppRoutes()
+⋮----
+{/* Inactivity Logout */}
+⋮----
+{/* Public Routes */}
+⋮----
+{/* Protected Routes */}
+⋮----
+{/* <Route path="camera-permission" element={<CameraPermission />} />
+            <Route path="selfie-verification" element={<Selfie />} /> */}
+</file>
+
+<file path="src/routes/ProtectedRoutes.jsx">
+export default function ProtectedRoutes()
+</file>
+
+<file path="src/services/dashboardService.js">
+
+</file>
+
+<file path="src/services/userService.js">
+// Customer Login API
+export async function customerLoginAPI(mobile)
+⋮----
+// const queryParams = new URLSearchParams(window.location.search).toString();
+⋮----
+// try {
+//   const url = "customers/customer-login-byMobile" + (queryParams ? `?${queryParams}` : "");
+⋮----
+//   const req = {
+//     url,
+//     method: "POST",
+//     data: {
+//       mobile,
+//     },
+//   };
+//   const res = await callApi(req, 800);
+//   return res;
+// } catch (error) {
+//   throw error;
+// }
+⋮----
+// Verify OTP API
+export async function verifyOTPAPI(requestId, otp)
+⋮----
+// PAN Verification API
+export async function panAutoFetchAPI()
+⋮----
+export async function panVerificationAPI(
+⋮----
+// PAN Confirmation API
+export async function panConfirmationAPI(panNumber)
+⋮----
+// Basic Details API
+export async function basicDetailsAPI(data)
+⋮----
+// Generate Aadhaar OTP API
+export async function generateAadhaarOTPAPI(aadharNo, accountId)
+⋮----
+// Verify Aadhaar OTP API
+export async function verifyAadhaarOTPAPI(aadharNo, otp, accountId)
+⋮----
+// Aadhaar PAN Verify API
+export async function aadhaarPANVerifyAPI()
+⋮----
+// Verify Aadhaar OTP API
+export async function selfieLivenessAPI(blob, accountId)
+⋮----
+// Get Bank Details API
+export async function getBankDetailsAPI(ifsc)
+⋮----
+// Verify Aadhaar OTP API
+export async function addBankDetailsAPI(values, previousAccountID)
+⋮----
+// Initiate Digilocker API
+export async function initiateDigilockerAPI(accountId)
+⋮----
+// Webjook Digilocker
+export async function webhookDigilockerAPI(params)
+⋮----
+// Finbox Connect API
+export async function finboxConnectAPI(entityId)
+// Get KYC Feature
+export async function getKYCFeatureAPI()
+⋮----
+// Select Tenure API
+export async function selectTenureAPI()
+⋮----
+// Loan Approval View API
+export async function loanApprovalViewAPI(data)
+⋮----
+// Bank Account Lists API
+export async function bankAccountsListAPI()
+⋮----
+// Customer Details
+export async function customerDetailsAPI(accountId)
+⋮----
+// Emandate V2
+export async function emandateV2API(accountId)
+⋮----
+// Emandate V2
+export async function getLenderPaymentDetailsAPI()
+⋮----
+// Penny Drop
+export async function pennyDropAPI(accountId = "")
+⋮----
+// Penny Drop
+export async function createFinboxUrlAPI()
+⋮----
+// KFS Payday
+export async function kfsPaydayAPI()
+⋮----
+// Penny Drop
+export async function keyfactsAcceptanceAPI()
+⋮----
+// Step Checker API
+export async function stepCheckerAPI(accountId, isReload)
+⋮----
+export async function paydayToEMIConversionAPI(values)
+⋮----
+// Confirm Bank Account API
+export async function confirmBankAccountAPI(mandateId, accountID)
+⋮----
+// Google Auth API
+export async function googleAuthAPI(token)
+⋮----
+// Get Employment API
+export async function getEmploymentAPI()
+⋮----
+// Banking Surrogate API
+export async function bankingSurrogateAPI()
+⋮----
+// Auto Login API
+export async function autoLoginAPI(token)
+⋮----
+// Events Funnel API
+export async function eventsFunnelAPI(eventName, attributes =
+⋮----
+// Clever Tap Events
+export async function createClevertapEvents(eventName, name, attributes =
+⋮----
+// Hyper Verge Feature API
+export async function hyperVergeFeatureAPI()
+⋮----
+// Hyper Verge Onboarding API
+export async function hyperVergeOnboardingAPI()
+⋮----
+// Hyper Verge Result API
+export async function hyperVergeResultAPI()
+⋮----
+export async function fetchAddress(pinCode)
+</file>
+
+<file path="src/styles/global.css">
+:root {
+⋮----
+@theme {
+⋮----
+@layer utilities {
+⋮----
+.text-xxs {
+⋮----
+.text-gradient {
+⋮----
+.gradient-1 {
+⋮----
+.card-gradient{
+⋮----
+.shadow-1 {
+⋮----
+.shadow-2 {
+⋮----
+.shadow-3 {
+⋮----
+/* ============ Loader Style ============ */
+⋮----
+.loader {
+⋮----
+/* ============ Forms Style ============ */
+input:focus {
+⋮----
+button {
+⋮----
+.input-base,
+⋮----
+.rs-picker-toggle-placeholder {
+.rs-picker-toggle {
+⋮----
+/* ============ Drawer Style ============ */
+.rs-drawer-content {
+⋮----
+.drawer-gradient .rs-drawer-content {
+⋮----
+/* ============ App Install Style ============ */
+.app-install-modal .rs-modal-content {
+⋮----
+/* background-image: url("../assets/modal-bg.jpg"); */
+⋮----
+.app-install-modal .rs-modal-dialog {
+⋮----
+/* ============ Button Style ============ */
+.rs-btn-primary {
+⋮----
+.fixed-button {
+⋮----
+/* ============ userConsent ============ */
+⋮----
+.userConsentCheckbox .rs-checkbox-checker {
+⋮----
+.userConsentCheckbox .rs-checkbox-control {
+⋮----
+.userConsentCheckbox .rs-checkbox-control [type="checkbox"] {
+⋮----
+.userConsentCheckbox.rs-checkbox-checked .rs-checkbox-inner::before,
+⋮----
+.rs-checkbox-label  {
+⋮----
+/* input accent-color */
+/* Hover */
+label:hover .rs-checkbox-control .rs-checkbox-inner:before,
+⋮----
+.rs-checkbox-disabled label .rs-checkbox-control .rs-checkbox-inner:before,
+⋮----
+/* Checked
+.rs-checkbox-checked .rs-checkbox-inner::before,
+.rs-radio-checked .rs-radio-inner::before {
+  background-color: var(--color-brand) !important;
+  border-color: var(--color-brand) !important;
+} */
+⋮----
+.rs-picker-select-menu-item:not(.rs-picker-select-menu-item-disabled):hover,
+⋮----
+.rs-btn-ghost{
+⋮----
+.rs-btn-ghost:focus, .rs-btn-ghost:hover,  .rs-btn-ghost:active {
+⋮----
+.rs-btn-link, .text-link {
+⋮----
+.caret-icon {
+⋮----
+.caret-icon::before,
+⋮----
+.caret-icon::before {
+⋮----
+.caret-icon::after {
+.selectDate {
+⋮----
+@apply rounded-lg;
+.dateSelected {
+.dateBlock {
+&:focus-within {
+⋮----
+.rs-loader-spin {
+⋮----
+&::before {
+&::after {
+⋮----
+.no-radius-drawer .rs-drawer-dialog,
+⋮----
+.center-modal {
+⋮----
+&.rs-modal-md{
+⋮----
+.rs-modal-dialog {
+⋮----
+.rs-modal-content {
+⋮----
+.rs-modal-header-close, .close-btn {
+⋮----
+.safe-and-secure-container svg{
+⋮----
+.kfs-drawer {
+⋮----
+.container {
+</file>
+
+<file path="src/utils/apiClient.js">
+// export const BASE_URL = import.meta.env.VITE_BASE_URL;
+// export const PHP_BASE_URL = import.meta.env.VITE_PHP_BASE_URL;
+⋮----
+export async function callApi(req, delayMs = 0)
+⋮----
+// "ngrok-skip-browser-warning": 69420, //remove later
+⋮----
+// delay after getting response
+⋮----
+// else if (error.response && error.response.status === 422) {
+//   window.location.href = "/stepper";
+//   return error?.response?.data;
+// }
+</file>
+
+<file path="src/utils/encryption.js">
+export async function getDecryptedValue(base64Data)
+⋮----
+// Utility function to decode Base64 to ArrayBuffer
+function base64ToArrayBuffer(base64)
+</file>
+
+<file path="src/utils/env.js">
+
+</file>
+
+<file path="src/utils/helper.js">
+// Delay
+export const delay = (ms)
+⋮----
+// Base 64 to Image
+export const base64ToImageFile = (base64) =>
+⋮----
+img.onload = () =>
+⋮----
+export const handleRedirect = () =>
+⋮----
+// const seprator = REDIRECT_URL.includes("?") ? "&" : "?";
+// const finalUrl = `${REDIRECT_URL}${seprator}token=${token}`;
+// window.location.href = finalUrl;
+⋮----
+// clear data BEFORE redirect
+⋮----
+// clear cookies
+⋮----
+// redirect after cleanup
+⋮----
+// Get UTM Source Name
+export const getUTMSourceName = () =>
+⋮----
+// Hash Mobile
+export const hashMobileSHA256 = async (mobile) =>
+⋮----
+// Check Product Type
+export const checkProductType = () =>
+⋮----
+export const getOrdinal = (n) =>
+⋮----
+export const formatINR = (amount)
+⋮----
+// Track Google Events
+export const trackG4Events = (name, params =
+</file>
+
+<file path="src/utils/lazyWithRetry.js">
+export function lazyWithRetry(importFn, retries = 3, delay = 1000)
+</file>
+
+<file path="src/utils/storage.js">
+// Storage Utility
+⋮----
+set: (key, value) =>
+⋮----
+get: (key) =>
+⋮----
+return JSON.parse(value); // Try to parse JSON
+⋮----
+return value; // Not JSON, return raw string
+⋮----
+remove: (key) =>
+⋮----
+clearAll: () =>
+⋮----
+// Storage Keys
+⋮----
+// import Storage, { KEYS } from './storage';
+⋮----
+// Storage.set(KEYS.CUSTOMER_ID, "12345");
+⋮----
+// Storage.get(KEYS.USER_INFO);
+⋮----
+// Storage.remove("customerId");
+⋮----
+// Storage.clearAll();
+</file>
+
+<file path="src/utils/validation.js">
+//.trim()
+// .matches(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Please enter valid IFSC code")
+</file>
+
+<file path="src/App.jsx">
+export default function App()
+</file>
+
+<file path="src/index.css">
+html, body, #root {
+⋮----
+*:focus-visible {
+⋮----
+body {
+⋮----
+a {
+⋮----
+p {
+⋮----
+ul {
+⋮----
+button {
+⋮----
+img {
+</file>
+
+<file path="src/main.jsx">
+// Redux
+⋮----
+// Google Auth Provider
+⋮----
+// Initialize CleverTap
+</file>
+
+<file path=".cgcignore">
+# Auto-generated by CodeGraphContext
+# Default ignore patterns for binary/media files
+# Add your own patterns below
+
+node_modules/
+venv/
+.venv/
+env/
+.env/
+dist/
+build/
+target/
+out/
+.git/
+__pycache__/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.mp4
+*.mp3
+*.zip
+*.tar
+*.gz
+</file>
+
+<file path=".gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependency directories
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment variables
+.env
+.env.*       # includes .env.development, .env.production, etc.
+!.env.example # keep a safe example file for reference
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+dist/
+build/
+.cache/
+.vscode/
+dev.txt
+</file>
+
+<file path="eslint.config.js">
+
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+
+    <!-- Meta -->
+    <meta name="theme-color" content="#094db2" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <!-- Primary SEO -->
+    <meta
+      name="description"
+      content="Kamakshi Money offers fast and secure business loans, personal loans, and financial solutions with instant approval. Check your eligibility and apply online easily."
+    />
+    <meta name="keywords" content="Kamakshi Money, business loan, personal loan, instant loan, finance, loan services" />
+
+    <!-- Title -->
+    <title>Kamakshi Money - Personal Loans, Business Loan, Finance Solutions</title>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VQ8KP0H3RK"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+
+      gtag("js", new Date());
+      gtag("config", "G-VQ8KP0H3RK");
+    </script>
+
+    <!-- Clarity -->
+    <script type="text/javascript">
+        (function(c,l,a,r,i,t,y){
+            c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+            t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+            y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+        })(window, document, "clarity", "script", "wgp3ajdxwi");
+    </script>
+
+    <!-- Meta Pixel Code -->
+    <script>
+      !(function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = "2.0";
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+      fbq("init", "869872032296025");
+      fbq("track", "PageView");
+    </script>
+    <!-- End Meta Pixel Code -->
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet" />
+
+    <style>
+      body {
+        font-family: "Outfit", sans-serif !important;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Meta Pixel noscript MUST be here -->
+    <noscript><img height="1" width="1" style="display: none" src="https://www.facebook.com/tr?id=869872032296025&ev=PageView&noscript=1" /></noscript>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+</file>
+
+<file path="package.json">
+{
+  "name": "dsa-loan-journey",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:dev": "vite build --mode development",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-oauth/google": "^0.12.2",
+    "@reduxjs/toolkit": "^2.9.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "axios": "^1.12.2",
+    "clevertap-web-sdk": "^2.3.3",
+    "formik": "^2.4.6",
+    "lucide-react": "^0.544.0",
+    "moment": "^2.30.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-otp-input": "^3.1.1",
+    "react-redux": "^9.2.0",
+    "react-router": "^7.9.3",
+    "react-webcam": "^7.2.0",
+    "redux-persist": "^6.0.0",
+    "rsuite": "^5.83.3",
+    "tailwindcss": "^4.1.14",
+    "vite-plugin-node-polyfills": "^0.24.0",
+    "yup": "^1.7.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.22",
+    "globals": "^16.4.0",
+    "vite": "^7.1.7"
+  }
+}
+</file>
+
+<file path="README.md">
+# React + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+</file>
+
+<file path="tailwind.config.js">
+/** @type {import('tailwindcss').Config} */
+</file>
+
+<file path="vite.config.js">
+
+</file>
+
+</files>

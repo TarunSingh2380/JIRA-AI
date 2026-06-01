@@ -1,0 +1,3456 @@
+<directory_structure>
+src/
+  config/
+    constraint.ts
+    custom-environment-variables.ts
+    default.ts
+    development.ts
+    production.ts
+    stage.ts
+  constants/
+    index.ts
+    sqsEvents.ts
+    user.ts
+  consumer/
+    processors/
+      dsaUserwiseReport.processor.ts
+    router.ts
+  controllers/
+    auth.controller.ts
+    dsa.controller.ts
+    index.controller.ts
+    media.controller.ts
+    users.controller.ts
+  database/
+    entity/
+      bankDetails.entity.ts
+      base.entity.ts
+      businessDetails.entity.ts
+      commissionPayment.entity.ts
+      commissionReport.entity.ts
+      commissionsSlab.entity.ts
+      credential.entity.ts
+      leadDownloadRecord.entity.ts
+      leadFiles.entity.ts
+      leads.entity.ts
+      otp.entity.ts
+      profile.entity.ts
+      ramfinUser.entity.ts
+      s3MediaMetadata.entity.ts
+      switchThirdPartyApi.Entity.ts
+      user.entity.ts
+      userAttribution.entity.ts
+      userLeads.entity.ts
+      userUtmLink.entity.ts
+    repository/
+      bankDetails.repository.ts
+      businessDetails.repository.ts
+      commissionPayment.repository.ts
+      commissionReport.repository.ts
+      commissionSlab.repository.ts
+      credential.repository.ts
+      crmLeadsAndCommissionReports.repository.ts.ts
+      leadDownloadRecord.repository.ts
+      leadFiles.repository.ts
+      leads.repository.ts
+      otp.repository.ts
+      profile.repository.ts
+      ramfinUser.repository.ts
+      switchThirdpartyApi.repository.ts
+      userAttributions.repository.ts
+      userLeads.repository.ts
+      users.repository.ts
+      userUtmLink.repository.ts
+  dtos/
+    request/
+      dsa.dtos.ts
+      media.dtos.ts
+    auth.dtos.ts
+    index.ts
+    users.dtos.ts
+  enums/
+    business.enum.ts
+    index.enum.ts
+    user.enum.ts
+    utm.enum.ts
+  exceptions/
+    HttpException.ts
+    zod.exceptions.ts
+  helpers/
+    index.ts
+    object.ts
+    zod.helper.ts
+  interfaces/
+    auth.interface.ts
+    dsa.interface.ts
+    media.interface.ts
+    nodemailer.interface.ts
+    notification.interface.ts
+    request.interface.ts
+    response.interface.ts
+    routes.interface.ts
+    service.interface.ts
+    task.interface.ts
+    users.interface.ts
+    utm.interface.ts
+    zod.interface.ts
+  middlewares/
+    auth.middleware.ts
+    context.middleware.ts
+    encryption.middleware.ts
+    error.middleware.ts
+    response.middleware.ts
+    validation.middleware.ts
+  redis/
+    cache.service.ts
+    index.ts
+  routes/
+    auth.route.ts
+    dsa.route.ts
+    index.route.ts
+    media.route.ts
+    user.route.ts
+  scripts/
+    uploadFileTest.js
+  services/
+    cronJobs/
+      cronJobs.service.ts
+    auth.service.ts
+    axios.service.ts
+    dsa.service.ts
+    generateQr.service.ts
+    leadApigateway.service.ts
+    otp.service.ts
+    s3MediaUpload.service.ts
+    users.service.ts
+  utils/
+    aws/
+      S3.ts
+      ses.ts
+      sqs.ts
+    error/
+      api-errors/
+        customApiError.ts
+        internalServerError.ts
+      error.ts
+    AESEncryption.ts
+    cls.utils.ts
+    config.utils.ts
+    context.utils.ts
+    cron.utils.ts
+    logger.utils.ts
+    mysql.utils.ts
+    nodemailer.ts
+    notification.ts
+    RSAEncryption.ts
+    string.utils.ts
+    typeorm-migration.ts
+    typeorm.ts
+    util.ts
+    zod.utils.ts
+  app.ts
+  consumer.ts
+  server.ts
+.cgcignore
+.dockerignore
+.editorconfig
+.eslintignore
+.eslintrc
+.gitignore
+.huskyrc
+.lintstagedrc.json
+.swcrc
+docker-compose.yml
+Dockerfile
+ecosystem.config.js
+knexfile.ts
+Makefile
+nodemon.json
+package.json
+README.md
+swagger.yaml
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/config/constraint.ts">
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends Array<infer U>
+    ? Array<DeepPartial<U>>
+    : T[P] extends ReadonlyArray<infer U>
+    ? ReadonlyArray<DeepPartial<U>>
+    : DeepPartial<T[P]>;
+};
+⋮----
+export interface IConfigApp {
+  nodeEnv?: string;
+  port?: number;
+  credentials: boolean;
+  internalAccessToken?: string;
+  databaseUrlSql?: string;
+  databaseUrlSqlRamfin?: string;
+  logDir: string;
+  origin: string;
+  aws?: Partial<AWS>;
+  encryption?: Encryption;
+  headers: Headers;
+  cookies: Cookies;
+  appIds: AppIds;
+  rsaKeys?: RSAKeys;
+  redisUrl?: string;
+  redisKeys: RedisKeys;
+  typeorm?: Typeorm;
+  isMockEnable?: boolean;
+  emailData: EmailData;
+  leadCreateAPIBaseUrl: string;
+  leadCreateAPIKey?: string;
+  defaultUtmLink: string;
+  utmBaseUrl: string;
+  apiKey: string;
+  apiSecret: string;
+  notificationBaseUrl: string;
+  fromEmail: string;
+  redisHost: string;
+  redisPort: number;
+  enableNewProcedureFlag: boolean;
+}
+⋮----
+interface S3 {
+  s3Path: string;
+  bucketName: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  signatureVersion: string;
+}
+⋮----
+interface SES {
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+⋮----
+interface SQS {
+  sqsRegion: string;
+  sqsAccessKeyId: string;
+  sqsSecretAccessKey: string;
+  queueUrl: string;
+  dsaUserwiseReportQueueName?: string;
+}
+⋮----
+interface AWS {
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+  S3: Partial<S3>;
+  SES: SES;
+  SQS: Partial<SQS>;
+}
+⋮----
+interface Encryption {
+  encryptionKey1: string;
+  encryptionKey2: string;
+}
+⋮----
+interface Headers {
+  authorization: string;
+  appId: string;
+}
+interface Cookies {
+  authorization: string;
+}
+⋮----
+interface AppIds {
+  app: string;
+  web: string;
+}
+⋮----
+interface RSAKeys {
+  internal: {
+    privateKey: string;
+    publicKey: string;
+  };
+  app: {
+    privateKey?: string;
+    publicKey: string;
+  };
+}
+⋮----
+interface RedisKeys {
+  fileTransactionsJob: string;
+}
+⋮----
+type LoggingOptions = 'error' | 'query';
+⋮----
+export interface Typeorm {
+  Type: string;
+  database?: string;
+  synchronize: boolean;
+  logging: [LoggingOptions] | [LoggingOptions, LoggingOptions];
+  entities?: [];
+}
+⋮----
+export interface EmailData {
+  fromEmail?: string;
+}
+</file>
+
+<file path="src/config/custom-environment-variables.ts">
+// This should follow constraints.ts config interface
+</file>
+
+<file path="src/config/default.ts">
+import { IConfigApp } from '@config/constraint';
+</file>
+
+<file path="src/config/development.ts">
+import { IConfigApp, DeepPartial } from '@config/constraint';
+</file>
+
+<file path="src/config/production.ts">
+import { IConfigApp, DeepPartial } from '@config/constraint';
+</file>
+
+<file path="src/config/stage.ts">
+import { IConfigApp, DeepPartial } from '@config/constraint';
+</file>
+
+<file path="src/constants/index.ts">
+
+</file>
+
+<file path="src/constants/sqsEvents.ts">
+
+</file>
+
+<file path="src/constants/user.ts">
+
+</file>
+
+<file path="src/consumer/processors/dsaUserwiseReport.processor.ts">
+import DsaService from '@/services/dsa.service';
+import { logger } from '@/utils/logger.utils';
+import { IQueueDsaLeadListReportRequest } from '@/interfaces/dsa.interface';
+⋮----
+export async function processDsaUserwiseReport(payload: IQueueDsaLeadListReportRequest &
+</file>
+
+<file path="src/consumer/router.ts">
+import { logger } from '@utils/logger.utils';
+import { sqsEvents } from '@constants';
+import { processDsaUserwiseReport } from '@/consumer/processors/dsaUserwiseReport.processor';
+</file>
+
+<file path="src/controllers/auth.controller.ts">
+import { Request } from 'express';
+import { ISignInUser, ISignUpUser } from '@interfaces/users.interface';
+import { CustomResponse } from '@interfaces/response.interface';
+import AuthService from '@services/auth.service';
+import { logger } from '@/utils/logger.utils';
+⋮----
+class AuthController
+</file>
+
+<file path="src/controllers/dsa.controller.ts">
+import { UpdateCommissionStatus } from '@/dtos/request/dsa.dtos';
+import {
+  ICreatePaymentRequest,
+  IQueueDsaLeadListReportRequest,
+  IUpdateCommissionStatusRequest,
+  IUpdatePaymentStatusRequest,
+  IUploadCommissionInvoicesRequest,
+  IUploadLeadsRequest,
+  LeadStatusFilter,
+  LeadStatusFilterV2,
+} from '@/interfaces/dsa.interface';
+import { CustomResponse } from '@/interfaces/response.interface';
+import DsaService from '@/services/dsa.service';
+import { logger } from '@/utils/logger.utils';
+import { NextFunction, Request, Response } from 'express';
+import { stat } from 'fs';
+⋮----
+class DsaController
+</file>
+
+<file path="src/controllers/index.controller.ts">
+import { NextFunction, Request, Response } from 'express';
+⋮----
+class IndexController
+</file>
+
+<file path="src/controllers/media.controller.ts">
+import { IMediaUploadRequest } from '@/interfaces/media.interface';
+import { CustomResponse } from '@/interfaces/response.interface';
+import s3MediaUploadService from '@/services/s3MediaUpload.service';
+import { logger } from '@/utils/logger.utils';
+import { NextFunction, Request, Response } from 'express';
+⋮----
+class MediaController
+</file>
+
+<file path="src/controllers/users.controller.ts">
+import { Request } from 'express';
+import {
+  IUpdateUserRequest,
+  IActivateUserRequest,
+  IProfileRequest,
+  IBusinessDetailsRequest,
+  IBankDetailsRequest,
+  IUpdateCommissionsRequest,
+} from '@interfaces/users.interface';
+import { CustomResponse } from '@interfaces/response.interface';
+import { logger } from '@/utils/logger.utils';
+import UserService from '@services/users.service';
+import { UserRole } from '@/enums/user.enum';
+⋮----
+import { Platform } from '../enums/utm.enum';
+import { Like } from 'typeorm';
+⋮----
+class UsersController
+⋮----
+getFilterKey(filter: string)
+⋮----
+// Regex for email
+⋮----
+// Regex for mobile (example: 10 digit Indian number, adjust as per your case)
+⋮----
+// Name (letters + spaces + dot + hyphen)
+⋮----
+// else {
+//   type = "unknown";
+// }
+⋮----
+/*
+  public generateUtmLink = async (req: Request, res: CustomResponse) => {
+    try {
+      logger.debug('Generating UTM link');
+      const utmCode = req.body.utmCode as string;
+      const utmSource = req.body.utmSource as string;
+      const utmMedium = req.body.utmMedium as string;
+      const utmCampaign = req.body.utmCampaign as string;
+      let userId: number | undefined;
+      const userIdRaw = req.body.userId;
+      if (typeof userIdRaw === 'string') {
+        userId = parseInt(userIdRaw, 10);
+      } else if (Array.isArray(userIdRaw) && typeof userIdRaw[0] === 'string') {
+        userId = parseInt(userIdRaw[0], 10);
+      }
+      if (!userId) {
+        logger.debug('User ID not found. Getting the user from context');
+        const user = context.getUserFromContext();
+        userId = user?.id;
+        logger.info(userId);
+      }
+      const response = await this.userService.generateUtmLink(utmCode);
+      if (response.ok) {
+        // Save UTM link details in userUtmLink entity
+        logger.debug('Saving UTM link for user');
+        logger.debug(
+          `User ID: ${userId}, UTM Code: ${utmCode}, UTM Campaign: ${utmCampaign}, UTM Medium: ${utmMedium}, UTM Source: ${utmSource}`,
+        );
+        await this.userService.addUtmLinkForUser({
+          userId,
+          utmCode,
+          utmCampaign,
+          utmMedium,
+          utmSource,
+          utmLink: response.data.utmLink,
+        });
+        logger.debug('UTM link saved successfully: ' + response.data.utmLink);
+        return res.success({ code: 201, data: response.data });
+      }
+
+      return res.failure({ msg: response.err });
+    } catch (error) {
+      logger.error(error.stack);
+      return res.failure({ code: 500 });
+    }
+  };
+  */
+⋮----
+// Validation
+⋮----
+// New Changes -> Automate the utm mapping
+⋮----
+// Validation
+</file>
+
+<file path="src/database/entity/bankDetails.entity.ts">
+// src/entity/BankDetails.ts
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Profile } from './profile.entity';
+import { BaseEntity } from './base.entity';
+⋮----
+export class BankDetails extends BaseEntity
+</file>
+
+<file path="src/database/entity/base.entity.ts">
+import { CreateDateColumn, UpdateDateColumn } from 'typeorm';
+⋮----
+export class BaseEntity
+</file>
+
+<file path="src/database/entity/businessDetails.entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Profile } from './profile.entity';
+import { BUSINESS_TYPES, type BusinessType } from '@/enums/business.enum';
+import { BaseEntity } from './base.entity';
+⋮----
+export class BusinessDetails extends BaseEntity
+</file>
+
+<file path="src/database/entity/commissionPayment.entity.ts">
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, Unique } from 'typeorm';
+import { CommissionReport } from './commissionReport.entity';
+import { BaseEntity } from './base.entity';
+⋮----
+export type PaymentStatus = 'default' | 'payment_initiated' | 'payment_done' | 'payment_failed';
+⋮----
+export class CommissionPayment extends BaseEntity
+⋮----
+referenceNumber: string; // Could store transaction reference number
+</file>
+
+<file path="src/database/entity/commissionReport.entity.ts">
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { User } from './user.entity';
+import { BaseEntity } from './base.entity';
+⋮----
+export type CommissionStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'paid';
+⋮----
+export class CommissionReport extends BaseEntity
+</file>
+
+<file path="src/database/entity/commissionsSlab.entity.ts">
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { BaseEntity } from './base.entity';
+import { Profile } from './profile.entity';
+⋮----
+export type CommissionStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'paid';
+⋮----
+export class CommissionSlab extends BaseEntity
+</file>
+
+<file path="src/database/entity/credential.entity.ts">
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+⋮----
+export class CredentialEntity
+</file>
+
+<file path="src/database/entity/leadDownloadRecord.entity.ts">
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { User } from './user.entity';
+import { BaseEntity } from './base.entity';
+⋮----
+export type LeadDownloadStatus = 'processing' | 'ready' | 'failed';
+⋮----
+export class LeadDownloadRecord extends BaseEntity
+</file>
+
+<file path="src/database/entity/leadFiles.entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { BaseEntity } from './base.entity';
+import { User } from './user.entity';
+import type { UserLeads } from './userLeads.entity';
+⋮----
+export class LeadFiles extends BaseEntity
+</file>
+
+<file path="src/database/entity/leads.entity.ts">
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    CreateDateColumn,
+} from "typeorm";
+⋮----
+export enum LeadStatus {
+    NEW = "NEW",
+    IN_PROGRESS = "IN_PROGRESS",
+    APPROVED = "APPROVED",
+    REJECTED = "REJECTED",
+    CLOSED = "CLOSED",
+}
+⋮----
+export class LeadEntity
+</file>
+
+<file path="src/database/entity/otp.entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { User } from './user.entity';
+import { BaseEntity } from './base.entity';
+⋮----
+export class Otp extends BaseEntity
+</file>
+
+<file path="src/database/entity/profile.entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, OneToMany } from 'typeorm';
+import { User } from './user.entity';
+import { BaseEntity } from './base.entity';
+import { BankDetails } from './bankDetails.entity';
+import { CommissionSlab } from './commissionsSlab.entity';
+import { BusinessDetails } from './businessDetails.entity';
+⋮----
+export class Profile extends BaseEntity
+⋮----
+// @OneToMany(() => BusinessDetails, business => business.profile)
+// businesses: BusinessDetails[];
+⋮----
+// @OneToMany(() => BankDetails, bankDetails => bankDetails.profile)
+// bankDetails: BankDetails[];
+⋮----
+// @OneToMany(() => CommissionSlab, commissions => commissions.profile)
+// commissions: CommissionSlab[];
+</file>
+
+<file path="src/database/entity/ramfinUser.entity.ts">
+import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+⋮----
+export class RamfinUser
+⋮----
+// Method to clone this instance (Prototype pattern)
+clone(): RamfinUser
+⋮----
+// Static method to create the initial prototype with default values
+static createInitial(): RamfinUser
+</file>
+
+<file path="src/database/entity/s3MediaMetadata.entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+⋮----
+export class S3MediaMetadata
+</file>
+
+<file path="src/database/entity/switchThirdPartyApi.Entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+⋮----
+export class SwitchThirdPartApiEntity
+</file>
+
+<file path="src/database/entity/user.entity.ts">
+import { Entity, Column, PrimaryColumn, OneToOne, OneToMany } from 'typeorm';
+import { BaseEntity } from './base.entity';
+import type { Profile } from './profile.entity';
+import type { LeadFiles } from './leadFiles.entity';
+import type { UserLeads } from './userLeads.entity';
+import { USER_STATUS, USER_ROLES, VERIFICATION_STATUS, type UserStatus, type UserRole, type VerificationStatus } from '@/enums/user.enum';
+⋮----
+export class User extends BaseEntity
+⋮----
+// @OneToOne(() => Profile, profile => profile.user)
+// profile: Profile;
+</file>
+
+<file path="src/database/entity/userAttribution.entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, } from "typeorm";
+⋮----
+export class UserAttribution
+</file>
+
+<file path="src/database/entity/userLeads.entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { BaseEntity } from './base.entity';
+import { User } from './user.entity';
+import { LeadFiles } from './leadFiles.entity';
+⋮----
+export type LeadStatus = 'ingested' | 'ingestion_failed' | 'lead_created' | 'lead_failed';
+⋮----
+export class UserLeads extends BaseEntity
+</file>
+
+<file path="src/database/entity/userUtmLink.entity.ts">
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Platform } from '@/enums/utm.enum';
+⋮----
+export class UserUtmLink
+</file>
+
+<file path="src/database/repository/bankDetails.repository.ts">
+import { DeleteResult, Repository } from 'typeorm';
+import { AppDataSource } from '@/utils/typeorm';
+import { BankDetails } from '../entity/bankDetails.entity';
+⋮----
+export default class BankDetailsRepository
+⋮----
+constructor()
+createBankDetails(profileData: Partial<BankDetails>): Promise<BankDetails | undefined>
+⋮----
+updateBankDetails(profileData: Partial<BankDetails>): Promise<BankDetails | undefined>
+⋮----
+getBankDetailsByProfileId(profileId: number): Promise<BankDetails[] | undefined>
+⋮----
+getBankDetailsById(id: number): Promise<BankDetails | undefined>
+⋮----
+deactivateAllBankAccountsForUser(profileId: number)
+⋮----
+// Update all bank accounts for the user to set active = false
+⋮----
+deleteBankDetails(id: number): Promise<DeleteResult>
+</file>
+
+<file path="src/database/repository/businessDetails.repository.ts">
+import { DeleteResult, Repository } from 'typeorm';
+import { AppDataSource } from '@/utils/typeorm';
+import { BusinessDetails } from '../entity/businessDetails.entity';
+⋮----
+export default class BusinessDetailsRepository
+⋮----
+constructor()
+createBusinessDetails(profileData: Partial<BusinessDetails>): Promise<BusinessDetails | undefined>
+⋮----
+getBusinessDetailsByProfileId(profileId: number): Promise<BusinessDetails | undefined>
+⋮----
+deleteBusinessDetails(id: number): Promise<DeleteResult>
+</file>
+
+<file path="src/database/repository/commissionPayment.repository.ts">
+import { Repository, DeleteResult, UpdateResult } from 'typeorm';
+import { AppDataSource } from '@/utils/typeorm';
+import { CommissionPayment, PaymentStatus } from '../entity/commissionPayment.entity';
+⋮----
+export default class CommissionPaymentRepository
+⋮----
+constructor()
+⋮----
+createCommissionPayment(data: Partial<CommissionPayment>): Promise<CommissionPayment | undefined>
+⋮----
+getCommissionPayment(reportId: number): Promise<CommissionPayment | undefined>
+⋮----
+updatePaymentStatus(id: number, status: PaymentStatus): Promise<UpdateResult>
+⋮----
+deleteCommissionPayment(id: number): Promise<DeleteResult>
+</file>
+
+<file path="src/database/repository/commissionReport.repository.ts">
+import { Repository, DeleteResult, UpdateResult, FindOptionsWhere } from 'typeorm';
+import { AppDataSource } from '@/utils/typeorm';
+import { CommissionReport, CommissionStatus } from '../entity/commissionReport.entity';
+⋮----
+export default class CommissionReportRepository
+⋮----
+constructor()
+⋮----
+createCommissionReport(data: Partial<CommissionReport>): Promise<CommissionReport | undefined>
+⋮----
+getCommissionReport(id?: number, userId?: string): Promise<CommissionReport | undefined>
+⋮----
+getUserCommissionReports(userId: string, offSet = 0, limit = 10): Promise<CommissionReport[] | undefined>
+⋮----
+getCommissionReportById(id: number): Promise<CommissionReport | undefined>
+⋮----
+updateCommissionStatus(id: number, status: CommissionStatus, remarks?: string): Promise<UpdateResult>
+⋮----
+updateCommissionInvoice(id: number, status: CommissionStatus, invoiceUrl: string): Promise<UpdateResult>
+⋮----
+deleteCommissionReport(id: number): Promise<DeleteResult>
+⋮----
+async getUserLastCommission(userId: string): Promise<CommissionReport | null>
+⋮----
+async getUserTotalCommission(userId: string): Promise<number>
+</file>
+
+<file path="src/database/repository/commissionSlab.repository.ts">
+import { DeleteResult, Repository } from 'typeorm';
+import { AppDataSource } from '@/utils/typeorm';
+import { CommissionSlab } from '@database/entity/commissionsSlab.entity';
+⋮----
+export default class CommissionSlabRepository
+⋮----
+constructor()
+createCommissionSlab(profileData: Partial<CommissionSlab>): Promise<CommissionSlab | undefined>
+⋮----
+getCommissionSlabByProfileId(profileId: number): Promise<CommissionSlab[] | undefined>
+⋮----
+getExistingSlab(
+    profileId: number,
+    type: 'disbursal' | 'leads',
+    start: number,
+    end: number,
+): Promise<CommissionSlab | undefined>
+⋮----
+deleteCommissionSlab(id: number): Promise<DeleteResult>
+</file>
+
+<file path="src/database/repository/credential.repository.ts">
+import { Repository, FindOptionsWhere, FindManyOptions, FindOneOptions } from 'typeorm';
+import { AppDataSourceRamfin } from '@/utils/typeorm';
+import { CredentialEntity } from '../entity/credential.entity';
+⋮----
+export default class CredentialRepository
+⋮----
+constructor()
+⋮----
+async findOneByOptions(options: FindOptionsWhere<CredentialEntity>, select?: (keyof CredentialEntity)[]): Promise<CredentialEntity | null>
+⋮----
+async findByOptions(options: FindManyOptions<CredentialEntity>): Promise<CredentialEntity[]>
+</file>
+
+<file path="src/database/repository/crmLeadsAndCommissionReports.repository.ts.ts">
+import { config } from '@utils/config.utils';
+import { logger } from '@/utils/logger.utils';
+import { AppDataSourceRamfin } from '@/utils/typeorm';
+⋮----
+import { z } from 'zod';
+import c from 'config';
+import { cons } from 'fp-ts/lib/ReadonlyNonEmptyArray';
+⋮----
+type UserLeadReport = z.infer<typeof UserLeadReportSchema>;
+type UserLeadsList = z.infer<typeof UserLeadsListSchema>;
+⋮----
+interface GetLead {
+  queryType: 'total' | 'list';
+  utmCode: string;
+  startDate: string;
+  endDate: string;
+  offset: number;
+  limit: number;
+  type: 'api' | 'utm';
+  lastCommissionDate?: string;
+  lastCommissionAmount?: number;
+  commissionType?: 'disbursal' | 'leads';
+  commissionValue?: number;
+  status: string;
+  leadFilter?: 'disbursal' | 'leads';
+  userId?: number; 
+}
+⋮----
+lastCommissionDate: '1991-01-01', // ISO date string format
+⋮----
+commissionType: 'disbursal', // Choose between 'disbursal' or 'leads'
+commissionValue: 3, // Set the commission value (number)
+⋮----
+interface GetLeadReport extends GetLead {
+  queryType: 'total';
+}
+⋮----
+// Utility function to convert snake_case to camelCase
+function snakeToCamel(s: string): string
+⋮----
+function convertSnakeToCamel(obj: any): any
+⋮----
+export default class CrmLeadsAndCommissionReportRepository
+⋮----
+async getLeadReport(lead: GetLead): Promise<any>
+⋮----
+// logger.info('Leads payload: ' + JSON.stringify(lead, null, ' '));
+⋮----
+//   result = convertSnakeToCamel(result[0][0]);
+// console.log(result);
+//   const leads = UserLeadReportSchema.parse(result[0][0]);
+⋮----
+async getDsaDetails(lead: GetLead): Promise<any>
+⋮----
+async getMerchantReport(lead: GetLead): Promise<any>
+⋮----
+// logger.info('Leads payload: ' + JSON.stringify(lead, null, ' '));
+⋮----
+//   result = convertSnakeToCamel(result[0][0]);
+//   console.log(result);
+//   const leads = UserLeadReportSchema.parse(result[0][0]);
+⋮----
+async getLeadList(lead: GetLead): Promise<any>
+⋮----
+// logger.info('Leads payload: ' + JSON.stringify(lead, null, ' '));
+⋮----
+//   result = convertSnakeToCamel(result[0][0]);
+//   console.log(result);
+//   const leads = UserLeadReportSchema.parse(result[0][0]);
+⋮----
+async getDSAList(lead: GetLead): Promise<any>
+⋮----
+// logger.info('Leads payload: ' + JSON.stringify(lead, null, ' '));
+⋮----
+//   result = convertSnakeToCamel(result[0][0]);
+//   console.log(result);
+//   const leads = UserLeadReportSchema.parse(result[0][0]);
+</file>
+
+<file path="src/database/repository/leadDownloadRecord.repository.ts">
+import { Repository } from 'typeorm';
+import { AppDataSource } from '@/utils/typeorm';
+import { LeadDownloadRecord, LeadDownloadStatus } from '@/database/entity/leadDownloadRecord.entity';
+import { User } from '@/database/entity/user.entity';
+⋮----
+export default class LeadDownloadRecordRepository
+⋮----
+constructor()
+⋮----
+async createRecord(data: {
+    user: User;
+    startDate: Date;
+    endDate: Date;
+    leadFilter: 'disbursal' | 'leads';
+    fileName: string;
+    leadStatus: 'rejected' | 'not_interested' | 'approved' | 'fresh_Incomplete' | 'all';
+}): Promise<LeadDownloadRecord>
+⋮----
+async updateRecord(id: number, data:
+⋮----
+async getRecordsByUserId(userId: string): Promise<LeadDownloadRecord[]>
+⋮----
+async getRecordById(id: number): Promise<LeadDownloadRecord | null>
+⋮----
+async getPendingRecordByFilters(data: {
+    userId: string;
+    startDate: Date;
+    endDate: Date;
+    leadFilter: 'disbursal' | 'leads';
+    leadStatus: 'rejected' | 'not_interested' | 'approved' | 'fresh_Incomplete' | 'all';
+}): Promise<LeadDownloadRecord | null>
+</file>
+
+<file path="src/database/repository/leadFiles.repository.ts">
+import { Repository, DeleteResult } from 'typeorm';
+import { LeadFiles } from '@entity/leadFiles.entity';
+import { AppDataSource } from '@/utils/typeorm';
+⋮----
+type leadFileStatus =
+  | 'upload'
+  | 'ingestion_stared'
+  | 'ingestion_failed'
+  | 'ingestion_completed'
+  | 'lead_creating_started'
+  | 'lead_creating_failed'
+  | 'lead_creating_completed';
+// LeadFiles Repository
+export class LeadFilesRepository
+⋮----
+constructor()
+⋮----
+// Create
+createLeadFile(leadFile: Partial<LeadFiles>): Promise<LeadFiles | undefined>
+⋮----
+// Read by ID
+getLeadFileById(id: number): Promise<LeadFiles | undefined>
+⋮----
+getUserLeadFiles(userId: string): Promise<LeadFiles[] | undefined>
+⋮----
+getLastLeadFile(userId: string): Promise<LeadFiles | undefined>
+⋮----
+// Read all
+getAllLeadFiles(): Promise<LeadFiles[]>
+⋮----
+// Update
+updateLeadFile(id: number, updateData: Partial<LeadFiles>): Promise<LeadFiles | undefined>
+⋮----
+updateStatus(id: number, status: leadFileStatus, errorMsg?: string): Promise<LeadFiles | undefined>
+⋮----
+// Delete
+deleteLeadFile(id: number): Promise<DeleteResult>
+</file>
+
+<file path="src/database/repository/leads.repository.ts">
+import { Repository } from 'typeorm';
+import { AppDataSourceRamfin } from '@/utils/typeorm';
+import { LeadEntity } from '../entity/leads.entity';
+⋮----
+export default class LeadsRepository
+⋮----
+constructor()
+⋮----
+async findOneByOptions(options: Partial<LeadEntity>): Promise<LeadEntity | undefined>
+⋮----
+async findByOptions(options: Partial<LeadEntity>): Promise<LeadEntity[] | undefined>
+</file>
+
+<file path="src/database/repository/otp.repository.ts">
+import { DeleteResult, Repository } from 'typeorm';
+import { Otp } from '@entity/otp.entity';
+import { AppDataSource } from '@/utils/typeorm';
+⋮----
+export default class OTPRepository
+⋮----
+constructor()
+createOtp(otp: Partial<Otp>): Promise<Otp | undefined>
+⋮----
+getOtpByRequestId(requestId: string): Promise<Otp | undefined>
+⋮----
+deleteOtp(id: number): Promise<DeleteResult>
+</file>
+
+<file path="src/database/repository/profile.repository.ts">
+import { DeleteResult, FindOptionsWhere, Repository } from 'typeorm';
+import { AppDataSource } from '@/utils/typeorm';
+import { Profile } from '../entity/profile.entity';
+import { User } from '../entity/user.entity';
+⋮----
+export default class ProfileRepository
+⋮----
+constructor()
+createProfile(profileData: Partial<Profile>): Promise<Profile | undefined>
+⋮----
+getProfileByUserId(userId: string)
+⋮----
+searchProfile(searchBy: 'mobile' | 'aadhaar', value: string): Promise<Profile | undefined>
+⋮----
+deleteProfile(id: number): Promise<DeleteResult>
+</file>
+
+<file path="src/database/repository/ramfinUser.repository.ts">
+import { Like, Repository } from 'typeorm';
+import { RamfinUser } from '@entity/ramfinUser.entity';
+import { AppDataSourceRamfin } from '@/utils/typeorm';
+import { USER_ROLES } from '@/enums/user.enum';
+⋮----
+export default class RamfinUserRepository
+⋮----
+constructor()
+⋮----
+async findOneBySource(utmSource: string): Promise<RamfinUser | undefined>
+⋮----
+createRamfinUser(ramfinUserData: Partial<RamfinUser>): Promise<RamfinUser | undefined>
+⋮----
+getRamfinUserByPhoneNo(phoneNo: string): Promise<RamfinUser | undefined>
+⋮----
+getRamfinUserByUserID(userID: number): Promise<RamfinUser | undefined>
+⋮----
+checkUserExists(phoneNo: string, email: string): Promise<RamfinUser | undefined>
+maxUserID(): Promise<RamfinUser | undefined>
+⋮----
+where: {}, // 👈 required even if empty
+⋮----
+select: ['id'], // optional: fetch only the `id`
+⋮----
+findAll(search: string): Promise<RamfinUser[] | undefined>
+public async query(sql: string, params?: any[]): Promise<any[]>
+</file>
+
+<file path="src/database/repository/switchThirdpartyApi.repository.ts">
+import { Repository, FindOptionsWhere, FindManyOptions, FindOneOptions } from 'typeorm';
+import { AppDataSourceRamfin } from '@/utils/typeorm';
+import { SwitchThirdPartApiEntity } from '../entity/switchThirdPartyApi.Entity';
+⋮----
+export default class SwitchThirdPartyApiRepository
+⋮----
+constructor()
+⋮----
+async findOneByOptions(options: FindOptionsWhere<SwitchThirdPartApiEntity>, select?: (keyof SwitchThirdPartApiEntity)[]): Promise<SwitchThirdPartApiEntity | null>
+⋮----
+async findByOptions(options: FindManyOptions<SwitchThirdPartApiEntity>): Promise<SwitchThirdPartApiEntity[]>
+</file>
+
+<file path="src/database/repository/userAttributions.repository.ts">
+import { Repository } from 'typeorm';
+import { AppDataSourceRamfin } from '@/utils/typeorm';
+import { UserAttribution } from '../entity/userAttribution.entity';
+⋮----
+export default class UserAttributionRepository
+⋮----
+constructor()
+⋮----
+async findOneByOptions(options: Partial<UserAttribution>): Promise<UserAttribution | undefined>
+⋮----
+async findByOptions(options: Partial<UserAttribution>): Promise<UserAttribution[] | undefined>
+</file>
+
+<file path="src/database/repository/userLeads.repository.ts">
+import { Repository, DeleteResult } from 'typeorm';
+import { LeadStatus, UserLeads } from '@entity/userLeads.entity';
+import { AppDataSource } from '@/utils/typeorm';
+⋮----
+// UserLeads Repository
+export class UserLeadsRepository
+⋮----
+constructor()
+⋮----
+// Create
+createUserLead(userLead: Partial<UserLeads>[]): Promise<UserLeads[] | undefined>
+⋮----
+// Read by ID
+getUserLeadById(id: number, status: LeadStatus): Promise<UserLeads[] | undefined>
+⋮----
+getIngestedLead(id: number): Promise<UserLeads | undefined>
+⋮----
+// Read all
+getAllUserLeads(): Promise<UserLeads[]>
+⋮----
+// Update
+updateUserLead(id: number, updateData: Partial<UserLeads>): Promise<UserLeads | undefined>
+⋮----
+// Delete
+deleteUserLead(id: number): Promise<DeleteResult>
+</file>
+
+<file path="src/database/repository/users.repository.ts">
+import { Repository, FindOptionsWhere, IsNull, Not, Like } from 'typeorm';
+import { User } from '@entity/user.entity';
+import { UserRole, UserStatus } from '@/enums/user.enum';
+import { AppDataSource } from '@/utils/typeorm';
+⋮----
+export default class UserRepository
+⋮----
+constructor()
+⋮----
+async findOneByOptions(options: Partial<User>): Promise<User | undefined>
+⋮----
+async createUser(userData: Partial<User>): Promise<User | undefined>
+⋮----
+async updateUser(userData: Partial<User>): Promise<void>
+⋮----
+async getUserById(id: string): Promise<User | undefined>
+⋮----
+async getDsaUsers(offset: number, limit: number, roles: UserRole, filters: any, status?: UserStatus, filter?: 'mobile' | 'aadhaar',): Promise<User[] | undefined>
+⋮----
+// name: Not(IsNull()),
+⋮----
+// search by names
+async searchUsersByName(search: string): Promise<User[]>
+⋮----
+async getDsaDropdownUsers(status?: UserStatus, filter?: 'mobile' | 'aadhaar'): Promise<User[] | undefined>
+⋮----
+async getUserByEmail(email: string): Promise<User | undefined>
+⋮----
+async deleteUser(id: string): Promise<void>
+⋮----
+async userExistsByEmail(email: string): Promise<boolean>
+</file>
+
+<file path="src/database/repository/userUtmLink.repository.ts">
+import { Repository } from 'typeorm';
+import { UserUtmLink } from '../entity/userUtmLink.entity';
+import { AppDataSourceRamfin } from '@/utils/typeorm';
+import { IUserUtmLinkRow } from '@/interfaces/utm.interface';
+⋮----
+export default class UserUtmLinkRepository
+⋮----
+constructor()
+/**
+   * Add a UTM link for a user
+   * @param userId - User's ID
+   * @param utmData - UTM link data
+   * @returns The created UTM link
+   */
+async addUtmLinkForUser(userId: string, utmData: Partial<UserUtmLink>): Promise<UserUtmLink>
+⋮----
+/**
+   * Get all UTM links, or UTM links generated by a user if userId is provided
+   * @param userId - Optional user ID to filter UTM links
+   * @returns Array of UTM links
+   */
+async getUtmLinks(userId?: string): Promise<IUserUtmLinkRow[]>
+⋮----
+async findOneByOptions(options: Partial<UserUtmLink>): Promise<UserUtmLink | undefined>
+⋮----
+async findByOptions(options: Partial<UserUtmLink>): Promise<UserUtmLink[] | undefined>
+</file>
+
+<file path="src/dtos/request/dsa.dtos.ts">
+import { z } from 'zod';
+⋮----
+export type UploadLeads = z.infer<typeof UploadLeadsSchemaZ>;
+export type UploadCommissionInvoice = z.infer<typeof UploadCommissionInvoiceSchemaZ>;
+export type CreatePayment = z.infer<typeof CreatePaymentSchemaZ>;
+export type DsaQuery = z.infer<typeof DsaQuerySchemaZ>;
+export type UpdateCommissionStatus = z.infer<typeof UpdateCommissionStatusSchemaZ>;
+export type UpdatePaymentStatus = z.infer<typeof UpdatePaymentStatusSchemaZ>;
+export type QueueDsaLeadListReport = z.infer<typeof QueueDsaLeadListReportSchemaZ>;
+⋮----
+export type RequestLeadDownload = z.infer<typeof RequestLeadDownloadSchemaZ>;
+</file>
+
+<file path="src/dtos/request/media.dtos.ts">
+import { z } from 'zod';
+⋮----
+export type MediaUpload = z.infer<typeof MediaUploadSchemaZ>;
+</file>
+
+<file path="src/dtos/auth.dtos.ts">
+import { z } from 'zod';
+import { zValidateMobileNo } from '@helpers/zod.helper';
+⋮----
+// password: z.string(),
+⋮----
+// name: z.string(),
+⋮----
+// password: z.string().min(8, 'Password must be at least 8 characters'),
+⋮----
+export type UserSignIn = z.infer<typeof userSignInSchemaZ>;
+export type UserSignUp = z.infer<typeof userSignUpSchemaZ>;
+export type VerifyOTP = z.infer<typeof verifyOTP>;
+</file>
+
+<file path="src/dtos/index.ts">
+
+</file>
+
+<file path="src/dtos/users.dtos.ts">
+import { z } from 'zod';
+import { zValidateMobileNo } from '@helpers/zod.helper';
+import { userSignUpSchemaZ } from './auth.dtos';
+⋮----
+// password: z.string().min(8, 'Password must be at least 8 characters').optional(),
+⋮----
+// Sort ranges by the start value
+⋮----
+// Check for overlaps in sorted ranges
+⋮----
+// Add an error to the context if an overlap is found
+⋮----
+path: [i], // Specify the path for better error localization
+⋮----
+return; // Stop further validation after the first overlap
+⋮----
+export type UserUpdate = z.infer<typeof userSignUpSchemaZ>;
+export type ActivateUser = z.infer<typeof ActivateUserSchemaZ>;
+export type ProfileRequest = z.infer<typeof ProfileSchemaZ>;
+export type BusinessDetailsRequest = z.infer<typeof BusinessDetailsSchemaZ>;
+export type BankDetailsRequest = z.infer<typeof BankDetailsSchemaZ>;
+export type UpdateCommissionData = z.infer<typeof UpdateCommissionSchemaZ>;
+</file>
+
+<file path="src/enums/business.enum.ts">
+export type BusinessType = (typeof BUSINESS_TYPES)[number];
+</file>
+
+<file path="src/enums/index.enum.ts">
+export enum EmailTemplate {
+  OTP = 'otp'
+}
+</file>
+
+<file path="src/enums/user.enum.ts">
+export type UserStatus = (typeof USER_STATUS)[number];
+⋮----
+export type UserRole = (typeof USER_ROLES)[number];
+⋮----
+export type VerificationStatus = (typeof VERIFICATION_STATUS)[number];
+</file>
+
+<file path="src/enums/utm.enum.ts">
+export enum Platform {
+    WEBSITE = 'website',
+    ANDROID = 'android'
+}
+</file>
+
+<file path="src/exceptions/HttpException.ts">
+export class HttpException extends Error
+⋮----
+constructor(status: number, message: string)
+</file>
+
+<file path="src/exceptions/zod.exceptions.ts">
+import { ZodError } from 'zod';
+⋮----
+import { RequestContentLocation } from '@interfaces/zod.interface';
+⋮----
+export class RequestValidationError extends Error
+⋮----
+constructor(requestContentLocation: RequestContentLocation, zodError: ZodError)
+</file>
+
+<file path="src/helpers/index.ts">
+
+</file>
+
+<file path="src/helpers/object.ts">
+function flattenObject<T>(data: T)
+⋮----
+function recurse(cur, prop)
+⋮----
+function unFlattenObject(data: object)
+⋮----
+function isObject(item)
+⋮----
+function mergeDeep(target: object, ...sources)
+</file>
+
+<file path="src/helpers/zod.helper.ts">
+import { z } from 'zod';
+import { isValidMobileNo, isValidIfscCode } from '@utils/string.utils';
+</file>
+
+<file path="src/interfaces/auth.interface.ts">
+import { Request } from 'express';
+import { User } from '@entity/user.entity';
+⋮----
+export interface DataStoredInToken {
+  _id: string;
+}
+⋮----
+export interface TokenData {
+  token: string;
+  expiresIn: number;
+}
+⋮----
+export interface RequestWithUser extends Request {
+  user: User;
+}
+</file>
+
+<file path="src/interfaces/dsa.interface.ts">
+import {
+  UploadLeads,
+  UploadCommissionInvoice,
+  CreatePayment,
+  UpdateCommissionStatus,
+  UpdatePaymentStatus,
+  QueueDsaLeadListReport,
+} from '@dtos/request/dsa.dtos';
+⋮----
+export type IUploadLeadsRequest = UploadLeads;
+export type IUploadCommissionInvoicesRequest = UploadCommissionInvoice;
+export type ICreatePaymentRequest = CreatePayment;
+⋮----
+export type LeadStatusFilter = 'Closed' | 'Approved' | 'Interested' | 'Rejected' | 'Fresh Lead' | 'all';
+export type LeadStatusFilterV2 = 'rejected' | 'not_interested' | 'approved' | 'fresh_Incomplete' | 'all';
+export type IUpdateCommissionStatusRequest = UpdateCommissionStatus;
+export type IUpdatePaymentStatusRequest = UpdatePaymentStatus;
+export type IQueueDsaLeadListReportRequest = QueueDsaLeadListReport;
+</file>
+
+<file path="src/interfaces/media.interface.ts">
+import { MediaUpload } from '@/dtos/request/media.dtos';
+⋮----
+export type IMediaUploadRequest = MediaUpload;
+</file>
+
+<file path="src/interfaces/nodemailer.interface.ts">
+import { Readable } from 'stream';
+⋮----
+export interface EmailData {
+  from: string;
+  to: string[];
+  subject: string;
+  text?: string;
+  body?: object;
+  html?: string;
+  attachments?: [
+    {
+      filename: string;
+      path?: string;
+      content?: string | Buffer | Readable | undefined;
+    },
+  ];
+}
+</file>
+
+<file path="src/interfaces/notification.interface.ts">
+export enum ThirdPartAPI {
+  TEXTNATION = 'textnation',
+  ACQUIRIT = 'acquirit',
+}
+⋮----
+export interface ISendingSMSBody {
+  mobile: number;
+  body_message: string;
+  template_id?: string;
+  entity_id?: string;
+  otp?: number;
+  vendor: ThirdPartAPI;
+  otpLogPlatform?: string;
+  dlttempid?: string;
+  sender: string;
+  username?: string;
+  pass?: string;
+}
+⋮----
+export interface ISendingEmailBody {
+  form_email: string;
+  to_email: string;
+  subject: string;
+  body_message: string;
+  attachment?: string;
+  ext?: string;
+}
+⋮----
+export interface INotification {
+  notificationID: number;
+  customerID: number;
+  leadID: number;
+  notification: string;
+  type: string;
+  subject: string;
+  createdDate: Date;
+  mtype: string;
+  uid: number;
+}
+⋮----
+export interface ISMSResponse {
+  success: boolean;
+  statusCode: Number;
+  data?: any;
+}
+⋮----
+export type TSelectNotification = keyof INotification;
+</file>
+
+<file path="src/interfaces/request.interface.ts">
+import { Request } from 'express';
+⋮----
+export interface CustomRequest extends Request {
+  user: any;
+}
+</file>
+
+<file path="src/interfaces/response.interface.ts">
+import { Response } from 'express';
+⋮----
+export interface CustomResponse extends Response {
+  sendEncryptedData: any;
+  invalid: any;
+  failure: any;
+  unauthorized: any;
+  success: any;
+  resBody: any;
+  sendXlsx: any;
+}
+</file>
+
+<file path="src/interfaces/routes.interface.ts">
+import { Router } from 'express';
+⋮----
+export interface Routes {
+  path?: string;
+  router: Router;
+}
+</file>
+
+<file path="src/interfaces/service.interface.ts">
+export interface IServiceResponse<T = unknown> {
+  ok: boolean;
+  err?: string;
+  data?: T;
+}
+</file>
+
+<file path="src/interfaces/task.interface.ts">
+import { Task, UpdateTask } from '@dtos/task.dtos';
+⋮----
+export type TaskStatus = 'done' | 'pending' | 'cancelled';
+export type TaskPriority = 'low' | 'medium' | 'high';
+export interface ITask extends Task {
+  id?: string;
+  userId?: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+}
+</file>
+
+<file path="src/interfaces/users.interface.ts">
+import { UserSignIn, UserSignUp, VerifyOTP } from '@dtos/auth.dtos';
+import { UserUpdate, ActivateUser, ProfileRequest, BusinessDetailsRequest, BankDetailsRequest, UpdateCommissionData } from '@dtos/users.dtos';
+export interface ISignInUser extends UserSignIn {
+  internalUserId?: number;
+}
+export interface ISignUpUser extends UserSignUp {
+  internalUserId?: number;
+  utmCode?: string;
+  name?: string;
+  referralCode?: string;
+  utmLink?: string;
+}
+export type IVerifyOTP = VerifyOTP;
+interface IUser {
+  id?: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  role?: string;
+  status?: string;
+  utmLink?: string;
+}
+⋮----
+export interface ISignInResponse extends IUser {
+  cookie?: string;
+}
+⋮----
+export type IUpdateUserRequest = UserUpdate;
+export type IUpdateUserResponse = IUser;
+export type IActivateUserRequest = ActivateUser;
+export type IProfileRequest = ProfileRequest;
+export type IBusinessDetailsRequest = BusinessDetailsRequest;
+export type IBankDetailsRequest = BankDetailsRequest;
+export type IUpdateCommissionsRequest = UpdateCommissionData;
+</file>
+
+<file path="src/interfaces/utm.interface.ts">
+import { Platform } from '@/enums/utm.enum';
+⋮----
+export interface IUserUtmLinkRow {
+  utm_source: string;
+  dsa_name?: string;
+  platform: Platform;
+  utm_link?: string;
+  user_id: number | string;
+  status: number;
+  created: Date | string | null;
+}
+⋮----
+export interface IUserUtmLinkDTO {
+  utmSource: string;
+  dsaName?: string;
+  platform: Platform;
+  utmLink?: string;
+  userId: number | string;
+  created: string | null;
+}
+</file>
+
+<file path="src/interfaces/zod.interface.ts">
+export type RequestContentLocation = 'body' | 'params' | 'query';
+</file>
+
+<file path="src/middlewares/auth.middleware.ts">
+import { NextFunction, Response, Request } from 'express';
+import { config } from '@/utils/config.utils';
+⋮----
+import { HttpException } from '@exceptions/HttpException';
+import { logger } from '@/utils/logger.utils';
+import UserService from '@/services/users.service';
+import { CustomResponse } from '@/interfaces/response.interface';
+import { verify } from 'jsonwebtoken';
+import { DataStoredInToken, RequestWithUser } from '@interfaces/auth.interface';
+⋮----
+export const authInternalAccessTokenMiddleware = async (req: Request, res: Response, next: NextFunction) =>
+⋮----
+export const authMiddleware = async (req: RequestWithUser, res: CustomResponse, next: NextFunction) =>
+⋮----
+export const apiKeyAuthMiddleware = async (req: RequestWithUser, res: CustomResponse, next: NextFunction) =>
+</file>
+
+<file path="src/middlewares/context.middleware.ts">
+import context from '@/utils/cls.utils';
+</file>
+
+<file path="src/middlewares/encryption.middleware.ts">
+import { decrypt } from '@/utils/RSAEncryption';
+⋮----
+import { NextFunction, Request } from 'express';
+import { config } from '@utils/config.utils';
+import { HttpException } from '@exceptions/HttpException';
+import { CustomResponse } from '@/interfaces/response.interface';
+import { logger } from '@/utils/logger.utils';
+const payloadDecryptMiddleware = async (req: Request, res: CustomResponse, next: NextFunction) =>
+</file>
+
+<file path="src/middlewares/error.middleware.ts">
+import { NextFunction, Request, Response } from 'express';
+import { HttpException } from '@exceptions/HttpException';
+import { logger } from '@/utils/logger.utils';
+import { CustomResponse } from '@interfaces/response.interface';
+⋮----
+const errorMiddleware = (error: HttpException, req: Request, res: CustomResponse, next: NextFunction) =>
+</file>
+
+<file path="src/middlewares/response.middleware.ts">
+import { NextFunction, Request } from 'express';
+import { config } from '@/utils/config.utils';
+import { CustomResponse } from '@/interfaces/response.interface';
+import { encrypt } from '@/utils/RSAEncryption';
+import { logger } from '@/utils/logger.utils';
+⋮----
+interface ResponseObject {
+  ok: boolean;
+  err: any;
+  data: any;
+  code?: number;
+}
+⋮----
+function encryptionWrapper(data: ResponseObject): string
+⋮----
+function sendResponse(data: ResponseObject, isEncryption: boolean)
+⋮----
+// const responseData = sendResponse({ ok: true, err: null, data }, isEncryption);
+// res.resBody = responsesData;
+⋮----
+export const logResponse = (_, res: CustomResponse, next: NextFunction) =>
+⋮----
+// logger.info(
+//   `After Request: ${res.statusCode} ${res.statusMessage} ${res.get(
+//     'Content-Length',
+//   )} responseBody: ${JSON.stringify(res.resBody)}`,
+// );
+</file>
+
+<file path="src/middlewares/validation.middleware.ts">
+import { ParsedQs } from 'qs';
+⋮----
+import { RequestHandler, Request, NextFunction } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
+import { z } from 'zod';
+import { function as F, either as E } from 'fp-ts';
+⋮----
+import { parseZ, parseZodError } from '@utils/zod.utils';
+import { RequestContentLocation } from '@interfaces/zod.interface';
+import { CustomResponse } from '@interfaces/response.interface';
+import { logger } from '@/utils/logger.utils';
+⋮----
+export type APIResponseBodyFailure<T> = {
+  success: false;
+  result: null;
+  error: T;
+};
+⋮----
+export const validateRequest =
+  <T>({
+    requestContentLocation,
+    zodType,
+  }: {
+    requestContentLocation: RequestContentLocation;
+    zodType: z.ZodType<T>;
+}): RequestHandler
+⋮----
+export const validateRequestBody = <T>(zodType: z.ZodType<T>): RequestHandler<any, any, T, any, any>
+⋮----
+export const validateRequestQueries = <T extends ParsedQs>(
+  zodType: z.ZodType<T>,
+): RequestHandler<any, any, any, T, any> => validateRequest(
+⋮----
+export const validateRequestParams = <T extends ParamsDictionary>(
+  zodType: z.ZodType<T>,
+): RequestHandler<T, any, any, any, any> => validateRequest(
+⋮----
+// export const transformToAPIFailureResponse: ErrorRequestHandler<any, APIResponseBodyFailure<unknown>> = (
+//   err,
+//   _,
+//   res,
+//   next,
+// ) => {
+//   if (err instanceof RequestValidationError) {
+//     const { requestContentLocation: location, zodError } = err;
+⋮----
+//     return res.status(400).json({
+//       success: false,
+//       result: null,
+//       error: {
+//         location,
+//         zodErrors: zodError.errors,
+//       },
+//     });
+//   }
+⋮----
+//   // Handle other errors here.
+⋮----
+//   return next(err);
+// };
+</file>
+
+<file path="src/redis/cache.service.ts">
+import { logger } from '@/utils/logger.utils';
+import redis from '@/redis/index';
+⋮----
+type CacheOptions = {
+  ttlSeconds?: number;
+  refreshOnEvent?: boolean;
+  keyPrefix?: string;
+};
+⋮----
+const defaultTTL = 60 * 60 * 24 * 7; // 7 days
+⋮----
+export const buildKey = (key: string, prefix = '') => `$
+⋮----
+export const setCache = async (key: string, value: any, options?: CacheOptions) =>
+⋮----
+export const getCache = async <T = any>(key: string, options?: CacheOptions): Promise<T | null> =>
+⋮----
+export const deleteCache = async (key: string, prefix = '') =>
+⋮----
+/**
+ * Delete cache keys by pattern (supports wildcards)
+ * This is specifically for pattern-based deletion without affecting the original deleteCache function
+ */
+export const deleteCacheByPattern = async (keyPattern: string) =>
+⋮----
+// Check if key contains wildcard pattern
+⋮----
+// Use SCAN to find matching keys and delete them
+⋮----
+// Direct key deletion
+⋮----
+/**
+ * Delete multiple cache keys by patterns
+ */
+export const deleteCachePatterns = async (patterns: string[]) =>
+⋮----
+/**
+ * Get from cache or set it if not found
+ */
+export const getOrSetCache = async <T = any>(key: string, fetchFn: () => Promise<T>, options?: CacheOptions): Promise<T | null> =>
+</file>
+
+<file path="src/redis/index.ts">
+import { config } from '@/utils/config.utils';
+import Redis from 'ioredis';
+⋮----
+// Add error handling
+</file>
+
+<file path="src/routes/auth.route.ts">
+import { Router } from 'express';
+import AuthController from '@/controllers/auth.controller';
+import { Routes } from '@interfaces/routes.interface';
+import { authMiddleware } from '@middlewares/auth.middleware';
+import { userSignInSchemaZ, userSignUpSchemaZ } from '@dtos/auth.dtos';
+import { validateRequestBody } from '@middlewares/validation.middleware';
+⋮----
+class AuthRoute implements Routes
+⋮----
+constructor()
+⋮----
+private initializeRoutes()
+</file>
+
+<file path="src/routes/dsa.route.ts">
+import { Router } from 'express';
+import DsaController from '@controllers/dsa.controller';
+import { Routes } from '@interfaces/routes.interface';
+import { validateRequestBody, validateRequestParams, validateRequestQueries } from '@middlewares/validation.middleware';
+import {
+  CreatePaymentSchemaZ,
+  UploadCommissionInvoiceSchemaZ,
+  UploadLeadsSchemaZ,
+  DsaQuerySchemaZ,
+  UpdateCommissionStatusSchemaZ,
+  UpdatePaymentStatusSchemaZ,
+  QueueDsaLeadListReportSchemaZ,
+  RequestLeadDownloadSchemaZ,
+} from '@/dtos/request/dsa.dtos';
+import { UpdateCommissionSchemaZ } from '@/dtos/users.dtos';
+import { authMiddleware } from '@middlewares/auth.middleware';
+⋮----
+class DsaRoute implements Routes
+⋮----
+constructor()
+private initializeRoutes()
+</file>
+
+<file path="src/routes/index.route.ts">
+import { Router } from 'express';
+import IndexController from '@controllers/index.controller';
+import { Routes } from '@interfaces/routes.interface';
+⋮----
+class IndexRoute implements Routes
+⋮----
+constructor()
+private initializeRoutes()
+</file>
+
+<file path="src/routes/media.route.ts">
+import { Router } from 'express';
+import MediaController from '@controllers/media.controller';
+import { Routes } from '@interfaces/routes.interface';
+import { validateRequestBody, validateRequestParams, validateRequestQueries } from '@middlewares/validation.middleware';
+import { authMiddleware } from '@/middlewares/auth.middleware';
+import { MediaUploadSchemaZ } from '@/dtos/request/media.dtos';
+⋮----
+class MediaRoute implements Routes
+⋮----
+constructor()
+private initializeRoutes()
+</file>
+
+<file path="src/routes/user.route.ts">
+import { Router } from 'express';
+import UserController from '@/controllers/users.controller';
+import { Routes } from '@interfaces/routes.interface';
+import { ActivateUserSchemaZ, ProfileSchemaZ, BankDetailsSchemaZ, BusinessDetailsSchemaZ, UpdateCommissionSchemaZ } from '@dtos/users.dtos';
+import { validateRequestBody } from '@middlewares/validation.middleware';
+import { apiKeyAuthMiddleware, authMiddleware } from '@middlewares/auth.middleware';
+⋮----
+class UserRoute implements Routes
+⋮----
+constructor()
+private initializeRoutes()
+⋮----
+// Product User
+⋮----
+// search name
+</file>
+
+<file path="src/scripts/uploadFileTest.js">
+function extractKeyFromPresignedUrl(presignedUrl)
+⋮----
+return urlObj.pathname.substring(1); // Remove leading '/' from pathname to get the key
+⋮----
+function getDownloadUrlFromPresignedUrl(presignedUrl)
+⋮----
+// Extract the bucket name from the hostname (e.g., "your-bucket-name.s3.amazonaws.com")
+⋮----
+// Extract the key from the pathname (removing leading '/')
+const key = urlObj.pathname.substring(1); // Remove leading '/'
+⋮----
+// Construct the download URL (this URL will work for publicly accessible objects)
+⋮----
+// Upload file to S3 using presigned URL
+async function uploadImageToS3(filePath, presignedUrl)
+⋮----
+// Get the file type
+const fileType = path.extname(filePath).substring(1); // e.g., 'jpg', 'png'
+⋮----
+// Upload the file
+⋮----
+'Content-Type': `image/${fileType}`, // Set content type based on file type
+'Content-Length': fs.statSync(filePath).size, // Set content length
+⋮----
+// Usage Example
+const filePath = '/Users/somveersharma/Downloads/leads-demo.xlsx'; // Local file path
+</file>
+
+<file path="src/services/cronJobs/cronJobs.service.ts">
+import { createJob } from '@utils/cron.utils';
+import DsaService from '@services/dsa.service';
+import UserService from '@services/users.service';
+class CronJobService
+⋮----
+constructor()
+⋮----
+// Schedule cron jobs
+⋮----
+public commissionGeneration()
+⋮----
+// Generate the commission every month
+</file>
+
+<file path="src/services/auth.service.ts">
+import { sign } from 'jsonwebtoken';
+import { UserConstant } from '@constants';
+⋮----
+import { config } from '@utils/config.utils';
+import { logger } from '@/utils/logger.utils';
+⋮----
+import UserRepository from '@repository/users.repository';
+⋮----
+import { IServiceResponse } from '@interfaces/service.interface';
+import { DataStoredInToken, TokenData } from '@interfaces/auth.interface';
+import { ISignInUser, ISignUpUser, ISignInResponse, IVerifyOTP } from '@interfaces/users.interface';
+⋮----
+import UserService from '@services/users.service';
+import OTPService from '@services/otp.service';
+import RamfinUserRepository from '@/database/repository/ramfinUser.repository';
+import { RamfinUser } from '@/database/entity/ramfinUser.entity';
+import { UserRole } from '@/enums/user.enum';
+⋮----
+import { Platform } from '@/enums/utm.enum';
+⋮----
+class AuthService
+⋮----
+public async signupOTP(userData: ISignUpUser): Promise<IServiceResponse<ISignInResponse>>
+⋮----
+// ramfinUser = await this.ramfinUserRepository.createRamfinUser({
+//   ...ramfinUser,
+//   phoneNo: userData.phone,
+//   email: userData.email.toLowerCase().trim(),
+//   username: userData.email,
+//   referralCode: userData.referralCode ? userData.referralCode : null,
+//   utmSource: userData.utmCode ? userData.utmCode : 'RF' + maxUserID,
+//   role: userData.role ? (userData.role as UserRole) : 'DSA',
+//   name: userData.email.split('@')[0]
+// });
+⋮----
+public async signInOTP(userData: ISignInUser): Promise<IServiceResponse<ISignInResponse>>
+⋮----
+// console.log(userRes, ramfinUser);
+⋮----
+public async signupVerifyOTP(userData: IVerifyOTP): Promise<IServiceResponse<ISignInResponse>>
+⋮----
+public async signIn(email: string): Promise<IServiceResponse<ISignInResponse>>
+⋮----
+public async signOut(userData: ISignInUser): Promise<IServiceResponse<ISignInResponse>>
+⋮----
+public createToken(userId): TokenData
+⋮----
+public createCookie(tokenData: TokenData): string
+</file>
+
+<file path="src/services/axios.service.ts">
+import axios, { AxiosError, AxiosHeaders, AxiosInstance, AxiosRequestConfig, AxiosResponse, RawAxiosRequestHeaders } from 'axios';
+import { InternalServerError } from '../utils/error/api-errors/internalServerError';
+import { logger } from '@/utils/logger.utils';
+⋮----
+export default class AxiosService
+⋮----
+constructor(serviceUrl: string)
+⋮----
+async call<T = unknown, D = unknown, P = unknown>(
+    method: 'get' | 'post' | 'delete',
+    url: string,
+    data?: D,
+    params?: P,
+    headers?: Partial<RawAxiosRequestHeaders>,
+): Promise<
+</file>
+
+<file path="src/services/dsa.service.ts">
+import { endOfMonth, startOfMonth, subMonths } from 'date-fns';
+⋮----
+import { config } from '@utils/config.utils';
+import { logger } from '@/utils/logger.utils';
+⋮----
+import { IServiceResponse } from '@interfaces/service.interface';
+import { ISignInUser, ISignUpUser, ISignInResponse, IVerifyOTP } from '@interfaces/users.interface';
+import {
+  ICreatePaymentRequest,
+  IQueueDsaLeadListReportRequest,
+  IUpdateCommissionStatusRequest,
+  IUpdatePaymentStatusRequest,
+  IUploadCommissionInvoicesRequest,
+  IUploadLeadsRequest,
+  LeadStatusFilter,
+  LeadStatusFilterV2,
+} from '@/interfaces/dsa.interface';
+import { LeadFilesRepository } from '@/database/repository/leadFiles.repository';
+import { UserLeadsRepository } from '@/database/repository/userLeads.repository';
+import { LeadFiles } from '@/database/entity/leadFiles.entity';
+import { UserLeads } from '@/database/entity/userLeads.entity';
+import { getFileStreamFromBucket, getPresignedDownloadUrl, uploadToS3FromBuffer, generateFileName } from '@/utils/aws/S3';
+import { User } from '@/database/entity/user.entity';
+import UserRepository from '@/database/repository/users.repository';
+import ProfileRepository from '@/database/repository/profile.repository';
+⋮----
+import LeadApiGatewayService, { LeadData } from '@services/leadApigateway.service';
+import CommissionReportRepository from '@/database/repository/commissionReport.repository';
+import CommissionPaymentRepository from '@/database/repository/commissionPayment.repository';
+import CrmLeadsAndCommissionReportRepository from '@database/repository/crmLeadsAndCommissionReports.repository.ts';
+import BusinessDetailsRepository from '@/database/repository/businessDetails.repository';
+import { UpdateCommissionStatus } from '@/dtos/request/dsa.dtos';
+import { CommissionReport, CommissionStatus } from '@/database/entity/commissionReport.entity';
+import { da } from 'date-fns/locale';
+import { PaymentStatus } from '@/database/entity/commissionPayment.entity';
+import { formatToIndianCurrency } from '@/utils/string.utils';
+import { sendMessageToQueueName } from '@/utils/aws/sqs';
+import { sqsEvents } from '@/constants/sqsEvents';
+import LeadDownloadRecordRepository from '@/database/repository/leadDownloadRecord.repository';
+import { sendEmail } from '@/utils/aws/ses';
+import AxiosService from './axios.service';
+import { ISendingEmailBody } from '@/interfaces/notification.interface';
+⋮----
+interface ExcelRowValidationResult {
+  isValid: boolean;
+  errors: { [header: string]: string };
+  rowData: Partial<UserLeads>;
+}
+⋮----
+const formatDate = date => {
+  const year = date.getFullYear();
+⋮----
+const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are zero-based
+⋮----
+class DsaService
+⋮----
+public async uploadLeads(file: IUploadLeadsRequest): Promise<IServiceResponse<ISignInResponse>>
+⋮----
+public async getUploadList(userId: string): Promise<IServiceResponse<any>>
+⋮----
+public async getUploadListDownload(leadFileId: number, status: 'SUCCESS' | 'FAILED'): Promise<IServiceResponse<any>>
+⋮----
+// Add data row
+⋮----
+public async getLeadFileStatus(userId: string)
+⋮----
+public async validateAndSaveLeads(leadFileId: number): Promise<IServiceResponse<ISignInResponse>>
+⋮----
+public async createLeads(userLeadId: number): Promise<IServiceResponse<ISignInResponse>>
+⋮----
+private validateAmount(amount: any): number | string
+⋮----
+private validateDateString(dateString: string): Date | string
+⋮----
+private isValidPhoneNumber(phoneNumber: any)
+⋮----
+public async uploadCommissionInvoice(file: IUploadCommissionInvoicesRequest): Promise<IServiceResponse<any>>
+⋮----
+public async createPayment(payment: ICreatePaymentRequest): Promise<IServiceResponse<any>>
+⋮----
+public async getDsaDetail(userId: string, startDate: Date, endDate: Date, leadFilter?: 'disbursal' | 'leads'): Promise<IServiceResponse<any>>
+⋮----
+// we store the utm code in user utm link table, but here we are sending the user(dsa) specific utm_code that is profile.utm_code
+// console.log('Profile : ', profile);
+⋮----
+public async getDsaReport(userId: string, startDate: Date, endDate: Date, leadFilter?: 'disbursal' | 'leads'): Promise<IServiceResponse<any>>
+⋮----
+// we store the utm code in user utm link table, but here we are sending the user(dsa) specific utm_code that is profile.utm_code
+// console.log('Profile : ', profile);
+⋮----
+public async getDsaReportData(userId: string, startDate: Date, endDate: Date): Promise<IServiceResponse<any>>
+⋮----
+public async getDsaLeadList(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    filter?: LeadStatusFilter,
+    pageSize?: number,
+    pageNumber?: number,
+    leadFilter?: 'disbursal' | 'leads',
+): Promise<IServiceResponse<any>>
+⋮----
+public async enqueueDsaLeadListReport(payload: IQueueDsaLeadListReportRequest): Promise<IServiceResponse<any>>
+⋮----
+public async getDSAMerchantList(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    filter?: LeadStatusFilter,
+    pageSize?: number,
+    mobile?: number,
+    email?: string,
+    pageNumber?: number,
+    leadFilter?: 'disbursal' | 'leads',
+): Promise<IServiceResponse<any>>
+⋮----
+public async getDsaLeadListDownload(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    status?: LeadStatusFilter,
+    leadFilter?: 'disbursal' | 'leads',
+): Promise<IServiceResponse<
+⋮----
+// Add data row
+⋮----
+public async generateCommission(userId: string): Promise<IServiceResponse<any>>
+⋮----
+// console.log(disbursedAmount, commission, gst, gstAmount, tdsAmount, totalCommission);
+⋮----
+public async getCommissionReports(userId: string, pageNumber = 1, pageSize = 10): Promise<IServiceResponse<any>>
+⋮----
+public async updateCommissionStatus(userData: IUpdateCommissionStatusRequest): Promise<IServiceResponse<CommissionReport>>
+⋮----
+public async updatePaymentStatus(userData: IUpdatePaymentStatusRequest): Promise<IServiceResponse<CommissionReport>>
+⋮----
+public async requestLeadDownload(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    leadFilter: 'disbursal' | 'leads',
+    status?: LeadStatusFilterV2,
+    recordId?: number,
+): Promise<IServiceResponse<any>>
+⋮----
+// API flow: fire-and-forget background processing
+⋮----
+// Consumer flow: process and await completion on the existing record
+⋮----
+public async processQueuedLeadDownload(payload: IQueueDsaLeadListReportRequest &
+⋮----
+private async _processLeadDownload(
+    recordId: number,
+    user: any,
+    profile: any,
+    startDate: Date,
+    endDate: Date,
+    leadFilter: 'disbursal' | 'leads',
+    fileName: string,
+    status?: LeadStatusFilterV2,
+): Promise<void>
+⋮----
+// Write to buffer (memory-efficient: no temp file on disk)
+⋮----
+// Send email if user has an email address
+⋮----
+//         await sendEmail({
+//           senderEmail: config.emailData.fromEmail,
+//           recipientEmail: [user.email],
+//           subject: { Data: 'Your Lead Report is Ready' },
+//           body: {
+//             Html: {
+//               Data: `<p>Hi ${profile.firstName || user.name || 'there'},</p>
+// <p>Your lead report for the period <strong>${startDate.toISOString().split('T')[0]}</strong> to <strong>${
+//                 endDate.toISOString().split('T')[0]
+//               }</strong> is ready.</p>
+// <p><a href="${presignedUrl}">Click here to download your report</a> (link valid for 1 hour).</p>
+// <p>You can also download it anytime from the Downloads section in your app.</p>
+// <p>Regards,<br/>Team Ramfin</p>`,
+//             },
+//           },
+//         });
+⋮----
+public async getLeadDownloadHistory(userId: string): Promise<IServiceResponse<any>>
+⋮----
+public async getLeadDownloadPresignedUrl(recordId: number): Promise<IServiceResponse<any>>
+⋮----
+public async downloadDocument(url: string): Promise<IServiceResponse<any>>
+</file>
+
+<file path="src/services/generateQr.service.ts">
+import QRCode from 'qrcode';
+import { createCanvas, loadImage } from 'canvas';
+import path from 'path';
+import fs from 'fs';
+⋮----
+const generateQrs = (
+⋮----
+// this function is for QR generate during add on people use case
+// I just found the code in the internet. :)
+⋮----
+// replace ?
+⋮----
+// write the image file
+⋮----
+const create = async (QRCode, createCanvas, loadImage, dataForQRcode, center_image, width, cwidth) =>
+</file>
+
+<file path="src/services/leadApigateway.service.ts">
+import { IServiceResponse } from '@/interfaces/service.interface';
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { config } from '@utils/config.utils';
+import { logger } from '@/utils/logger.utils';
+⋮----
+// Define an interface for the lead data
+export interface LeadData {
+  name: string;
+  mobile: string;
+  loanAmount: string;
+  email: string;
+  employeeType: string;
+  dob: string;
+  utmCode: string;
+}
+⋮----
+// Utility class to manage API interactions
+class LeadApiGatewayService
+⋮----
+constructor()
+⋮----
+// Method to make the API request
+public async createLead(leadData: LeadData): Promise<IServiceResponse<any>>
+public async sendMobileOTP(mobile: string, otp: string): Promise<IServiceResponse<any>>
+</file>
+
+<file path="src/services/otp.service.ts">
+import { NotificationUtils, notificationUtils } from './../utils/notification';
+⋮----
+import OTPRepository from '@/database/repository/otp.repository';
+import { EmailData } from '@/interfaces/nodemailer.interface';
+import { logger } from '@/utils/logger.utils';
+import { IServiceResponse } from '@interfaces/service.interface';
+import { transporter } from '@utils/nodemailer';
+import { config } from '@utils/config.utils';
+import { v4 as UUID } from 'uuid';
+import AxiosService from './axios.service';
+import { ISendingEmailBody, ISendingSMSBody } from '@/interfaces/notification.interface';
+⋮----
+function maskEmail(email: string)
+⋮----
+function maskPhoneNumber(phone)
+⋮----
+class OTPService
+⋮----
+public async sendOTP(phoneNo: string, toemail: string, fromEmail: string): Promise<IServiceResponse>
+⋮----
+// Send OTP to the phone number
+// send OTP to email address
+⋮----
+// await this.leadApiGatewayService.sendMobileOTP(phoneNo, otp.toString());
+⋮----
+public async sendOTPV2(phoneNo: string, toemail: string, fromEmail: string): Promise<IServiceResponse>
+⋮----
+expiresAt: new Date(Date.now() + 60 * 1000 * 2), // 120 second expire
+⋮----
+// const mobileBody = {
+//   mobile: Number(phoneNo),
+//   otp: Number(otp),
+//   body_message: message,
+//   template_id: creds?.template_id,
+//   dlttempid: creds?.dlttempid,
+//   entity_id: creds?.entity_id,
+//   sender: creds.sender,
+//   vendor,
+//   otpLogPlatform,
+//   username: creds?.username,
+//   pass: creds?.pass,
+// };
+⋮----
+// await this.apiService.call<undefined, ISendingSMSBody, undefined>('post', `/notificationService/sending_sms`, mobileBody, undefined, {
+//   'Content-Type': 'application/json',
+// });
+⋮----
+public async verifyOTP(requestId: string, otp: string): Promise<IServiceResponse>
+⋮----
+// For development purposes, we allow any OTP
+</file>
+
+<file path="src/services/s3MediaUpload.service.ts">
+import {
+  completeMultipartUpload,
+  generatePresignedUrl,
+  generatePresignedUrlForMultipartUpload,
+  getMultipartUploadPartsStatus,
+  initiateMultipartUpload,
+} from '@utils/aws/S3';
+import { config } from '@/utils/config.utils';
+import { IMediaUploadRequest } from '@/interfaces/media.interface';
+import { IServiceResponse } from '@/interfaces/service.interface';
+⋮----
+class S3MediaUploadService
+⋮----
+// TODO: 1. save type in constants 2. Create a table for management of multipart uploading
+⋮----
+expires = 3600 /* in seconds */,
+</file>
+
+<file path="src/services/users.service.ts">
+import { User } from '@entity/user.entity';
+import { UserRole, UserStatus } from '@/enums/user.enum';
+import { Platform } from '@/enums/utm.enum';
+import UserRepository from '@repository/users.repository';
+import { IServiceResponse } from '@interfaces/service.interface';
+import {
+  IActivateUserRequest,
+  IBankDetailsRequest,
+  IBusinessDetailsRequest,
+  IProfileRequest,
+  ISignUpUser,
+  IUpdateCommissionsRequest,
+} from '@/interfaces/users.interface';
+import ProfileRepository from '@/database/repository/profile.repository';
+import { Profile } from '@database/entity/profile.entity';
+import BusinessDetailsRepository from '@/database/repository/businessDetails.repository';
+import BankDetailsRepository from '@/database/repository/bankDetails.repository';
+import { BusinessDetails } from '@/database/entity/businessDetails.entity';
+import { BankDetails } from '@/database/entity/bankDetails.entity';
+import { logger } from '@/utils/logger.utils';
+import { config } from '@/utils/config.utils';
+import RamfinUserRepository from '@/database/repository/ramfinUser.repository';
+import CommissionSlabRepository from '@/database/repository/commissionSlab.repository';
+import UserUtmLinkRepository from '@/database/repository/userUtmLink.repository';
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { QRCodeCanvas } from '@loskir/styled-qr-code-node';
+import moment from 'moment';
+import { IUserUtmLinkDTO, IUserUtmLinkRow } from '@/interfaces/utm.interface';
+import UserAttributionRepository from '@/database/repository/userAttributions.repository';
+import LeadsRepository from '@/database/repository/leads.repository';
+⋮----
+import { maskMobile } from '@/utils/string.utils';
+⋮----
+class UserService
+⋮----
+public async findUserById(userId: string): Promise<IServiceResponse<User>>
+⋮----
+public async findOneByOptions(options: Partial<User>): Promise<User | undefined>
+⋮----
+public async findUserDataById(userId: string): Promise<IServiceResponse<User>>
+⋮----
+// const findOneUTM = await this.userUtmLinkRepository.findOneByOptions({ userId: (user?.internalUserId).toString() });
+// user.utmLink = findOneUTM ? findOneUTM.utmLink : '';
+⋮----
+public async searchUser(searchBy: 'mobile' | 'aadhaar', value: string): Promise<IServiceResponse<User>>
+⋮----
+public async searchUsersByName(search: string): Promise<IServiceResponse<any>>
+⋮----
+// return { ok: false, err: "Error fetching users" };
+⋮----
+async getDisbursedLeadsByUtmSource(userName?: string): Promise<IServiceResponse<any>>
+⋮----
+// 👇 Use HAVING instead of WHERE for aggregated/group filtering
+⋮----
+return { ok: true, data: names }; // return full data, not only names
+⋮----
+public async getDsaUsers(pageSize: number, pageNumber: number, role: UserRole, filters: any): Promise<IServiceResponse<any>>
+⋮----
+public async getDsaDropdownUsers(role: UserRole): Promise<IServiceResponse<any>>
+⋮----
+// public generateQrCode = () => {};
+⋮----
+public async generateQRCodeWithIcon(utmCode: string): Promise<IServiceResponse<any>>
+⋮----
+//"png" | "jpg" | "jpeg" | "pdf" | "svg"
+// await qrCode.toFile(`${utmCode}.svg`, 'svg');
+⋮----
+public async generateQRCodeWithIconV2(utmLink?: string): Promise<string>
+⋮----
+public async generateUtmLink(utmCode: string): Promise<IServiceResponse<
+⋮----
+// logger.info(`createLead: ${JSON.stringify(config)}`);
+⋮----
+public async generateUtmLink1(userId: string): Promise<IServiceResponse<any>>
+⋮----
+// logger.info(`createLead: ${JSON.stringify(config)}`);
+⋮----
+public async getUserByEmail(email: string): Promise<IServiceResponse<User>>
+⋮----
+public async createUser(userData: ISignUpUser): Promise<IServiceResponse<User>>
+⋮----
+// const response = await this.generateUtmLinkV2(userData.utmCode, userData.email.split('@')[0], Platform.WEBSITE, userData.internalUserId.toString());
+// if (response.ok) {
+//   userData.utmLink = response.data.utmLink;
+// }
+⋮----
+public async activateUser(userData: IActivateUserRequest): Promise<IServiceResponse>
+⋮----
+public async updateCommissionData(userData: IUpdateCommissionsRequest): Promise<IServiceResponse>
+⋮----
+public async createUserProfile(profileData: IProfileRequest): Promise<IServiceResponse>
+⋮----
+//TODO: write the code to create the profile, if profile is already created then copy all the new details and update it, maintaining the idompotency per userID
+⋮----
+//generate utm link
+⋮----
+public async addBusiness(businessData: IBusinessDetailsRequest): Promise<IServiceResponse>
+⋮----
+public async addBank(bankData: IBankDetailsRequest): Promise<IServiceResponse>
+⋮----
+// bank = await this.bankDetailsRepository.updateBankDetails(bank);
+⋮----
+// bank = await this.bankDetailsRepository.createBankDetails(bank);
+⋮----
+public async updateUser(userId: string, userData: ISignUpUser): Promise<IServiceResponse>
+⋮----
+// if (userData.name) newUserData.name = userData.name;
+⋮----
+/**
+   * Fetch all UTM links generated by a user from the database
+   * @param userId - Optional user ID to filter UTM links by user
+   * If not provided, fetches all UTM links
+   * @return A promise that resolves to an IServiceResponse containing the UTM links
+   */
+public async getUtmLinks(userId?: string): Promise<IServiceResponse<IUserUtmLinkDTO[]>>
+⋮----
+// const formattedLinks: IUserUtmLinkDTO[] = await Promise.all(
+//   utmLinks.map(async link => {
+//     const utmLinkTrim = link && link.utm_link ? link.utm_link.trim() : '';
+//     let qr = '';
+//     if (utmLinkTrim != '') {
+//       const generatedQr = await QRCode.toDataURL(utmLinkTrim);
+//       qr = generatedQr ? generatedQr : '';
+//     }
+//     // const qr = '';//await this.generateQRCodeWithIconV2(link.utm_link.toString());
+//     return {
+//       utmSource: link.utm_source,
+//       qrCode: qr ?? '',
+//       dsaName: link.dsa_name,
+//       platform: link.platform,
+//       utmLink: link.utm_link,
+//       userId: link.user_id,
+//       created: link.created ? moment(link.created).format('YYYY-MM-DD HH:mm') : null,
+//     };
+//   }),
+// );
+⋮----
+public async getQrcode(utmSource: string): Promise<IServiceResponse<
+⋮----
+/**
+   * Generate UTM Link
+   * @param utmSource - UTM Source (mandatory)
+   * @param dsaName - DSA Name (optional)
+   * @param platform - ENUM Platform (mandatory)
+   * @param userId - User ID
+   * @returns Promise with generated UTM link
+   */
+public async generateUtmLinkV2(
+    utmSource: string,
+    dsaName: string | undefined,
+    platform: Platform,
+    userId: string,
+    strict: boolean = false,
+): Promise<IServiceResponse<
+⋮----
+// Check if UTM link already exists for the given utmSource and platform
+⋮----
+// Also check in ramfinUser table if the utmSource already exists
+⋮----
+// Also check in userAttribution table if the utmSource already exists
+⋮----
+// Also check in leads table if the utmSource already exists
+⋮----
+function normalizeSource(src: string): string
+</file>
+
+<file path="src/utils/aws/S3.ts">
+import { v4 } from 'uuid';
+import { Readable } from 'stream';
+import { cwd } from 'process';
+import { GetObjectCommand, GetObjectCommandOutput, S3Client } from '@aws-sdk/client-s3';
+import path from 'path';
+import { config } from '@/utils/config.utils';
+⋮----
+export interface UploadFileToS3 {
+  localFilePath: string;
+  s3FilePath: string;
+  bucket: string;
+}
+⋮----
+export const getFileStream = async (bucket: string, pathKey: string): Promise<any> =>
+⋮----
+export function generateFileName(extension = 'xlsx'): string
+⋮----
+export function uploadToS3FromDisk(file: UploadFileToS3): Promise<any>
+⋮----
+export async function uploadToS3FromBuffer(
+  Key: string,
+  Bucket: string,
+  ContentType: string,
+  buffer: any,
+): Promise<string>
+⋮----
+// TODO: get file extension from s3 object
+export const downloadToDisk = (
+  bucket: string,
+  pathKey: string,
+  location = `${path.resolve(cwd(), '../')}`,
+  fileExtension = 'pdf',
+) =>
+⋮----
+export const generatePresignedUrl = ({
+  bucketName,
+  key,
+  expires = 3600 /* in seconds */,
+  contentType = 'video/webm',
+}) =>
+⋮----
+expires = 3600 /* in seconds */,
+⋮----
+export const initiateMultipartUpload = (
+⋮----
+export const generatePresignedUrlForMultipartUpload = ({
+  bucketName,
+  key,
+  expires = 3600 /* in seconds */,
+  partNumber,
+  uploadId,
+}) =>
+⋮----
+expires = 3600 /* in seconds */,
+⋮----
+export const completeMultipartUpload = (
+⋮----
+export const getMultipartUploadPartsStatus = (
+⋮----
+export const stopMultipartUpload = (
+⋮----
+export const getFileStreamFromBucket = (bucketName: string, key: string) =>
+⋮----
+export const getPresignedDownloadUrl = (bucketName: string, key: string, expires = 3600): Promise<string | null> =>
+</file>
+
+<file path="src/utils/aws/ses.ts">
+import { config } from '@/utils/config.utils';
+⋮----
+export const sendEmail = emailData => {
+  const params: AWS.SES.SendEmailRequest = {
+    Source: emailData.senderEmail,
+    Destination: {
+      ToAddresses: emailData.recipientEmail,
+    },
+    Message: {
+      Body: emailData.body,
+      Subject: emailData.subject,
+    },
+  };
+  return AWS_SES.sendEmail(params).promise();
+</file>
+
+<file path="src/utils/aws/sqs.ts">
+import AWS from 'aws-sdk';
+import { Producer } from 'sqs-producer';
+import { GetQueueUrlCommand, SQSClient, SendMessageCommand, SendMessageCommandInput } from '@aws-sdk/client-sqs';
+⋮----
+import { config } from '@utils/config.utils';
+⋮----
+export const getSQSClient: () => AWS.SQS = () =>
+⋮----
+// Create an SQS client
+⋮----
+// Example function to send a message
+export async function sendMessage(queueUrl: string, messageBody: string)
+⋮----
+export async function getQueueUrlByName(queueName: string): Promise<string>
+⋮----
+export async function sendMessageToQueueName(queueUrl: string, messageBody: string)
+⋮----
+// const queueUrl = await getQueueUrlByName(queueName);
+⋮----
+export function sendToAccountingQueue(messageBody: string)
+</file>
+
+<file path="src/utils/error/api-errors/customApiError.ts">
+export abstract class CustomApiError extends Error
+⋮----
+constructor(message: string)
+</file>
+
+<file path="src/utils/error/api-errors/internalServerError.ts">
+import { CustomApiError } from "../api-errors/customApiError";
+⋮----
+class InternalServerError extends CustomApiError
+⋮----
+constructor(message: string = 'Something went wrong!')
+</file>
+
+<file path="src/utils/error/error.ts">
+import { InternalServerError } from './api-errors/internalServerError'
+</file>
+
+<file path="src/utils/AESEncryption.ts">
+import { config } from '@/utils/config.utils';
+⋮----
+export function generateUniqueId(): string
+⋮----
+export function getBase64Payload(payload: string): string
+⋮----
+export function aes256cbcDecryption(key: Buffer, initVector: Buffer, encryptedString: Buffer): string
+⋮----
+export function generateSHA512Hash(input: Buffer, key: Buffer): Buffer
+⋮----
+export function getBase64DecodedValue2(payload: string): Buffer
+⋮----
+export function getDecryptedValue(base64Data: string): string
+⋮----
+export function getEncryptedValue(input: string): string
+⋮----
+export function aes256cbcEncryption(key: Buffer, initVector: Buffer, value: Buffer): Buffer
+⋮----
+export function getEncryptedObject(inputObject: Object): Object
+⋮----
+export function getDecryptedObject(inputObject: Object): Object
+</file>
+
+<file path="src/utils/cls.utils.ts">
+import { Request, Response, NextFunction } from 'express';
+import { createNamespace, Namespace } from 'cls-hooked';
+import { nanoid } from 'nanoid';
+⋮----
+// If we generate 100,000 ids per second, ~2 years needed, in order to have a 1% probability of at least one collision.
+</file>
+
+<file path="src/utils/config.utils.ts">
+import { cwd } from 'process';
+⋮----
+import fs from 'fs';
+import { IConfigApp, DeepPartial } from '@config/constraint';
+import defaultConstants from '@config/default';
+import customEvnVariables from '@config/custom-environment-variables';
+import { flattenObject, unFlattenObject, mergeDeep } from '@/helpers';
+⋮----
+function assignEnvs(customEvnVariables: object, nodeEnvObject: Object)
+⋮----
+function getEnvironmentVariables()
+⋮----
+function getEnvironmentConstants(environment: string): DeepPartial<IConfigApp>
+⋮----
+// TODO make import for constant file path dynamic
+⋮----
+const configInitialized = () =>
+</file>
+
+<file path="src/utils/context.utils.ts">
+import cls from '@utils/cls.utils';
+⋮----
+export const addToContext = <T>(key: string, value: T): void => cls.set(
+⋮----
+export const getFromContext = <T>(key: string): T | undefined => cls.get(
+⋮----
+export const getCorrelationId = (): string | undefined => cls.get(
+⋮----
+export const addUserToContext = (userInfo: any): void
+⋮----
+export const getUserFromContext = (): any
+</file>
+
+<file path="src/utils/cron.utils.ts">
+import { CronJob } from 'cron';
+⋮----
+export function createJob(cronTime: string, callback: () => void)
+⋮----
+export function stopJob(job: CronJob)
+</file>
+
+<file path="src/utils/logger.utils.ts">
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import winston from 'winston';
+import winstonDaily from 'winston-daily-rotate-file';
+import { config } from '@/utils/config.utils';
+⋮----
+// logs dir
+⋮----
+// Define log format
+⋮----
+/*
+ * Log Level
+ * error: 0, warn: 1, info: 2, http: 3, verbose: 4, debug: 5, silly: 6
+ */
+⋮----
+// debug log setting
+⋮----
+dirname: logDir + '/debug', // log file /logs/debug/*.log in save
+⋮----
+maxFiles: 30, // 30 Days saved
+⋮----
+// error log setting
+⋮----
+dirname: logDir + '/error', // log file /logs/error/*.log in save
+⋮----
+maxFiles: 30, // 30 Days saved
+</file>
+
+<file path="src/utils/mysql.utils.ts">
+import Knex, { Knex as KnexType } from 'knex';
+import { config } from '@/utils/config.utils';
+⋮----
+export function create()
+⋮----
+// acquireConnectionTimeout: 2000,
+</file>
+
+<file path="src/utils/nodemailer.ts">
+import nodemailer from 'nodemailer';
+import { AWS_SES } from '@utils/aws/ses';
+⋮----
+// create Nodemailer SES transporter
+</file>
+
+<file path="src/utils/notification.ts">
+import CredentialRepository from '@/database/repository/credential.repository';
+import SwitchThirdPartyApiRepository from '@/database/repository/switchThirdpartyApi.repository';
+import { ISMSResponse } from '@/interfaces/notification.interface';
+import { getOrSetCache } from '@/redis/cache.service';
+⋮----
+export enum OtpLogPlatform {
+  RAMFIN_WEB_VIEW = 'Ramfin'
+}
+⋮----
+export enum ApiType {
+  PANCARD = 'pancard',
+  SMS = 'sms'
+}
+⋮----
+export enum Status {
+  ACTIVE = 'Active',
+  DEACTIVE = 'Deactive',
+}
+⋮----
+export class NotificationUtils
+⋮----
+constructor()
+⋮----
+//Step 1: Get active vendor from cache or DB
+</file>
+
+<file path="src/utils/RSAEncryption.ts">
+import crypto, { generateKeyPairSync } from 'crypto';
+import path from 'path';
+import fs, { writeFileSync } from 'fs';
+import { Base64 } from 'aws-sdk/clients/ecr';
+⋮----
+export function generateKeys()
+⋮----
+function getEncryptedValue(payload: Buffer, publicKey: string)
+⋮----
+export function encrypt(payload: any, publicKey: string | undefined, keyPath: string | undefined): string
+⋮----
+// return Error('Please provide the private key or the path to the private key');
+⋮----
+function getDecryptedValue(payload: Buffer, privateKey: string)
+⋮----
+export function decrypt(payload: Base64, privateKey: Base64 | undefined, keyPath: string | undefined): string
+⋮----
+// return Error('Please provide the private key or the path to the private key');
+</file>
+
+<file path="src/utils/string.utils.ts">
+export const isValidMobileNo = (mobile: string): boolean =>
+⋮----
+export const isValidIfscCode = (ifscCode: string): boolean =>
+⋮----
+// export function formatToIndianCurrency(amount) {
+//   if (amount === null || amount === undefined || amount === '' || Number.isNaN(amount)) {
+//     return '0';
+//   }
+⋮----
+//   return amount
+//     .toString()
+//     .replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+//     .replace(/\d+/, n => n.replace(/(\d)(?=(\d\d)+\d$)/g, '$1,'));
+// }
+⋮----
+export function formatToIndianCurrency(number: any): string
+⋮----
+// Convert the number to a string
+⋮----
+// Check for negative numbers
+⋮----
+// Split the number into integer and fractional parts
+⋮----
+// If the integer part is less than or equal to 3 digits, return it as is
+⋮----
+// Extract the last three digits
+⋮----
+// Add commas after every two digits in the remaining digits
+⋮----
+// Combine the modified remaining digits with the last three digits
+⋮----
+// Add the negative sign back if the number was negative
+⋮----
+// Return the formatted number with the fractional part (if any)
+⋮----
+export function maskMobile(mobile: string): string
+⋮----
+const first = mobile.slice(0, 2);   // 86
+const last = mobile.slice(-4);      // 0443
+</file>
+
+<file path="src/utils/typeorm-migration.ts">
+import { AppDataSource } from './typeorm';
+</file>
+
+<file path="src/utils/typeorm.ts">
+import { config } from '@utils/config.utils';
+⋮----
+import { DataSource } from 'typeorm';
+import { User } from '@entity/user.entity';
+// import { BankStatement } from '@entity/bankStatement.entity';
+// import { BankStatementTransaction } from '@entity/bankStatementTransaction.entity';
+// import { CrmTransaction } from '@/database/entity/crmTransaction.entity';
+// import { TransactionMatch } from '@/database/entity/transactionMatch.entity';
+import { S3MediaMetadata } from '@/database/entity/s3MediaMetadata.entity';
+// import { RamfinUser } from '@/database/entity/ramfinUser.entity';
+import { Otp } from '@/database/entity/otp.entity';
+import { Profile } from '@/database/entity/profile.entity';
+import { BusinessDetails } from '@/database/entity/businessDetails.entity';
+import { BankDetails } from '@database/entity/bankDetails.entity';
+import { LeadFiles } from '@database/entity/leadFiles.entity';
+import { UserLeads } from '@/database/entity/userLeads.entity';
+import { CommissionReport } from '@/database/entity/commissionReport.entity';
+import { CommissionPayment } from '@/database/entity/commissionPayment.entity';
+import { RamfinUser } from '@/database/entity/ramfinUser.entity';
+import { CommissionSlab } from '@/database/entity/commissionsSlab.entity';
+import { UserUtmLink } from '@/database/entity/userUtmLink.entity';
+import { UserAttribution } from '@/database/entity/userAttribution.entity';
+import { LeadEntity } from '@/database/entity/leads.entity';
+import { LeadDownloadRecord } from '@/database/entity/leadDownloadRecord.entity';
+import { CredentialEntity } from '@/database/entity/credential.entity';
+import { SwitchThirdPartApiEntity } from '@/database/entity/switchThirdPartyApi.Entity';
+</file>
+
+<file path="src/utils/util.ts">
+/**
+ * @method isEmpty
+ * @param {String | Number | Object} value
+ * @returns {Boolean} true & false
+ * @description this value is Empty Check
+ */
+export const isEmpty = (value: string | number | object): boolean =>
+</file>
+
+<file path="src/utils/zod.utils.ts">
+import { either as E } from 'fp-ts';
+import { z } from 'zod';
+⋮----
+export const parseZ =
+<T>(zodType: z.ZodType<T>)
+⋮----
+export const parseZodError = (error: z.ZodError): string =>
+</file>
+
+<file path="src/app.ts">
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
+⋮----
+import cors from 'cors';
+import express, { Request } from 'express';
+import helmet from 'helmet';
+import hpp from 'hpp';
+import morgan from 'morgan';
+import swaggerJSDoc from 'swagger-jsdoc';
+import swaggerUi from 'swagger-ui-express';
+import { Routes } from '@interfaces/routes.interface';
+import errorMiddleware from '@middlewares/error.middleware';
+import { logger, stream } from '@/utils/logger.utils';
+import { config } from '@/utils/config.utils';
+import { AppDataSource, AppDataSourceRamfin } from '@/utils/typeorm';
+import requestContext from '@middlewares/context.middleware';
+import responseHandlers, { logResponse } from '@/middlewares/response.middleware';
+⋮----
+// Start cron jobs
+import CronJobsService from '@/services/cronJobs/cronJobs.service';
+⋮----
+class App
+⋮----
+constructor(routes: Routes[])
+⋮----
+public listen()
+⋮----
+public getServer()
+⋮----
+private connectToDatabase()
+⋮----
+private initializeMiddlewares()
+⋮----
+// Custom Response Handlers
+⋮----
+private initializeRoutes(routes: Routes[])
+⋮----
+private initializeSwagger()
+⋮----
+private initializeErrorHandling()
+⋮----
+private morgenSetup()
+⋮----
+// morgan.token('resHeaders', (_, res) => JSON.stringify(res.getHeaders()));
+⋮----
+// `[${tokens.date(req, res, 'iso')}]`,
+⋮----
+private startCronJobs()
+</file>
+
+<file path="src/consumer.ts">
+import { Consumer } from 'sqs-consumer';
+import { config } from '@utils/config.utils';
+import { logger } from '@utils/logger.utils';
+import router from '@/consumer/router';
+import { getSQSClient } from '@utils/aws/sqs';
+import { AppDataSource } from '@/utils/typeorm';
+⋮----
+pollingWaitTimeMs: 5000, // 5 seconds
+⋮----
+// app.on('error', err => {
+//   logger.error(err);
+// });
+⋮----
+// app.on('processing_error', err => {
+//   logger.error(err);
+// });
+// app.on('started', () => {
+//   AppDataSource.initialize()
+//     .then(() => logger.info('Mysql connected via Typeorm'))
+//     .catch(error => logger.error(error.stack));
+// });
+⋮----
+// app.start();
+</file>
+
+<file path="src/server.ts">
+import App from '@/app';
+import IndexRoute from '@routes/index.route';
+import UserRoute from '@routes/user.route';
+import AuthRoute from '@routes/auth.route';
+import MediaRoute from './routes/media.route';
+import DsaRoute from './routes/dsa.route';
+</file>
+
+<file path=".cgcignore">
+# Auto-generated by CodeGraphContext
+# Default ignore patterns for binary/media files
+# Add your own patterns below
+
+node_modules/
+venv/
+.venv/
+env/
+.env/
+dist/
+build/
+target/
+out/
+.git/
+__pycache__/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.mp4
+*.mp3
+*.zip
+*.tar
+*.gz
+</file>
+
+<file path=".dockerignore">
+# compiled output
+.vscode
+/node_modules
+
+# code formatter
+.eslintrc
+.eslintignore
+.editorconfig
+.huskyrc
+.lintstagedrc.json
+.prettierrc
+
+# test
+jest.config.js
+
+# docker
+Dockerfile
+docker-compose.yml
+</file>
+
+<file path=".editorconfig">
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+</file>
+
+<file path=".eslintignore">
+/dist
+</file>
+
+<file path=".eslintrc">
+{
+  "parser": "@typescript-eslint/parser",
+  "extends": ["prettier", "plugin:@typescript-eslint/recommended", "plugin:prettier/recommended"],
+  "parserOptions": {
+    "ecmaVersion": 2018,
+    "sourceType": "module"
+  },
+  "rules": {
+    "@typescript-eslint/explicit-member-accessibility": 0,
+    "@typescript-eslint/explicit-function-return-type": 0,
+    "@typescript-eslint/no-parameter-properties": 0,
+    "@typescript-eslint/interface-name-prefix": 0,
+    "@typescript-eslint/explicit-module-boundary-types": 0,
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/ban-types": "off",
+    "@typescript-eslint/no-var-requires": "off",
+    "@typescript-eslint/no-empty-interface": [
+      "error",
+      {
+        "allowSingleExtends": false
+      }
+    ]
+  }
+}
+</file>
+
+<file path=".gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+.DS_Store
+
+# Directory for instrumented libs generated by jscoverage/JSCover
+lib-cov
+
+# Coverage directory used by tools like istanbul
+coverage
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+.grunt
+
+# Bower dependency directory (https://bower.io/)
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons (https://nodejs.org/api/addons.html)
+build/Release
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Snowpack dependency directory (https://snowpack.dev/)
+web_modules/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+out
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+# Comment in the public line in if your project uses Gatsby and not Next.js
+# https://nextjs.org/blog/next-9-1#public-directory-support
+# public
+
+# vuepress build output
+.vuepress/dist
+
+# vuepress v2.x temp and cache directory
+.temp
+.cache
+
+# Docusaurus cache and generated files
+.docusaurus
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+.vscode
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# format
+.prettierrc
+</file>
+
+<file path=".huskyrc">
+{
+  "hooks": {
+    "pre-commit": "lint-staged"
+  }
+}
+</file>
+
+<file path=".lintstagedrc.json">
+{
+  "*.ts": [
+    "npm run lint"
+  ]
+}
+</file>
+
+<file path=".swcrc">
+{
+  "jsc": {
+    "parser": {
+      "syntax": "typescript",
+      "tsx": false,
+      "dynamicImport": true,
+      "decorators": true
+    },
+    "transform": {
+      "legacyDecorator": true,
+      "decoratorMetadata": true
+    },
+    "target": "es2017",
+    "externalHelpers": false,
+    "keepClassNames": true,
+    "loose": false,
+    "minify": {
+      "compress": false,
+      "mangle": false
+    },
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"],
+      "@config/*": ["config/*"],
+      "@helpers/*": ["helpers/*"],
+      "@controllers/*": ["controllers/*"],
+      "@dtos/*": ["dtos/*"],
+      "@exceptions/*": ["exceptions/*"],
+      "@interfaces/*": ["interfaces/*"],
+      "@middlewares/*": ["middlewares/*"],
+      "@routes/*": ["routes/*"],
+      "@services/*": ["services/*"],
+      "@utils/*": ["utils/*"],
+      "@database/*": ["database/*"],
+      "@entity/*": ["database/entity/*"],
+      "@repository/*": ["database/repository/*"],
+      "@constants": ["constants"],
+      "@MockedData/*": ["MockedData/*"]
+    }
+  },
+  "module": {
+    "type": "commonjs"
+  }
+}
+</file>
+
+<file path="docker-compose.yml">
+version: '3.8'
+services:
+  app:
+    container_name: app
+    restart: always
+    build: .
+    command: npm run start
+    volumes:
+      - .:/usr/app
+      - /usr/app/node_modules
+    ports:
+      - 8088:8088
+    depends_on:
+      - mongo
+      - mysql
+      - redis
+  mongo:
+    container_name: mongo
+    image: mongo
+    restart: always
+    volumes:
+      - $HOME/docker/volumes/mongo:/data/db
+    ports:
+      - 27017:27017
+  mysql:
+    container_name: mysql
+    image: biarms/mysql:5.7.30
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+    ports:
+      - 3306:3306
+  redis:
+    image: redis
+    ports:
+      - '6379:6379'
+</file>
+
+<file path="Dockerfile">
+FROM node:18.19.1 AS build
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+RUN npm run build
+
+
+EXPOSE 8080
+
+# # Start server in dev mode (nodemon) or prod mode (node)
+CMD ["npm", "run", "start"]
+</file>
+
+<file path="ecosystem.config.js">
+
+</file>
+
+<file path="knexfile.ts">
+import { config } from './src/utils/config.utils';
+</file>
+
+<file path="Makefile">
+# Builds the images required for the application
+build:
+	docker compose build --no-cache
+
+# rebuild images
+rebuild:
+	docker compose up -d --build
+
+# Creates containers, networks, volumes, etc. and start the containers
+run:
+	docker compose up -d
+
+# Start the stopped containers
+start:
+	docker compose start
+
+# Restart all containers
+restart:
+	docker compose restart
+
+# Stop the running containers
+stop:
+	docker compose stop
+
+# Stop and remove containers, networks, and non-persistent volumes
+down:
+	docker compose down
+</file>
+
+<file path="nodemon.json">
+{
+    "watch": [
+        "src",
+        ".env"
+    ],
+    "ext": "js,ts,json",
+    "ignore": [
+        "src/logs/*",
+        "src/**/*.{spec,test}.ts"
+    ],
+    "exec": "ts-node -r tsconfig-paths/register --transpile-only src/server.ts"
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "ramfin-tech-backend",
+  "version": "0.0.0",
+  "description": "ramfin-tech-backend application for upload and viewing the bank statements",
+  "author": "",
+  "license": "ISC",
+  "scripts": {
+    "migration:run": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/utils/typeorm-migration.ts",
+    "migration:revert": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:revert -d src/utils/typeorm-migration.ts",
+    "start": "npm run build && npm run migration:run && cross-env node dist/server.js",
+    "dev": "cross-env NODE_ENV=development nodemon",
+    "consumer:start": "npm run build && cross-env node dist/consumer.js",
+    "build": "swc src -d dist --source-maps --copy-files",
+    "build:tsc": "tsc && tsc-alias",
+    "test": "jest --forceExit --detectOpenHandles",
+    "lint": "eslint --ignore-path .gitignore --ext .ts src/",
+    "lint:fix": "npm run lint -- --fix",
+    "deploy:prod": "npm run build && npm run migration:run && pm2 start ecosystem.config.js --only prod",
+    "deploy:dev": "pm2 start ecosystem.config.js --only dev"
+  },
+  "prisma": {
+    "schema": "src/database/prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.210.0",
+    "@loskir/styled-qr-code-node": "^1.5.2",
+    "@types/cls-hooked": "^4.3.3",
+    "@types/config": "^3.3.0",
+    "@types/nodemailer": "^6.4.6",
+    "aws-sdk": "^2.1249.0",
+    "axios": "^1.7.9",
+    "base64url": "^3.0.1",
+    "bcrypt": "^5.0.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.0",
+    "cls-hooked": "^4.2.2",
+    "compression": "^1.7.4",
+    "config": "^3.3.8",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "cron": "^2.4.3",
+    "crypto": "^1.0.1",
+    "date-fns": "^2.29.3",
+    "dotenv": "^16.0.1",
+    "dotenv-safe": "^9.1.0",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.1",
+    "fp-ts": "^2.16.0",
+    "helmet": "^5.1.1",
+    "hpp": "^0.2.3",
+    "ioredis": "^5.2.4",
+    "jimp": "^1.6.0",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^2.3.0",
+    "knex-types": "^0.4.0",
+    "mongoose": "^6.7.0",
+    "morgan": "^1.10.0",
+    "mysql2": "^2.3.3",
+    "nanoid": "^3.3.6",
+    "nodemailer": "^6.8.0",
+    "nodemailer-express-handlebars": "^6.0.0",
+    "qrcode": "^1.5.4",
+    "sqs-consumer": "^10.3.0",
+    "sqs-producer": "^5.0.0",
+    "swagger-jsdoc": "^6.2.1",
+    "swagger-ui-express": "^4.5.0",
+    "typeorm": "^0.3.11",
+    "uuid": "^9.0.0",
+    "uuidv4": "^6.2.13",
+    "winston": "^3.8.1",
+    "winston-daily-rotate-file": "^4.7.1"
+  },
+  "devDependencies": {
+    "@swc/cli": "^0.1.57",
+    "@swc/core": "^1.2.220",
+    "@types/bcrypt": "^5.0.0",
+    "@types/compression": "^1.7.2",
+    "@types/cookie-parser": "^1.4.3",
+    "@types/cors": "^2.8.12",
+    "@types/express": "^4.17.13",
+    "@types/hpp": "^0.2.2",
+    "@types/jest": "^28.1.6",
+    "@types/jsonwebtoken": "^8.5.8",
+    "@types/mongoose": "^5.11.97",
+    "@types/morgan": "^1.9.4",
+    "@types/node": "^17.0.45",
+    "@types/supertest": "^2.0.12",
+    "@types/swagger-jsdoc": "^6.0.1",
+    "@types/swagger-ui-express": "^4.1.3",
+    "@typescript-eslint/eslint-plugin": "^5.29.0",
+    "@typescript-eslint/parser": "^5.29.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.20.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "husky": "^8.0.1",
+    "jest": "^28.1.1",
+    "lint-staged": "^13.0.3",
+    "node-config": "^0.0.2",
+    "node-gyp": "^9.4.1",
+    "nodemon": "^3.0.1",
+    "pm2": "^5.2.0",
+    "prettier": "^2.7.1",
+    "supertest": "^6.2.4",
+    "ts-jest": "^28.0.7",
+    "ts-node": "^10.9.1",
+    "tsc-alias": "^1.7.0",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^4.7.4",
+    "zod": "^3.21.4"
+  }
+}
+</file>
+
+<file path="README.md">
+# DSA-Backend
+
+# Project Setup
+
+1. npm install
+2. copy .env.template and to new file name .env
+    cp .env.template .env
+
+# start dev-server
+npm run dev
+
+# Start production server
+npm run start
+
+# build project
+npm run build
+
+## Database Changes
+### Create Migration (Development)
+
+To generate a new migration, run:
+
+```bash
+npx ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:generate src/database/migrations/<Migration-file-name> -d src/utils/typeorm-migration.ts
+```
+</file>
+
+<file path="swagger.yaml">
+tags:
+- name: users
+  description: users API
+
+paths:
+# [GET] users
+  /users:
+    get:
+      tags:
+      - users
+      summary: Find All Users
+      responses:
+        200:
+          description: 'OK'
+        500:
+          description: 'Server Error'
+
+schemes:
+ - https
+ - http
+</file>
+
+<file path="tsconfig.json">
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "target": "ES2019",
+    "lib": ["es2017", "esnext.asynciterable", "ES2021.String"],
+    "typeRoots": ["node_modules/@types"],
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "module": "commonjs",
+    "pretty": true,
+    "sourceMap": true,
+    "declaration": true,
+    "outDir": "dist",
+    "allowJs": true,
+    "noEmit": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "importHelpers": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"],
+      "@helpers/*": ["helpers/*"],
+      "@config/*": ["config/*"],
+      "@controllers/*": ["controllers/*"],
+      "@dtos/*": ["dtos/*"],
+      "@exceptions/*": ["exceptions/*"],
+      "@interfaces/*": ["interfaces/*"],
+      "@middlewares/*": ["middlewares/*"],
+      "@routes/*": ["routes/*"],
+      "@services/*": ["services/*"],
+      "@utils/*": ["utils/*"],
+      "@database/*": ["database/*"],
+      "@entity/*": ["database/entity/*"],
+      "@repository/*": ["database/repository/*"],
+      "@constants": ["constants"],
+      "@MockedData/*": ["MockedData/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.json"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/http",
+    "src/logs",
+    "src/tests"
+  ]
+}
+</file>
+
+</files>

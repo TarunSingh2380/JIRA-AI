@@ -1,0 +1,3174 @@
+<directory_structure>
+.github/
+  workflows/
+    deploy-main.yml
+    deploy-main2.yml
+src/
+  components/
+    forms/
+      ActionButton.jsx
+      ErrorMessage.jsx
+      Label.jsx
+      SubmitButton.jsx
+    shared/
+      Header.jsx
+      Layout.jsx
+      Loader.jsx
+      ProcessLoader.jsx
+      ProgressStepper.jsx
+    AadhaarOTPVerify.jsx
+    BankAccounts.jsx
+    ChangeLanguage.jsx
+    CkycOTP.jsx
+    CompleteEmandate.jsx
+    EmailOTPVerify.jsx
+    EMILoanDetails.jsx
+    EnterAadhaar.jsx
+    GoogleSignIn.jsx
+    InactivityLogout.jsx
+    Month12LoanRejectModal.jsx
+    PANConfirmation.jsx
+    ProgressiveWebApp.jsx
+    RatingReview.jsx
+    SpecialOfferTimer.jsx
+    UserConsent.jsx
+    VerifyOTP.jsx
+  events/
+    clevertapEvents.js
+  hooks/
+    useBackButtonLogout.jsx
+    useDisableLoader.jsx
+    usePageTracking.jsx
+    useStepper.jsx
+    useToast.jsx
+  i18n/
+    locales/
+      en.json
+      hi.json
+      ka.json
+    index.js
+  lib/
+    clevertap.js
+    razorpay.js
+  pages/
+    AadhaarVerification.jsx
+    AddBankAccount.jsx
+    AutoLogin.jsx
+    CameraPermission.jsx
+    DigilockerVerify.jsx
+    Disbursed.jsx
+    Emandate.jsx
+    EmploymentDetails.jsx
+    Finbox.jsx
+    FinboxError.jsx
+    FinboxStatus.jsx
+    KFS.jsx
+    LoanApproval.jsx
+    LoanRejected.jsx
+    Login.jsx
+    Logout.jsx
+    NotFound.jsx
+    PANVerify.jsx
+    PANVerifyRejected.jsx
+    PennyDrop.jsx
+    SelectTenure.jsx
+    Selfie.jsx
+    SelfieHyperVerge.jsx
+    SelfieHyperVergeResult.jsx
+    Stepper.jsx
+    YourEmail.jsx
+  redux/
+    slices/
+      appSlice.js
+      userSlice.js
+    store.js
+  routes/
+    AppRoutes.jsx
+    ProtectedRoutes.jsx
+  services/
+    dashboardService.js
+    userService.js
+  styles/
+    global.css
+  utils/
+    apiClient.js
+    encryption.js
+    env.js
+    helper.js
+    storage.js
+    validation.js
+  App.jsx
+  index.css
+  main.jsx
+.cgcignore
+.gitignore
+dev.txt
+eslint.config.js
+index.html
+package.json
+README.md
+vite.config.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".github/workflows/deploy-main.yml">
+name: Deploy to main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, jenkins-server]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy latest code
+        run: |
+          echo ">>> Switching to project directory"
+          cd /home/ubuntu/api_code/onboarding_service_frontend
+
+          echo ">>> Fetching latest code from master branch"
+          git pull origin main
+
+          echo ">>> Install dependency"
+          npm install --legacy-peer-deps
+          CI=false npm run build
+
+          echo ">>> rm from s3"
+          aws s3 rm s3://loan.ramfincorp.com --recursive
+
+          echo ">>> upload on s3"
+          aws s3 cp dist/ s3://loan.ramfincorp.com/ --recursive
+          
+          aws cloudfront create-invalidation --distribution-id E43AFN6BHKN1A --paths "/*" --profile default
+          
+          echo ">>> Showing last 10 commits"
+          git log -10 --oneline
+          echo ">>> Deployment completed successfully!"
+</file>
+
+<file path=".github/workflows/deploy-main2.yml">
+name: Deploy to main2
+
+on:
+  push:
+    branches:
+      - main2
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, jenkins-server]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy latest code
+        run: |
+          echo ">>> Switching to project directory"
+          cd /home/ubuntu/api_code/onboarding_service_frontend_hyperverge
+
+          echo ">>> Fetching latest code from master branch"
+          git pull origin main2
+
+          echo ">>> Install dependency"
+          npm install --legacy-peer-deps
+          CI=false npm run build
+
+          echo ">>> rm from s3"
+          aws s3 rm s3://onboarding-applyloan.ramfincorp.com/ --recursive
+
+          echo ">>> upload on s3"
+          aws s3 cp dist/ s3://onboarding-applyloan.ramfincorp.com/ --recursive
+          
+          aws cloudfront create-invalidation --distribution-id EHSJYVGHQ2QBC --paths "/*" --profile default
+          
+          echo ">>> Showing last 10 commits"
+          git log -10 --oneline
+          echo ">>> Deployment completed successfully!"
+</file>
+
+<file path="src/components/forms/ActionButton.jsx">
+export default function ActionButton(
+</file>
+
+<file path="src/components/forms/ErrorMessage.jsx">
+export default function ErrorMessage(
+</file>
+
+<file path="src/components/forms/Label.jsx">
+export default function Label(
+</file>
+
+<file path="src/components/forms/SubmitButton.jsx">
+export default function SubmitButton(
+</file>
+
+<file path="src/components/shared/Header.jsx">
+export default function Header(
+⋮----
+{/* Back Icon */}
+⋮----
+{/* Title */}
+⋮----
+{/* Help Icon */}
+⋮----
+{/* Skip */}
+</file>
+
+<file path="src/components/shared/Layout.jsx">
+export default function Layout(
+</file>
+
+<file path="src/components/shared/Loader.jsx">
+export default function Loader()
+</file>
+
+<file path="src/components/shared/ProcessLoader.jsx">
+export default function ProcessLoader(
+⋮----
+{/* Loader Animation */}
+⋮----
+{/* Rotating ring */}
+⋮----
+{/* Outer ripple */}
+⋮----
+{/* Center icon */}
+⋮----
+{/* Text message */}
+⋮----
+{/* Loading dots */}
+</file>
+
+<file path="src/components/shared/ProgressStepper.jsx">
+export default function ProgressStepper(
+⋮----
+{/* Step circle */}
+⋮----
+{/* Step label */}
+⋮----
+{/* Connector line */}
+</file>
+
+<file path="src/components/AadhaarOTPVerify.jsx">
+export default function AadhaarOTPVerify(
+⋮----
+function convertSecondsToMinutes()
+⋮----
+const handleVerifyOTP = async () =>
+⋮----
+// await aadhaarPANVerifyAPI();
+⋮----
+// navigate("/camera-permission");
+⋮----
+const handleResentAPI = async () =>
+⋮----
+const handleCloseAndReset = () =>
+⋮----
+{/* Buttons */}
+</file>
+
+<file path="src/components/BankAccounts.jsx">
+export default function BankAccounts(
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Active Bank */}
+⋮----
+{/* Hidden Edit Button */}
+⋮----
+{/* Drawer */}
+⋮----
+{/* Header inside Drawer */}
+⋮----
+{/* Bank List */}
+</file>
+
+<file path="src/components/ChangeLanguage.jsx">
+export default function ChangeLanguage()
+⋮----
+const profileLanguage = async () =>
+</file>
+
+<file path="src/components/CkycOTP.jsx">
+export default function CkycOTP(
+⋮----
+const handleVerifyOTP = async () =>
+⋮----
+const handleResentAPI = async () =>
+⋮----
+const handleCloseAndReset = () =>
+⋮----
+{/* Buttons */}
+</file>
+
+<file path="src/components/CompleteEmandate.jsx">
+export default function CompleteEmandate(
+⋮----
+{/* Buttons */}
+</file>
+
+<file path="src/components/EmailOTPVerify.jsx">
+export default function EmailOTPVerify(
+⋮----
+const startTimer = () =>
+⋮----
+const handleVerifyOTP = async () =>
+⋮----
+const handleResentAPI = async () =>
+⋮----
+const handleCloseAndReset = () =>
+⋮----
+const handleOtpChange = async (value) =>
+</file>
+
+<file path="src/components/EMILoanDetails.jsx">
+export default function EMILoanDetails(
+⋮----
+const toggleItems = (index) =>
+⋮----
+{/* EMI row */}
+⋮----
+{/* Expanded details */}
+</file>
+
+<file path="src/components/EnterAadhaar.jsx">
+export default function EnterAadhaar(
+⋮----
+const formatAadhaar = (val) =>
+</file>
+
+<file path="src/components/GoogleSignIn.jsx">
+export default function GoogleSignIn()
+⋮----
+const handleGoogleSuccess = async (credentialResponse) =>
+⋮----
+// const idToken = credentialResponse.access_token;
+</file>
+
+<file path="src/components/InactivityLogout.jsx">
+export default function InactivityLogout()
+⋮----
+const logout = () =>
+⋮----
+const resetTimer = () =>
+⋮----
+// 30 minutes = 1800000 ms
+⋮----
+// Events that reset the timer
+⋮----
+resetTimer(); // start timer on mount
+</file>
+
+<file path="src/components/Month12LoanRejectModal.jsx">
+export default function Month12LoanRejectModal(
+</file>
+
+<file path="src/components/PANConfirmation.jsx">
+export default function PANConfirmation(
+⋮----
+const fireEvent = async () =>
+⋮----
+const handlePANVerify = async () =>
+⋮----
+{/* Emblem */}
+⋮----
+{/* Info Section */}
+</file>
+
+<file path="src/components/ProgressiveWebApp.jsx">
+export default function ProgressiveWebApp()
+⋮----
+// only show popup when event is captured
+⋮----
+const handler = (e) =>
+⋮----
+const handleInstallClick = async () =>
+⋮----
+const handleClose = () =>
+⋮----
+{/* Header */}
+⋮----
+{/* App Icon */}
+⋮----
+{/* Text */}
+⋮----
+{/* Close */}
+⋮----
+{/* Divider */}
+⋮----
+{/* Actions */}
+</file>
+
+<file path="src/components/RatingReview.jsx">
+export default function RatingReview()
+⋮----
+const handleOpen = ()
+const handleClose = ()
+⋮----
+// Place ID
+⋮----
+const openGoogleReview = () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Floating Emoji */}
+</file>
+
+<file path="src/components/SpecialOfferTimer.jsx">
+// import { useEffect, useState } from "react";
+⋮----
+// export default function SpecialOfferTimer({ expiryDate }) {
+//   const [timeLeft, setTimeLeft] = useState(() => {
+//     const diff = new Date(expiryDate) - new Date();
+//     return Math.max(0, Math.floor(diff / 1000)); // seconds
+//   });
+⋮----
+//   useEffect(() => {
+//     if (timeLeft <= 0) return;
+⋮----
+//     const timer = setInterval(() => {
+//       setTimeLeft((prev) => {
+//         if (prev <= 1) {
+//           clearInterval(timer);
+//           return 0;
+//         }
+//         return prev - 1;
+//       });
+//     }, 1000);
+⋮----
+//     return () => clearInterval(timer);
+//   }, [timeLeft]);
+⋮----
+//   // Convert seconds → days, hours, minutes, seconds
+//   const days = Math.floor(timeLeft / (3600 * 24));
+//   const hours = Math.floor((timeLeft % (3600 * 24)) / 3600);
+//   const minutes = Math.floor((timeLeft % 3600) / 60);
+//   const seconds = timeLeft % 60;
+⋮----
+//   return (
+//     <div className="text-center py-1 text-base/loose">
+//       Special Offer! <span className="font-light">Only For You</span>{" "}
+//       <span className="text-green-500 block">
+//         <span className="font-light">Ends in</span> {days}d : {hours.toString().padStart(2, "0")}h : {minutes.toString().padStart(2, "0")}m :{" "}
+//         {seconds.toString().padStart(2, "0")}s
+//       </span>
+//     </div>
+//   );
+// }
+⋮----
+export default function SpecialOfferTimer(
+⋮----
+// Convert number of days → future date
+const getFinalExpiryDate = () =>
+⋮----
+const calculateTimeLeft = () =>
+⋮----
+return Math.max(0, Math.floor(diff / 1000)); // seconds
+⋮----
+// const calculateTimeLeft = () => {
+//   const diff = new Date(expiryDate) - new Date();
+//   return Math.max(0, Math.floor(diff / 1000));
+// };
+⋮----
+// Convert seconds → days, hours, minutes, seconds
+</file>
+
+<file path="src/components/UserConsent.jsx">
+const UserConsent = (
+</file>
+
+<file path="src/components/VerifyOTP.jsx">
+export default function VerifyOTP(
+⋮----
+const handleVerifyOTP = async () =>
+⋮----
+// if (!stepData?.data?.step) return;
+⋮----
+// if (res.data.lead.leadType === "New Case" && LOGIN_LEAD_STATUS.includes(res.data.lead.leadStatus)) {
+//   const stepData = await stepCheckerAPI();
+//   if (stepData?.data?.step?.current_route) {
+//     dispatch(setLoading({ status: true, message: t("loaderMsg.FETCH_PAN") }));
+//     navigate(stepData?.data?.step?.current_route, { replace: true });
+//   }
+//   return;
+// }
+⋮----
+// if (res.data.lead.leadType === "New Case" && res.data.lead.leadStatus === "Approved Process") {
+//   navigate("/select-tenure", { replace: true });
+//   return;
+// }
+⋮----
+const handleResentAPI = async () =>
+⋮----
+const handleCloseAndReset = () =>
+⋮----
+{/* Buttons */}
+</file>
+
+<file path="src/events/clevertapEvents.js">
+// Profile Push Identity
+export async function profilePushIdentity(user)
+⋮----
+// optional fields
+"MSG-email": true, // Enable email notifications
+"MSG-push": true, // Enable push notifications
+"MSG-sms": true, // Enable sms notifications
+"MSG-whatsapp": true, // Enable WhatsApp notifications
+⋮----
+// Profile Push Name & Gender
+export async function profilePushNameAndGender(data)
+⋮----
+export async function profileApprovedAmount(amount, tenure)
+⋮----
+export async function profileBankName(bank)
+⋮----
+export async function profilePushEmail(email)
+⋮----
+export async function profilePushLanguage(language)
+⋮----
+//****************** Registration Flow *******************************
+⋮----
+// Event Push - 2 : sv_enter_mobile
+export async function clevertap__sv_enter_mobile()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 3 : enter_mobile_number_fill
+export async function clevertap__enter_mobile_number_fill(mobile)
+// Event Push - 4 : enter_mobile_number_del
+export async function clevertap__enter_mobile_number_del()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 5 : enter_mobile_get_otp_clk
+export async function clevertap__enter_mobile_get_otp_clk(mobile)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 6 : enter_mobile_err_blank_num_vw
+export async function clevertap__enter_mobile_err_blank_num_vw()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 7 : btmsld_enter_otp
+export async function clevertap__btmsld_enter_otp(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 8 : btmsld_enter_otp_man_otp_fill
+export async function clevertap__btmsld_enter_otp_man_otp_fill(mobile)
+⋮----
+// Event Push - 9 : btmsld_enter_otp_auto_otp_fill
+export async function clevertap__btmsld_enter_otp_auto_otp_fill(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 10 : btmsld_enter_otp_resend_otp_clk
+export async function clevertap__btmsld_enter_otp_resend_otp_clk(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 11 : btmsld_enter_otp_verify_otp_clk
+export async function clevertap__btmsld_enter_otp_verify_otp_clk(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 12 : btmsld_enter_otp_err_wrong_otp_vw
+export async function clevertap__btmsld_enter_otp_err_wrong_otp_vw(mobile)
+⋮----
+// await createClevertapEvents("Enter_OTP", name, attributes);
+⋮----
+// Event Push - 13 : enter_mobile_err_wrong_num_vw
+export async function clevertap__enter_mobile_err_wrong_num_vw()
+⋮----
+//****************** Loan Journey Flow *******************************
+⋮----
+// Event Push - 1 : sv_basic_details
+export async function clevertap__sv_basic_details()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 2 : basic_details_pancard_fill
+export async function clevertap__basic_details_pancard_fill()
+⋮----
+// Event Push - 78 : basic_details_wrong_pancard_fill
+export async function clevertap__basic_details_wrong_pancard_fill()
+⋮----
+// Event Push - 3 : basic_details_pincode_fill
+export async function clevertap__basic_details_pincode_fill()
+⋮----
+// Event Push - 4 : basic_details_loan_purpose_sel
+export async function clevertap__basic_details_loan_purpose_sel(loan_pupose)
+⋮----
+// Event Push - 5 : basic_details_continue_clk
+export async function clevertap__basic_details_continue_clk(user_pancard, loan_pupose)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 6 : btmsld_pan_confirmation
+export async function clevertap__btmsld_pan_confirmation(user_pancard, loan_pupose)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 7 : btmsld_pan_confirmation_back_clk
+export async function clevertap__btmsld_pan_confirmation_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 8 : btmsld_pan_confirmation_continue_clk
+export async function clevertap__btmsld_pan_confirmation_continue_clk(user_pancard)
+⋮----
+// Event Push - 9 : sv_employ_details
+export async function clevertap__sv_employ_details()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 10 : employ_details_employment_type_sel
+export async function clevertap__employ_details_employment_type_sel(employment)
+⋮----
+// Event Push - 11 : employ_details_payment_mode_sel
+export async function clevertap__employ_details_payment_mode_sel(payment_mode)
+⋮----
+// Event Push - 12 : employ_details_sal_date_sel
+export async function clevertap__employ_details_sal_date_sel(salary_date)
+⋮----
+// Event Push - 13 : employ_details_continue_clk
+export async function clevertap__employ_details_continue_clk(employment, payment_mode, salary_date)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 14 : sv_brd_employ_details
+export async function clevertap__sv_brd_employ_details(payment_mode, employment, salary_date)
+⋮----
+// Event Push - 15 : sv_sel_your_loan
+export async function clevertap__sv_sel_your_loan()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 16 : sel_your_loan_emi_plan_vw
+export async function clevertap__sel_your_loan_emi_plan_vw()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 17 : sel_your_loan_emi_plan_automan_sel
+export async function clevertap__sel_your_loan_emi_plan_automan_sel(type, emi_plan)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 18 : sel_your_loan_continue_clk
+export async function clevertap__sel_your_loan_continue_clk(emi_plan)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 19 : sel_your_loan_upgrade_amount_clk
+export async function clevertap__sel_your_loan_upgrade_amount_clk()
+⋮----
+// Event Push - 20 : sv_loan_approved
+export async function clevertap__sv_loan_approved()
+⋮----
+// 16,17,18,19,26,27
+⋮----
+// Event Push - 21 : loan_approved_back_clk
+export async function clevertap__loan_approved_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 22 : loan_approved_continue_clk
+export async function clevertap__loan_approved_continue_clk()
+⋮----
+// Event Push - 23 : sv_emailid
+export async function clevertap__sv_emailid()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 24 : emailid_email_filled
+export async function clevertap__emailid_email_filled()
+⋮----
+// Event Push - 25 : emailid_email_delete
+export async function clevertap__emailid_email_delete()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 26 : emailid_google_email_sel
+export async function clevertap__emailid_google_email_sel()
+⋮----
+// Event Push - 27 : emailid_back_clk
+export async function clevertap__emailid_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 28 : emailid_continue_clk
+export async function clevertap__emailid_continue_clk(user_email)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 29 : sv_kyc_verification
+export async function clevertap__sv_kyc_verification()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 30 : kyc_verification_digilocker_clk
+export async function clevertap__kyc_verification_digilocker_clk()
+⋮----
+// Event Push - 31 : kyc_verification_aadhar_clk
+export async function clevertap__kyc_verification_aadhar_clk()
+⋮----
+// Event Push - 32 : btmsld_aadhar_num
+export async function clevertap__btmsld_aadhar_num()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 33 : btmsld_aadhar_num_filled
+export async function clevertap__btmsld_aadhar_num_filled()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 34 : btmsld_aadhar_num_del
+export async function clevertap__btmsld_aadhar_num_del()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 35 : btmsld_aadhar_send_otp_clk
+export async function clevertap__btmsld_aadhar_send_otp_clk(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 36 : btmsld_aadhar_otp
+export async function clevertap__btmsld_aadhar_otp(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 37 : btmsld_aadhar_otp_filled
+export async function clevertap__btmsld_aadhar_otp_filled(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 38 : btmsld_aadhar_otp_del
+export async function clevertap__btmsld_aadhar_otp_del(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 39 : btmsld_aadhar_otp_resend_otp_clk
+export async function clevertap__btmsld_aadhar_otp_resend_otp_clk(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 40 : btmsld_aadhar_otp_verify_otp_clk
+export async function clevertap__btmsld_aadhar_otp_verify_otp_clk(aadhar_number)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 41 : sv_allow_camera_permission
+export async function clevertap__sv_allow_camera_permission()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 42 : allow_camera_permission_allow_clk
+export async function clevertap__allow_camera_permission_allow_clk()
+⋮----
+// Event Push - 43 : sv_selfie
+export async function clevertap__sv_selfie()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 44 : selfie_clk
+export async function clevertap__selfie_clk()
+⋮----
+// Event Push - 45 : btmsld_selfie_attempt_1
+export async function clevertap__btmsld_selfie_attempt_1()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 46 : btmsld_selfie_attempt_2
+export async function clevertap__btmsld_selfie_attempt_2()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 47 : sv_add_bank_details
+export async function clevertap__sv_add_bank_details()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 48 : add_bank_details_act_num_filled
+export async function clevertap__add_bank_details_act_num_filled()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 49 : add_bank_details_re_act_num_filled
+export async function clevertap__add_bank_details_re_act_num_filled()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 50 : add_bank_details_ifsc_filled
+export async function clevertap__add_bank_details_ifsc_filled()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 51 : add_bank_details_act_holder_chkuchk
+export async function clevertap__add_bank_details_act_holder_chkuchk(check)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 52 : add_bank_details_submit_clk
+export async function clevertap__add_bank_details_submit_clk()
+⋮----
+// Event Push - 53 : btmsld_emandate
+export async function clevertap__btmsld_emandate()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 54 : btmsld_emandate_man_continue_clk
+export async function clevertap__btmsld_emandate_man_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 55 : btmsld_emandate_auto_continue_clk
+export async function clevertap__btmsld_emandate_auto_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 56 : sv_penny_drop
+export async function clevertap__sv_penny_drop()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 57 : penny_drop_continue_clk
+export async function clevertap__penny_drop_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 58 : sv_key_fct_stat
+export async function clevertap__sv_key_fct_stat()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 59 : key_fct_stat_back_clk
+export async function clevertap__key_fct_stat_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 60 : key_fct_stat_consent_chkuchk
+export async function clevertap__key_fct_stat_consent_chkuchk(check)
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 61 : key_fct_stat_accept_clk
+export async function clevertap__key_fct_stat_accept_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 62 : sv_loan_disbursement
+export async function clevertap__sv_loan_disbursement()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 63 : loan_disbursement_okgotit_clk
+export async function clevertap__loan_disbursement_okgotit_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 64 : sv_loan_amount
+export async function clevertap__sv_loan_amount()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 65 : loan_amount_back_clk
+export async function clevertap__loan_amount_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 66 : loan_amount_enter
+export async function clevertap__loan_amount_enter()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 67 : loan_amount_next_clk
+export async function clevertap__loan_amount_next_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 68 : sv_one_page
+export async function clevertap__sv_one_page()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 69 : one_page_back_clk
+export async function clevertap__one_page_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 70 : one_page_tilename_edit_sel
+export async function clevertap__one_page_tilename_edit_sel()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 71 : one_page_continue_clk
+export async function clevertap__one_page_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 72 : sv_brd_one_page
+export async function clevertap__sv_brd_one_page()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 73 : sv_bank_details_fetched
+export async function clevertap__sv_bank_details_fetched()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 74 : bank_details_fetch_bank_sel
+export async function clevertap__bank_details_fetch_bank_sel()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 75 : bank_details_fetch_add_bank_clk
+export async function clevertap__bank_details_fetch_add_bank_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 76 : bank_details_fetch_continue_clk
+export async function clevertap__bank_details_fetch_continue_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+// Event Push - 77 : bank_details_fetch_back_clk
+export async function clevertap__bank_details_fetch_back_clk()
+⋮----
+// await createClevertapEvents("Enter_Mobile", name, attributes);
+⋮----
+export async function clevertap__pwa_install_clk()
+⋮----
+export async function clevertap__pwa_install_cancel_clk()
+⋮----
+/*===============================================
+ CleverTap Version 2
+===============================================*/
+⋮----
+export async function clevertap__login_success(lead_status)
+⋮----
+export async function clevertap__basic_details_submitted_success(pincode, loan_pupose)
+⋮----
+export async function clevertap__pan_fetch_success()
+⋮----
+export async function clevertap__pan_fetch_failed()
+⋮----
+export async function clevertap__emp_details_submit_success(data)
+⋮----
+export async function clevertap__rejection_screen(action, cta = "")
+⋮----
+export async function clevertap__aa_screen(action = "page_view")
+⋮----
+export async function clevertap__aa_verification_success()
+⋮----
+export async function clevertap__aa_verification_failed()
+⋮----
+export async function clevertap__loan_offer_loader()
+⋮----
+export async function clevertap__select_loan_offer_screen(action = "page_view", data, cta = "NA")
+⋮----
+export async function clevertap__loan_approved_screen(action = "page_view", data, cta = "NA")
+⋮----
+export async function clevertap__email_verification_pop_up_screen(action = "page_view", cta = "NA")
+⋮----
+export async function clevertap__email_verification_success(vrfy_type)
+⋮----
+export async function clevertap__email_verification_failed(vrfy_type)
+⋮----
+export async function clevertap__bank_verification_success(bank)
+⋮----
+export async function clevertap__pd_verification_success()
+⋮----
+export async function clevertap__e_mandate_verification_success()
+⋮----
+export async function clevertap__kyc_verification_success(source)
+⋮----
+export async function clevertap__kyc_verification_failed(source)
+⋮----
+export async function clevertap__selfie_verification_success()
+⋮----
+export async function clevertap__selfie_verification_failed()
+⋮----
+export async function clevertap__loan_disbursal_success()
+⋮----
+export async function clevertap__language_preferred_hindi(screen_name)
+⋮----
+export async function clevertap__language_preferred_eng(screen_name)
+⋮----
+export async function clevertap__language_preferred_kan(screen_name)
+</file>
+
+<file path="src/hooks/useBackButtonLogout.jsx">
+export function useBackButtonLogout()
+⋮----
+const handleBackButton = (event) =>
+⋮----
+// window.history.forward();
+⋮----
+// Add dummy history entry so back press triggers popstate
+</file>
+
+<file path="src/hooks/useDisableLoader.jsx">
+export function useDisableLoader()
+⋮----
+}, 60000); // 1 minute
+</file>
+
+<file path="src/hooks/usePageTracking.jsx">
+function usePageTracking()
+</file>
+
+<file path="src/hooks/useStepper.jsx">
+export function useStepper(
+</file>
+
+<file path="src/hooks/useToast.jsx">
+export function useToast()
+⋮----
+const showToast = (message, type = "info", options =
+</file>
+
+<file path="src/i18n/locales/en.json">
+{
+  "login": {
+    "text_1": "Mobile Verification",
+    "text_2": "We will send you a One Time Password on this mobile number",
+    "text_3": "Enter your mobile number",
+    "text_4": "Get OTP",
+    "text_5": "OTP Verification",
+    "text_6": "Please enter the 6-digit OTP sent to {{mobile}}",
+    "text_7": "Have not received your OTP?",
+    "text_8": "Resend in {{seconds}} seconds",
+    "text_9": "Resend OTP",
+    "text_10": "By proceeding, you agree to our",
+    "text_11": "Terms & Conditions",
+    "text_12": "Privacy Policy",
+    "text_13": "and consent to us accessing your credit information from credit bureaus for processing your application.",
+    "text_14": "I consent to receive loan-related updates, alerts, and communications via WhatsApp ,SMS , RCS and any other communication channel on my registered mobile number.",
+    "text_15": "I authorize Ram Fincorp to validate my bank details via the penny drop mechanism. An amount of Rs. 0.01 may be credited to your bank a/c.",
+    "text_16": "Enter your 6-digit OTP",
+    "text_17": "I hereby provide my consent to fetch and verify my KYC details from the CKYC registry for the purpose of processing my application."
+  },
+  "notFound": {
+    "text_1": "Ooops...",
+    "text_2": "Page Not Found",
+    "text_3": "We couldn't find the page you were looking for.",
+    "text_4": "It might have been moved or deleted.",
+    "text_5": "Go to Home"
+  },
+  "panVerify": {
+    "text_1": "PAN Number",
+    "text_2": "Enter Your PAN",
+    "text_3": "We've auto-fetched your PAN details,If anything looks incorrect, please check and update.",
+    "text_4": "PIN Code",
+    "text_5": "Enter PIN Code",
+    "text_6": "Loan Purpose",
+    "text_7": "Select Loan Purpose",
+    "text_8": "Are These Information Correct?",
+    "text_9": "PAN VERIFICATION",
+    "text_10": "Name",
+    "text_11": "Date of Birth",
+    "text_12": "Permanent Account Number",
+    "text_13": "No",
+    "text_14": "Yes, Confirm"
+  },
+  "employmentDetails": {
+    "text_1": "Employment Details",
+    "text_2": "Help us understand your salary date and employee details",
+    "text_3": "Monthly Income (₹)",
+    "text_4": "Enter Monthly Income",
+    "text_5": "Employment Type",
+    "text_6": "Select your mode of Income",
+    "text_7": "Select Your Salary/Income Date",
+    "text_8": "I confirm that my annual household income is <strong>more than ₹3,00,000,</strong> and the information provided is true and correct.",
+    "text_9": "Finding best offer for you...",
+    "text_10": "Don't exit the screen or press back <br/> this could take up to <highlight>{{seconds}} seconds</highlight>",
+    "text_11": "Select Salary Date"
+  },
+  "selectLoanOffer": {
+    "text_1": "Select Loan Offer",
+    "text_2": "Please select a repayment option for your loan disbursal",
+    "text_3": "Upgrade My Loan"
+  },
+  "loanApproval": {
+    "text_1": "Loan Approved",
+    "text_2": "You have been approved for a loan of amount",
+    "text_3": "Approved amount",
+    "text_4": "Processing fee +GST",
+    "text_5": "Final loan amount",
+    "text_6": "Repayment plan",
+    "text_7": "Repayment Date",
+    "text_8": "Repayment Amount",
+    "text_9": "EMI Dates",
+    "text_10": "Amount",
+    "text_11": "Principal",
+    "text_12": "Interest",
+    "text_13": "days"
+  },
+  "yourEmail": {
+    "text_1": "Where should we send your loan details?",
+    "text_2": "Your approved offer and documents will be sent to this mail.",
+    "text_3": "Email ID",
+    "text_4": "Enter Your Email ID (e.g. name@email.com)",
+    "text_5": "OR",
+    "text_6": "Please enter a valid 6-digit OTP",
+    "text_7": "OTP resent successfully",
+    "text_8": "Email Verify",
+    "text_9": "Please enter the 6-digit OTP sent to {{email}}",
+    "text_10": "Have not received your OTP?",
+    "text_11": "Resend in {{seconds}} seconds",
+    "text_12": "Resend OTP",
+    "text_13": "We only use your email to send loan updates. No spam, No calls without permission."
+  },
+  "aadhaarVerification": {
+    "text_1": "KYC Verification",
+    "text_2": "Secure verify your identity to unlock instant loan benefits",
+    "text_3": "Verify with Aadhaar OTP",
+    "text_4": "Verify with Digilocker",
+    "text_5": "Faster",
+    "text_6": "Enter your Aadhaar No.",
+    "text_7": "An OTP will be sent to your registered mobile number.",
+    "text_8": "Send OTP",
+    "text_9": "Enter Aadhaar OTP",
+    "text_10": "An OTP has been sent to your Aadhaar-linked mobile number.",
+    "text_11": "Have not received your OTP?",
+    "text_12": "Resend in {{time}}",
+    "text_13": "Resend OTP",
+    "text_14": "To complete your KYC, please select both <strong>PAN and Aadhaar</strong> by checking the boxes from the document list in Digilocker. KYC cannot be completed unless both documents are selected."
+  },
+  "cameraPermission": {
+    "text_1": "We need your camera permission to capture a selfie.",
+    "text_2": "Please allow camera access to continue.",
+    "text_3": "Step by step guide",
+    "text_4": "Tap in the address bar on top",
+    "text_5": "Tap on Permission",
+    "text_6": "Tap to switch on camera permission",
+    "text_7": "Once camera permission is updated, tap on continue below",
+    "text_8": "No hat",
+    "text_9": "No glasses"
+  },
+  "selfie": {
+    "text_1": "Selfie Verification",
+    "text_2": "Just a quick selfie to verify it's really you.",
+    "text_3": "Click Selfie",
+    "text_4": "Retake"
+  },
+  "addBankAccount": {
+    "text_1": "Add Your Bank Account",
+    "text_2": "Add the salary account to receive your loan and auto-debit EMIs.",
+    "text_3": "Bank Account Number",
+    "text_4": "Enter bank account number",
+    "text_5": "Re-Enter Account Number",
+    "text_6": "Bank IFSC Code",
+    "text_7": "Enter bank IFSC code",
+    "text_8": "This bank account is registered under the name of {{name}}",
+    "text_9": "Complete your E-mandate",
+    "text_10": "After completing e-mandate process, come back to the <br /> application for further process."
+  },
+  "pennyDrop": {
+    "text_1": "Complete your Penny Drop",
+    "text_2": "We'll send ₹1 to your account to verify your bank details.",
+    "text_3": "Sending ₹1 to your <br /> bank for verification",
+    "text_4": "E-mandate"
+  },
+  "kfs": {
+    "text_1": "Key Fact Statement",
+    "text_2": "This document contains key details about your loan",
+    "text_3": "Disbursement Bank Account",
+    "text_4": "I acknowledge, that I have read and understood the Key Fact Statement and agreement mentioned therein and confirm that I hold the bank account mentioned above. I take full responsibility for the correctness of all provided information."
+  },
+  "disbursed": {
+    "text_1": "Congratulations!!",
+    "text_2": "Your Loan Disbursement <br /> Successful!",
+    "text_3": "Loan Amount will be credited to your <br /> account within 1-2 hours."
+  },
+  "loanRejected": {
+    "text_1": "Application Not Approved",
+    "text_2": "Your application didn't meet our requirements for credit approval. Please feel free to reapply <strong>after 45 days</strong>.",
+    "text_3": "Know possible reasons"
+  },
+  "finboxError": {
+    "text_1": "Verification Failed"
+  },
+  "submit": "Submit",
+  "continue": "Continue",
+  "continue_securely": "Continue securely",
+  "sign_in_with_google": "Sign in with Google",
+  "okGotIt": "Ok, Got it",
+  "seconds": "seconds",
+  "tryAgain": "Try Again",
+  "sorry": "SORRY!!",
+  "verifyOTP": "Verify OTP",
+  "minute": "minute",
+  "second": "second",
+  "loaderMsg": {
+    "ENTER_MOBILE": "Checking your mobile number...",
+    "OTP_VERIFY": "Verifying the OTP...",
+    "FETCH_PAN": "Fetching your PAN details...",
+    "ENTER_PAN": "Validating your PAN...",
+    "PAN_VERIFY": "Confirming your PAN details...",
+    "EMPLOYMENT_DETAILS_LOAD": "Loading employment details...",
+    "EMPLOYMENT_DETAILS_CLICK": "Saving your employment details...",
+    "SELECT_TENURE": "Finding the best offer for you...",
+    "LOAN_APPROVAL_LOAD": "Finalizing your loan approval...",
+    "LOAN_APPROVAL_CLICK": "Processing your loan request...",
+    "LOAN_REJECTED": "Updating your application status...",
+    "YOUR_EMAIL": "Checking your email address...",
+    "REFERENCE_DETAILS": "Saving reference details...",
+    "AADHAAR_VERIFICATION_LOAD": "Getting things ready...",
+    "AADHAAR_GENERATE_OTP": "Sending OTP for Aadhaar verification...",
+    "AADHAAR_OTP_VERIFY": "Verifying your Aadhaar...",
+    "Email_OTP_VERIFY": "Verifying your email...",
+    "AADHAAR_INITIATE_DIGILOCKER": "Connecting securely for Aadhaar verification...",
+    "SELFIE_VERIFICATION": "Uploading your selfie...",
+    "ADD_BANK_DETAILS_LOAD": "Preparing bank details form...",
+    "ADD_BANK_DETAILS_CLICK": "Checking your bank details...",
+    "EMANDATE_VERIFY": "Setting up your payment mandate...",
+    "PENNY_VERIFY": "Verifying your bank account...",
+    "KFS_LOAD": "Preparing your loan agreement...",
+    "KFS_CLICK": "Saving your agreement...",
+    "DISBURSED_LOAD": "Fetching your loan details...",
+    "DISBURSED_CLICK": "Taking you to your dashboard...",
+    "WAITING": "Please wait...",
+    "VERIFYING_BANK": "Verifying bank details...",
+    "LOADING": "Loading...",
+    "FINBOX_PROCESS": "Checking your financial profile...",
+    "LOGOUT": "Signing you out..."
+  },
+  "mobileValidation": {
+    "text_1": "Please enter your mobile number",
+    "text_2": "Please enter valid mobile number",
+    "text_3": "Invalid mobile number"
+  },
+  "aadhaarValidation": {
+    "text_1": "Aadhaar is required",
+    "text_2": "Enter a valid 12-digit Aadhaar number",
+    "text_3": "Invalid aadhaar number"
+  },
+  "panValidation": {
+    "text_1": "PAN Number is required",
+    "text_2": "Invalid PAN Number format",
+    "text_3": "PIN Code is required",
+    "text_4": "Invalid PIN Code (must be 6 digits)",
+    "text_5": "Loan Purpose is required"
+  },
+  "employmentDetailsValidation": {
+    "text_1": "Monthly income is required",
+    "text_2": "Monthly income must be a number",
+    "text_3": "Monthly income must be at least ₹5,000",
+    "text_4": "Monthly income cannot exceed ₹99,99,999",
+    "text_5": "Employment type is required",
+    "text_6": "Mode of income is required",
+    "text_7": "Salary/income date is required"
+  },
+  "addBankAccountValidation": {
+    "text_1": "Account number is required",
+    "text_2": "Account numbers must match",
+    "text_3": "Please confirm account number",
+    "text_4": "IFSC code is required",
+    "text_5": "Invalid IFSC code"
+  },
+  "emailValidation": {
+    "text_1": "Enter a valid email address",
+    "text_2": "Email is required"
+  },
+  "installApp": {
+    "text_1": "Install Mobile App",
+    "text_2": "Enjoy faster, safer access—add this app to your home screen and stay just one tap away.",
+    "text_3": "Cancel",
+    "text_4": "Install"
+  },
+  "12MonthError": {
+    "text_1": "You're not eligible for the 12 Month Loan",
+    "text_2": "No worries!",
+    "text_3": "You can still choose from <br /> the other loan options"
+  },
+  "bankAccount": {
+    "text_1": "Bank Account",
+    "text_2": "Select Bank",
+    "text_3": "Add Account",
+    "text_4": "Account",
+    "text_5": "IFSC",
+    "text_6": "Verified",
+    "text_7": "We recommend this bank account for faster disbursal. Confirm to continue or add a different account."
+  },
+  "loanPurpose": {
+    "medical": "Medical Emergency",
+    "salary": "Salary Delay",
+    "personal": "Personal Emergency",
+    "education": "Education",
+    "rent": "Rent / Bills",
+    "other": "Other"
+  },
+  "progressStep": {
+    "basic": "Enter <br/> Basic Details",
+    "approved": "Approved <br/> Offer",
+    "complete": "Complete <br/> KYC",
+    "disburse": "Disburse <br/> Loan"
+  },
+  "employmentType": {
+    "salaried": "Salaried",
+    "selfEmployed": "Self Employed"
+  },
+  "incomeMode": {
+    "bankTransfer": "Bank Transfer",
+    "cash": "Cash",
+    "cheque": "Cheque"
+  },
+  "kycMethod": {
+    "1": "Verify with Aadhaar OTP",
+    "2": "Verify with Digilocker"
+  },
+  "panVerifyReject": {
+    "text_1": "Not Eligible",
+    "text_2": "You are not eligible for this loan based on your age."
+  }
+}
+</file>
+
+<file path="src/i18n/locales/hi.json">
+{
+  "login": {
+    "text_1": "मोबाइल सत्यापन",
+    "text_2": "हम इस मोबाइल नंबर पर आपको एक वन-टाइम पासवर्ड भेजेंगे",
+    "text_3": "अपना मोबाइल नंबर दर्ज करें",
+    "text_4": "OTP प्राप्त करें",
+    "text_5": "OTP सत्यापन",
+    "text_6": "कृपया भेजे गए 6-अंकों का OTP दर्ज करें {{mobile}}",
+    "text_7": "क्या आपको OTP प्राप्त नहीं हुआ?",
+    "text_8": "{{seconds}} सेकंड में दोबारा भेजें",
+    "text_9": "OTP दोबारा भेजें",
+    "text_10": "आगे बढ़कर, आप हमारे",
+    "text_11": "नियमों एवं शर्तों",
+    "text_12": "गोपनीयता नीति",
+    "text_13": "से सहमत होते हैं और आपके आवेदन की प्रक्रिया के लिए क्रेडिट ब्यूरो से आपकी क्रेडिट जानकारी प्राप्त करने के लिए हमें सहमति देते हैं।",
+    "text_14": "मैं अपने रजिस्टर्ड मोबाइल नंबर पर WhatsApp, SMS, RCS और किसी भी दूसरे कम्युनिकेशन चैनल से लोन से जुड़े अपडेट, अलर्ट और कम्युनिकेशन पाने के लिए मंज़ूरी देता/देती हूँ।",
+    "text_15": "मैं Ram Fincorp को 'पेनी ड्रॉप' प्रक्रिया के माध्यम से मेरे बैंक विवरणों को सत्यापित करने के लिए अधिकृत करता/करती हूँ। आपके बैंक खाते में 0.01 रुपए की राशि जमा की जा सकती है।",
+    "text_16": "अपना 6-अंकों का ओटीपी दर्ज करें",
+    "text_17": "मैं अपने आवेदन की प्रक्रिया के लिए CKYC रजिस्ट्री से अपने KYC विवरण प्राप्त करने और सत्यापित करने के लिए अपनी सहमति देता/देती हूँ।"
+  },
+  "notFound": {
+    "text_1": "ओह...",
+    "text_2": "पेज नहीं मिला",
+    "text_3": "हमें वह पेज नहीं मिला जिसे आप ढूंढ रहे थे।",
+    "text_4": "यह शायद हटा दिया गया है या इसका स्थान बदल दिया गया है।",
+    "text_5": "होम पर जाएं"
+  },
+  "panVerify": {
+    "text_1": "PAN नंबर",
+    "text_2": "अपना PAN दर्ज करें",
+    "text_3": "हमने आपके PAN विवरण स्वतः प्राप्त कर लिए हैं, यदि कुछ भी गलत लगे, तो कृपया जांचें और अपडेट करें।",
+    "text_4": "पिन कोड",
+    "text_5": "पिन कोड दर्ज करें",
+    "text_6": "लोन का उद्देश्य",
+    "text_7": "लोन का उद्देश्य चुनें",
+    "text_8": "क्या यह जानकारी सही है?",
+    "text_9": "PAN सत्यापन",
+    "text_10": "नाम",
+    "text_11": "जन्मतिथि",
+    "text_12": "स्थायी खाता संख्या",
+    "text_13": "नहीं",
+    "text_14": "हाँ, पुष्टि करें"
+  },
+  "employmentDetails": {
+    "text_1": "रोज़गार विवरण",
+    "text_2": "अपनी वेतन तिथि और कर्मचारी विवरण समझने में हमारी सहायता करें",
+    "text_3": "मासिक आय (₹)",
+    "text_4": "मासिक आय दर्ज करें",
+    "text_5": "रोज़गार का प्रकार",
+    "text_6": "अपनी आय का माध्यम चुनें",
+    "text_7": "अपनी वेतन/आय की तिथि चुनें",
+    "text_8": "मैं पुष्टि करता/करती हूँ कि मेरी वार्षिक पारिवारिक आय <strong>₹3,00,000 से अधिक</strong> है, और दी गई जानकारी सत्य और सही है।",
+    "text_9": "आपके लिए सर्वोत्तम प्रस्ताव खोजा जा रहा है...",
+    "text_10": "स्क्रीन से बाहर न निकलें या बैक (back) बटन न दबाएँ <br/> इसमें <highlight>{{seconds}} सेकंड</highlight> तक का समय लग सकता है",
+    "text_11": "वेतन तिथि चुनें"
+  },
+  "selectLoanOffer": {
+    "text_1": "लोन प्रस्ताव चुनें",
+    "text_2": "कृपया अपने लोन वितरण के लिए रीपेमेंट विकल्प चुनें",
+    "text_3": "मेरे लोन को अपग्रेड करें"
+  },
+  "loanApproval": {
+    "text_1": "लोन स्वीकृत",
+    "text_2": "आपको इतनी राशि के लोन के लिए स्वीकृति मिल गई है",
+    "text_3": "स्वीकृत राशि",
+    "text_4": "प्रोसेसिंग शुल्क +GST",
+    "text_5": "फाइनल लोन राशि",
+    "text_6": "रीपेमेंट प्लान",
+    "text_7": "रीपेमेंट तिथि",
+    "text_8": "रीपेमेंट राशि",
+    "text_9": "EMI तिथियाँ",
+    "text_10": "राशि",
+    "text_11": "मूलधन",
+    "text_12": "ब्याज",
+    "text_13": "दिन"
+  },
+  "yourEmail": {
+    "text_1": "आपकी लोन की जानकारी किस मेल आईडी पर भेजी जाए?",
+    "text_2": "आपका लोन मंजूर होने के बाद उसकी डिटेल्स और जरूरी कागज़ इसी ईमेल पर भेज दिए जाएंगे।",
+    "text_3": "ईमेल आईडी",
+    "text_4": "अपनी ईमेल आईडी दर्ज करें (उदाहरण: name@email.com)",
+    "text_5": "या",
+    "text_6": "कृपया एक मान्य 6-अंकों का OTP दर्ज करें",
+    "text_7": "OTP सफलतापूर्वक पुनः भेजा गया",
+    "text_8": "ईमेल सत्यापित करें",
+    "text_9": "{{email}} पर भेजा गया 6-अंकों का OTP दर्ज करें",
+    "text_10": "क्या आपको अपना OTP प्राप्त नहीं हुआ?",
+    "text_11": "{{seconds}} सेकंड में पुनः भेजें",
+    "text_12": "OTP पुनः भेजें",
+    "text_13": "हम आपके ईमेल का इस्तेमाल सिर्फ़ लोन अपडेट भेजने के लिए करते हैं। कोई स्पैम नहीं, बिना इजाज़त के कोई कॉल नहीं।"
+  },
+  "aadhaarVerification": {
+    "text_1": "KYC सत्यापन",
+    "text_2": "तत्काल लोन लाभ प्राप्त करने के लिए अपनी पहचान सुरक्षित रूप से सत्यापित करें।",
+    "text_3": "आधार OTP के साथ सत्यापित करें",
+    "text_4": "Digilocker के साथ सत्यापित करें",
+    "text_5": "तेज़ माध्यम",
+    "text_6": "अपना आधार नंबर दर्ज करें",
+    "text_7": "आपके पंजीकृत मोबाइल नंबर पर एक OTP भेजा जाएगा।",
+    "text_8": "OTP भेजें",
+    "text_9": "आधार OTP दर्ज करें",
+    "text_10": "आपके आधार से जुड़े मोबाइल नंबर पर एक OTP भेजा गया है।",
+    "text_11": "क्या आपको OTP प्राप्त नहीं हुआ?",
+    "text_12": "{{time}} में दोबारा भेजें",
+    "text_13": "OTP दोबारा भेजें",
+    "text_14": "अपना KYC पूरा करने के लिए, कृपया DigiLocker की दस्तावेज़ सूची में से बॉक्स पर टिक करके <strong>PAN और आधार</strong> दोनों का चयन करें। दोनों दस्तावेज़ चुने बिना KYC पूरा नहीं किया जा सकता।"
+  },
+  "cameraPermission": {
+    "text_1": "सेल्फी लेने के लिए हमें आपके कैमरे की अनुमति की आवश्यकता है।",
+    "text_2": "जारी रखने के लिए कृपया कैमरा एक्सेस की अनुमति दें।",
+    "text_3": "चरण-दर-चरण मार्गदर्शिका",
+    "text_4": "ऊपर दिए गए एड्रेस बार पर टैप करें",
+    "text_5": "अनुमति पर टैप करें",
+    "text_6": "कैमरा अनुमति चालू करने के लिए टैप करें",
+    "text_7": "कैमरा अनुमति अपडेट हो जाने के बाद, नीचे दिए गए 'जारी रखें' पर टैप करें",
+    "text_8": "टोपी न पहनें",
+    "text_9": "चश्मा न पहनें"
+  },
+  "selfie": {
+    "text_1": "सेल्फी सत्यापन",
+    "text_2": "यह सत्यापित करने के लिए कि यह वास्तव में आप ही हैं, बस एक त्वरित सेल्फी।",
+    "text_3": "सेल्फी लें",
+    "text_4": "दोबारा प्रयास करें"
+  },
+  "addBankAccount": {
+    "text_1": "अपना बैंक खाता जोड़ें",
+    "text_2": "लोन राशि प्राप्त करने और EMI के ऑटो-डेबिट के लिए अपना वेतन खाता जोड़ें।",
+    "text_3": "बैंक खाता संख्या",
+    "text_4": "बैंक खाता संख्या दर्ज करें",
+    "text_5": "खाता संख्या दोबारा दर्ज करें",
+    "text_6": "बैंक IFSC कोड",
+    "text_7": "बैंक IFSC कोड दर्ज करें",
+    "text_8": "यह बैंक खाता {{name}} के नाम से पंजीकृत है",
+    "text_9": "अपना ई-मेंडेट पूरा करें",
+    "text_10": "ई-मेंडेट प्रक्रिया पूरी करने के बाद, आगे की प्रक्रिया के लिए ऐप पर वापस आएं।"
+  },
+  "pennyDrop": {
+    "text_1": "अपना पेनी ड्रॉप पूरा करें",
+    "text_2": "आपके बैंक विवरणों को सत्यापित करने के लिए हम आपके खाते में ₹1 भेजेंगे।",
+    "text_3": "सत्यापन के लिए आपके बैंक <br/> में ₹1 भेजा जा रहा है",
+    "text_4": "ई-मैंडेट"
+  },
+  "kfs": {
+    "text_1": "मुख्य तथ्य विवरण",
+    "text_2": "इस दस्तावेज़ में आपके लोन के बारे में मुख्य विवरण शामिल हैं",
+    "text_3": "डिस्बर्समेंट बैंक खाता",
+    "text_4": "मैं स्वीकार करता/करती हूँ कि मैंने मुख्य तथ्य विवरण और उसमें उल्लिखित समझौते को पढ़ और समझ लिया है और पुष्टि करता/करती हूँ कि उपर्युक्त बैंक खाता मेरा ही है। मैं प्रदान की गई सभी जानकारी की सटीकता के लिए पूर्ण उत्तरदायित्व लेता/लेती हूँ।"
+  },
+  "disbursed": {
+    "text_1": "बधाई हो!!",
+    "text_2": "आपका लोन डिस्बर्समेंट <br/> सफल रहा!",
+    "text_3": "लोन राशि 1-2 घंटे के भीतर आपके <br/> खाते में जमा कर दी जाएगी।"
+  },
+  "loanRejected": {
+    "text_1": "आवेदन स्वीकृत नहीं हुआ",
+    "text_2": "आपका आवेदन हमारी क्रेडिट स्वीकृति आवश्यकताओं को पूरा नहीं कर पाया। कृपया <strong>45 दिनों के बाद</strong> दोबारा आवेदन करें।",
+    "text_3": "संभावित कारण जानें"
+  },
+  "finboxError": {
+    "text_1": "सत्यापन विफल"
+  },
+  "submit": "सबमिट करें",
+  "continue": "जारी रखें",
+  "continue_securely": "सुरक्षित रूप से जारी रखें",
+  "sign_in_with_google": "Google से साइन इन करें",
+  "okGotIt": "ठीक है, समझ गया/गई",
+  "seconds": "सेकंड",
+  "tryAgain": "दोबारा प्रयास करें",
+  "sorry": "क्षमा करें!!",
+  "verifyOTP": "OTP सत्यापित करें",
+  "minute": "मिनट",
+  "second": "सेकंड",
+  "loaderMsg": {
+    "ENTER_MOBILE": "आपका मोबाइल नंबर चेक किया जा रहा है...",
+    "OTP_VERIFY": "OTP सत्यापित किया जा रहा है...",
+    "FETCH_PAN": "आपकी PAN की जानकारी प्राप्त की जा रही है...",
+    "ENTER_PAN": "आपका PAN सत्यापित किया जा रहा है...",
+    "PAN_VERIFY": "आपकी PAN जानकारी की पुष्टि की जा रही है...",
+    "EMPLOYMENT_DETAILS_LOAD": "रोजगार की जानकारी लोड की जा रही है...",
+    "EMPLOYMENT_DETAILS_CLICK": "आपकी रोजगार की जानकारी सेव की जा रही है...",
+    "SELECT_TENURE": "आपके लिए सबसे अच्छा ऑफ़र ढूंढा जा रहा है...",
+    "LOAN_APPROVAL_LOAD": "आपका लोन अप्रूवल फ़ाइनल किया जा रहा है...",
+    "LOAN_APPROVAL_CLICK": "आपके लोन के अनुरोध को प्रोसेस किया जा रहा है...",
+    "LOAN_REJECTED": "आपके आवेदन की स्थिति अपडेट की जा रही है...",
+    "YOUR_EMAIL": "आपका ईमेल एड्रेस चेक किया जा रहा है...",
+    "REFERENCE_DETAILS": "रेफरेंस की जानकारी सेव की जा रही है...",
+    "AADHAAR_VERIFICATION_LOAD": "चीजें तैयार की जा रही हैं...",
+    "AADHAAR_GENERATE_OTP": "आधार सत्यापन के लिए OTP भेजा जा रहा है...",
+    "AADHAAR_OTP_VERIFY": "आपका आधार सत्यापित किया जा रहा है...",
+    "Email_OTP_VERIFY": "आपका ईमेल सत्यापित किया जा रहा है...",
+    "AADHAAR_INITIATE_DIGILOCKER": "आधार सत्यापन के लिए सुरक्षित रूप से कनेक्ट किया जा रहा है...",
+    "SELFIE_VERIFICATION": "आपकी सेल्फ़ी अपलोड की जा रही है...",
+    "ADD_BANK_DETAILS_LOAD": "बैंक डिटेल्स फ़ॉर्म तैयार किया जा रहा है...",
+    "ADD_BANK_DETAILS_CLICK": "आपकी बैंक की जानकारी चेक की जा रही है...",
+    "EMANDATE_VERIFY": "आपका पेमेंट मैंडेट सेटअप किया जा रहा है...",
+    "PENNY_VERIFY": "आपका बैंक अकाउंट सत्यापित किया जा रहा है...",
+    "KFS_LOAD": "आपका लोन एग्रीमेंट तैयार किया जा रहा है...",
+    "KFS_CLICK": "आपका एग्रीमेंट सेव किया जा रहा है...",
+    "DISBURSED_LOAD": "आपके लोन की जानकारी प्राप्त की जा रही है...",
+    "DISBURSED_CLICK": "आपको आपके डैशबोर्ड पर ले जाया जा रहा है...",
+    "WAITING": "कृपया प्रतीक्षा करें...",
+    "VERIFYING_BANK": "बैंक की जानकारी सत्यापित की जा रही है...",
+    "LOADING": "लोड हो रहा है...",
+    "FINBOX_PROCESS": "आपका वित्तीय प्रोफ़ाइल चेक किया जा रहा है...",
+    "LOGOUT": "आपको साइन आउट किया जा रहा है..."
+  },
+  "mobileValidation": {
+    "text_1": "कृपया अपना मोबाइल नंबर दर्ज करें",
+    "text_2": "कृपया वैध मोबाइल नंबर दर्ज करें",
+    "text_3": "अमान्य मोबाइल नंबर"
+  },
+  "aadhaarValidation": {
+    "text_1": "कृपया अपना आधार नंबर दर्ज करें",
+    "text_2": "मान्य 12 अंकों का आधार नंबर दर्ज करें",
+    "text_3": "अमान्य आधार नंबर"
+  },
+  "panValidation": {
+    "text_1": "PAN नंबर आवश्यक है",
+    "text_2": "अमान्य PAN नंबर प्रारूप",
+    "text_3": "पिन कोड आवश्यक है",
+    "text_4": "अमान्य पिन कोड (6 अंकों का होना चाहिए)",
+    "text_5": "ऋण का उद्देश्य आवश्यक है"
+  },
+  "employmentDetailsValidation": {
+    "text_1": "मासिक आय आवश्यक है",
+    "text_2": "मासिक आय एक संख्या होनी चाहिए",
+    "text_3": "मासिक आय कम से कम ₹5,000 होनी चाहिए",
+    "text_4": "मासिक आय ₹99,99,999 से अधिक नहीं हो सकती",
+    "text_5": "रोज़गार का प्रकार आवश्यक है",
+    "text_6": "आय का माध्यम आवश्यक है",
+    "text_7": "वेतन/आय की तारीख आवश्यक है"
+  },
+  "addBankAccountValidation": {
+    "text_1": "खाता संख्या आवश्यक है",
+    "text_2": "खाता संख्या मेल खानी चाहिए",
+    "text_3": "कृपया खाता संख्या की पुष्टि करें",
+    "text_4": "IFSC कोड आवश्यक है",
+    "text_5": "अमान्य IFSC कोड"
+  },
+  "emailValidation": {
+    "text_1": "मान्य Email पता दर्ज करें",
+    "text_2": "Email आवश्यक है"
+  },
+  "installApp": {
+    "text_1": "मोबाइल ऐप इंस्टॉल करें",
+    "text_2": "तेज़ और सुरक्षित पहुंच का आनंद लें—इस ऐप को अपनी होम स्क्रीन पर जोड़ें और मात्र एक टैप की दूरी पर रहें।",
+    "text_3": "रद्द करें",
+    "text_4": "इंस्टॉल करें"
+  },
+  "12MonthError": {
+    "text_1": "आप 12 महीने के लोन के लिए पात्र नहीं हैं",
+    "text_2": "चिंता न करें!",
+    "text_3": "आप अभी भी अन्य लोन विकल्पों <br /> में से चुन सकते हैं।"
+  },
+  "bankAccount": {
+    "text_1": "बैंक खाता",
+    "text_2": "बैंक चुनें",
+    "text_3": "खाता जोड़ें",
+    "text_4": "खाता",
+    "text_5": "IFSC",
+    "text_6": "सत्यापित",
+    "text_7": "हम तेज़ डिस्बर्समेंट के लिए इस बैंक खाते की अनुशंसा करते हैं। जारी रखने के लिए पुष्टि करें या कोई अन्य खाता जोड़ें।"
+  },
+  "loanPurpose": {
+    "medical": "चिकित्सा आपातकाल",
+    "salary": "वेतन में देरी",
+    "personal": "व्यक्तिगत आपातकाल",
+    "education": "शिक्षा",
+    "rent": "किराया / बिल",
+    "other": "अन्य"
+  },
+  "progressStep": {
+    "basic": "बुनियादी <br/> विवरण दर्ज करें",
+    "approved": "स्वीकृत <br/> प्रस्ताव",
+    "complete": "KYC <br/> पूरा करें",
+    "disburse": "लोन <br/> डिस्बर्स्ड करें"
+  },
+  "employmentType": {
+    "salaried": "वेतनभोगी",
+    "selfEmployed": "स्व-रोज़गार"
+  },
+  "incomeMode": {
+    "bankTransfer": "बैंक ट्रांसफर",
+    "cash": "नकद",
+    "cheque": "चेक"
+  },
+  "kycMethod": {
+    "1": "आधार OTP के साथ सत्यापित करें",
+    "2": "Digilocker के साथ सत्यापित करें"
+  },
+  "panVerifyReject": {
+    "text_1": "आप इस ऋण के लिए योग्य नहीं हैं।",
+    "text_2": "आप अपनी आयु के आधार पर इस ऋण के लिए पात्र नहीं हैं।"
+  }
+}
+</file>
+
+<file path="src/i18n/locales/ka.json">
+{
+  "login": {
+    "text_1": "ಮೊಬೈಲ್ ದೃಢೀಕರಣ",
+    "text_2": "ಈ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಗೆ ನಾವು ನಿಮಗೆ ಒಂದು ಬಾರಿಯ ಪಾಸ್‌ವರ್ಡ್ ಕಳುಹಿಸುತ್ತೇವೆ",
+    "text_3": "ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ನಮೂದಿಸಿ",
+    "text_4": "OTP ಪಡೆಯಿರಿ",
+    "text_5": "OTP ದೃಢೀಕರಣ",
+    "text_6": "ದಯವಿಟ್ಟು ಕಳುಹಿಸಿದ 6-ಅಂಕಿಯ OTP ನಮೂದಿಸಿ {{mobile}}",
+    "text_7": "ನಿಮಗೆ OTP ಬಂದಿಲ್ಲವೇ?",
+    "text_8": "{{seconds}} ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಮತ್ತೆ ಕಳುಹಿಸಿ",
+    "text_9": "OTP ಮತ್ತೆ ಕಳುಹಿಸಿ",
+    "text_10": "ಮುಂದುವರಿಯುವ ಮೂಲಕ, ನೀವು ನಮ್ಮ",
+    "text_11": "ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳು",
+    "text_12": "ಗೌಪ್ಯತಾ ನೀತಿಗಳನ್ನು",
+    "text_13": "ಒಪ್ಪುತ್ತೀರಿ ಹಾಗೂ ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಕ್ರೆಡಿಟ್ ಬ್ಯೂರೋಗಳಿಂದ ನಿಮ್ಮ ಕ್ರೆಡಿಟ್ ಮಾಹಿತಿಯನ್ನು ಪ್ರವೇಶಿಸಲು ನಮಗೆ ಸಮ್ಮತಿ ನೀಡುತ್ತೀರಿ.",
+    "text_14": "ನನ್ನ ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯಲ್ಲಿ WhatsApp, SMS, RCS ಮತ್ತು ಯಾವುದೇ ಇತರ ಸಂವಹನ ಚಾನೆಲ್ ಮೂಲಕ ಸಾಲಕ್ಕೆ ಸಂಬಂಧಿಸಿದ ನವೀಕರಣಗಳು, ಎಚ್ಚರಿಕೆಗಳು ಮತ್ತು ಸಂವಹನಗಳನ್ನು ಸ್ವೀಕರಿಸಲು ನಾನು ಸಮ್ಮತಿಸುತ್ತೇನೆ.",
+    "text_15": "ಪೆನ್ನಿ ಡ್ರಾಪ್ ಕಾರ್ಯವಿಧಾನದ ಮೂಲಕ ನನ್ನ ಬ್ಯಾಂಕ್ ವಿವರಗಳನ್ನು ಮೌಲ್ಯೀಕರಿಸಲು ನಾನು ರಾಮ್ ಫಿನ್‌ಕಾರ್ಪ್‌ಗೆ ಅಧಿಕಾರ ನೀಡುತ್ತೇನೆ. ರೂ. 0.01 ಮೊತ್ತವನ್ನು ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಖಾತೆಗೆ ಜಮಾ ಮಾಡಬಹುದು.",
+    "text_16": "ನಿಮ್ಮ 6 ಅಂಕೆಯ OTP ಅನ್ನು ನಮೂದಿಸಿ",
+    "text_17": "ನನ್ನ ಅರ್ಜಿಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು CKYC ರಿಜಿಸ್ಟ್ರಿಯಿಂದ ನನ್ನ KYC ವಿವರಗಳನ್ನು ಪಡೆಯಲು ಮತ್ತು ಪರಿಶೀಲಿಸಲು ನಾನು ನನ್ನ ಒಪ್ಪಿಗೆಯನ್ನು ನೀಡುತ್ತೇನೆ।"
+  },
+  "notFound": {
+    "text_1": "ಓಹ್...",
+    "text_2": "ಪುಟ ಕಂಡುಬಂದಿಲ್ಲ",
+    "text_3": "ನೀವು ಹುಡುಕುತ್ತಿದ್ದ ಪುಟ ನಮಗೆ ಸಿಗಲಿಲ್ಲ.",
+    "text_4": "ಅದನ್ನು ಸರಿಸಿರಬಹುದು ಅಥವಾ ಅಳಿಸಿರಬಹುದು.",
+    "text_5": "ಹೋಮ್‌ಗೆ ಹೋಗಿ"
+  },
+  "panVerify": {
+    "text_1": "PAN ಸಂಖ್ಯೆ",
+    "text_2": "ನಿಮ್ಮ PAN ನಮೂದಿಸಿ",
+    "text_3": "ನಾವು ನಿಮ್ಮ PAN ವಿವರಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪಡೆದುಕೊಂಡಿದ್ದೇವೆ, ಏನಾದರೂ ತಪ್ಪಿದ್ದರೆ, ದಯವಿಟ್ಟು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ.",
+    "text_4": "PIN ಕೋಡ್",
+    "text_5": "PIN ಕೋಡ್ ನಮೂದಿಸಿ",
+    "text_6": "ಸಾಲದ ಉದ್ದೇಶ",
+    "text_7": "ಸಾಲದ ಉದ್ದೇಶವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "text_8": "ಈ ಮಾಹಿತಿಗಳು ಸರಿಯಾಗಿವೆಯೇ?",
+    "text_9": "PAN ದೃಢೀಕರಣ",
+    "text_10": "ಹೆಸರು",
+    "text_11": "ಹುಟ್ಟಿದ ದಿನಾಂಕ",
+    "text_12": "ಶಾಶ್ವತ ಖಾತೆ ಸಂಖ್ಯೆ",
+    "text_13": "ಇಲ್ಲ",
+    "text_14": "ಹೌದು, ದೃಢೀಕರಿಸಿ"
+  },
+  "employmentDetails": {
+    "text_1": "ಉದ್ಯೋಗ ವಿವರಗಳು",
+    "text_2": "ನಿಮ್ಮ ಸಂಬಳದ ದಿನಾಂಕ ಮತ್ತು ಉದ್ಯೋಗಿ ವಿವರಗಳನ್ನು ತಿಳಿದುಕೊಳ್ಳಲು ನಮಗೆ ಸಹಾಯ ಮಾಡಿ",
+    "text_3": "ಮಾಸಿಕ ಆದಾಯ (₹)",
+    "text_4": "ಮಾಸಿಕ ಆದಾಯವನ್ನು ನಮೂದಿಸಿ",
+    "text_5": "ಉದ್ಯೋಗದ ಪ್ರಕಾರ",
+    "text_6": "ನಿಮ್ಮ ಆದಾಯದ ವಿಧಾನವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "text_7": "ನಿಮ್ಮ ಸಂಬಳ/ಆದಾಯ ದಿನಾಂಕವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "text_8": "ನನ್ನ ವಾರ್ಷಿಕ ಮನೆಯ ಆದಾಯ <strong>₹3,00,000 ಕ್ಕಿಂತ ಹೆಚ್ಚಿದೆ</strong> ಹಾಗೂ ಒದಗಿಸಲಾದ ಮಾಹಿತಿಯು ನಿಜ ಮತ್ತು ಸರಿಯಾಗಿದೆ ಎಂದು ನಾನು ದೃಢೀಕರಿಸುತ್ತೇನೆ.",
+    "text_9": "ನಿಮಗಾಗಿ ಉತ್ತಮ ಆಫರ್ ಹುಡುಕಲಾಗುತ್ತಿದೆ...",
+    "text_10": "ಸ್ಕ್ರೀನ್‌ನಿಂದ ನಿರ್ಗಮಿಸಬೇಡಿ ಅಥವಾ ಹಿಂದಕ್ಕೆ (Back) ಬಟನ್ ಒತ್ತಬೇಡಿ <br/> ಇದಕ್ಕೆ <highlight>{{seconds}} ಸೆಕೆಂಡುಗಳ</highlight> ಸಮಯ ಹಿಡಿಯಬಹುದು",
+    "text_11": "ವೇತನ ದಿನಾಂಕವನ್ನು ಆಯ್ಕೆಮಾಡಿ"
+  },
+  "selectLoanOffer": {
+    "text_1": "ಸಾಲದ ಆಫರ್ ಆಯ್ಕೆಮಾಡಿ",
+    "text_2": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಸಾಲ ವಿತರಣೆಗೆ ಮರುಪಾವತಿ ಆಯ್ಕೆಯನ್ನು ಆರಿಸಿ",
+    "text_3": "ನನ್ನ ಸಾಲವನ್ನು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ"
+  },
+  "loanApproval": {
+    "text_1": "ಸಾಲವನ್ನು ಅನುಮೋದಿಸಲಾಗಿದೆ",
+    "text_2": "ಮೊತ್ತದ ಸಾಲಕ್ಕೆ ನಿಮಗೆ ಅನುಮೋದನೆ ನೀಡಲಾಗಿದೆ",
+    "text_3": "ಅನುಮೋದಿತ ಮೊತ್ತ",
+    "text_4": "ಪ್ರಕ್ರಿಯೆ ಶುಲ್ಕ +GST",
+    "text_5": "ಅಂತಿಮ ಸಾಲದ ಮೊತ್ತ",
+    "text_6": "ಮರುಪಾವತಿ ಯೋಜನೆ",
+    "text_7": "ಮರುಪಾವತಿ ದಿನಾಂಕ",
+    "text_8": "ಮರುಪಾವತಿ ಮೊತ್ತ",
+    "text_9": "EMI ದಿನಾಂಕಗಳು",
+    "text_10": "ಮೊತ್ತ",
+    "text_11": "ಮೂಲಧನ",
+    "text_12": "ಬಡ್ಡಿ",
+    "text_13": "ದಿನಗಳು"
+  },
+  "yourEmail": {
+    "text_1": "ನಿಮ್ಮ ಸಾಲದ ವಿವರಗಳನ್ನು ನಾವು ಎಲ್ಲಿಗೆ ಕಳುಹಿಸಬೇಕು?",
+    "text_2": "ನಿಮ್ಮ ಅನುಮೋದಿತ ಕೊಡುಗೆ ಮತ್ತು ದಾಖಲೆಗಳನ್ನು ಈ ಮೇಲ್‌ಗೆ ಕಳುಹಿಸಲಾಗುತ್ತದೆ.",
+    "text_3": "ಇಮೇಲ್ ಐಡಿ",
+    "text_4": "ನಿಮ್ಮ ಇಮೇಲ್ ID ನಮೂದಿಸಿ (ಉದಾಹರಣೆ: name@email.com)",
+    "text_5": "ಅಥವಾ",
+    "text_6": "ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ 6 ಅಂಕೆಯ OTP ಅನ್ನು ನಮೂದಿಸಿ",
+    "text_7": "OTP ಯಶಸ್ವಿಯಾಗಿ ಮರುಕಳುಹಿಸಲಾಗಿದೆ",
+    "text_8": "ಇಮೇಲ್ ಅನ್ನು ಪರಿಶೀಲಿಸಿ",
+    "text_9": "{{email}} ಗೆ ಕಳುಹಿಸಲಾದ 6 ಅಂಕೆಯ OTP ಅನ್ನು ನಮೂದಿಸಿ",
+    "text_10": "ನಿಮಗೆ ನಿಮ್ಮ OTP ಬಂದಿಲ್ಲವೇ?",
+    "text_11": "{{seconds}} ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಮರುಕಳುಹಿಸಿ",
+    "text_12": "OTP ಮರುಕಳುಹಿಸಿ",
+    "text_13": "ಸಾಲದ ಅಪ್‌ಡೇಟ್‌ಗಳನ್ನು ಕಳುಹಿಸಲು ನಾವು ನಿಮ್ಮ ಇಮೇಲ್ ಅನ್ನು ಮಾತ್ರ ಬಳಸುತ್ತೇವೆ. ಸ್ಪ್ಯಾಮ್ ಇಲ್ಲ, ಅನುಮತಿಯಿಲ್ಲದೆ ಕರೆಗಳಿಲ್ಲ."
+  },
+  "aadhaarVerification": {
+    "text_1": "KYC ದೃಢೀಕರಣ",
+    "text_2": "ತ್ವರಿತ ಸಾಲದ ಪ್ರಯೋಜನಗಳನ್ನು ಅನ್‌ಲಾಕ್ ಮಾಡಲು ನಿಮ್ಮ ಗುರುತನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ದೃಢೀಕರಿಸಿ",
+    "text_3": "ಆಧಾರ್ OTP ಯೊಂದಿಗೆ ದೃಢೀಕರಿಸಿ",
+    "text_4": "ಡಿಜಿಲಾಕರ್ ಮೂಲಕ ದೃಢೀಕರಿಸಿ",
+    "text_5": "ವೇಗವಾಗಿ",
+    "text_6": "ನಿಮ್ಮ ಆಧಾರ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ",
+    "text_7": "ನಿಮ್ಮ ನೋಂದಾಯಿತ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಗೆ OTP ಕಳುಹಿಸಲಾಗುತ್ತದೆ.",
+    "text_8": "OTP ಕಳುಹಿಸಿ",
+    "text_9": "ಆಧಾರ್ OTP ನಮೂದಿಸಿ",
+    "text_10": "ನಿಮ್ಮ ಆಧಾರ್-ಲಿಂಕ್ ಮಾಡಲಾದ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಗೆ OTP ಕಳುಹಿಸಲಾಗಿದೆ.",
+    "text_11": "ನಿಮಗೆ OTP ಬಂದಿಲ್ಲವೇ?",
+    "text_12": "{{time}} ನಂತರ ಮರುಕಳುಹಿಸಿ",
+    "text_13": "OTP ಮತ್ತೆ ಕಳುಹಿಸಿ",
+    "text_14": "ನಿಮ್ಮ KYC ಪೂರ್ಣಗೊಳಿಸಲು, ದಯವಿಟ್ಟು DigiLocker‌ನ ದಾಖಲೆಗಳ ಪಟ್ಟಿಯಿಂದ ಬಾಕ್ಸ್ ಗುರುತು ಹಾಕಿ <strong>PAN ಮತ್ತು ಆಧಾರ್</strong> ಎರಡನ್ನೂ ಆಯ್ಕೆಮಾಡಿ. ಎರಡೂ ದಾಖಲೆಗಳನ್ನು ಆಯ್ಕೆ ಮಾಡದಿದ್ದರೆ KYC ಪೂರ್ಣಗೊಳ್ಳುವುದಿಲ್ಲ."
+  },
+  "cameraPermission": {
+    "text_1": "ಸೆಲ್ಫಿ ಸೆರೆಹಿಡಿಯಲು ನಮಗೆ ನಿಮ್ಮ ಕ್ಯಾಮರಾ ಅನುಮತಿ ಬೇಕು.",
+    "text_2": "ಮುಂದುವರಿಯಲು ದಯವಿಟ್ಟು ಕ್ಯಾಮರಾ ಪ್ರವೇಶವನ್ನು ಅನುಮತಿಸಿ.",
+    "text_3": "ಹಂತ ಹಂತದ ಮಾರ್ಗದರ್ಶಿ",
+    "text_4": "ಮೇಲ್ಭಾಗದಲ್ಲಿರುವ ವಿಳಾಸ ಪಟ್ಟಿಯಲ್ಲಿ ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "text_5": "ಅನುಮತಿ ಮೇಲೆ ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "text_6": "ಕ್ಯಾಮರಾ ಅನುಮತಿಯನ್ನು ಆನ್ ಮಾಡಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "text_7": "ಕ್ಯಾಮರಾ ಅನುಮತಿಯನ್ನು ಅಪ್‌ಡೇಟ್ ಮಾಡಿದ ನಂತರ, ಕೆಳಗೆ ಮುಂದುವರಿಸಿ ಮೇಲೆ ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "text_8": "ಟೋಪಿ ಇರಬಾರದು",
+    "text_9": "ಕನ್ನಡಕ ಇರಬಾರದು"
+  },
+  "selfie": {
+    "text_1": "ಸೆಲ್ಫಿ ದೃಢೀಕರಣ",
+    "text_2": "ನಿಜವಾಗಿಯೂ ಇದು ನೀವೇ ಎಂದು ದೃಢೀಕರಿಸಲು ಒಂದು ತ್ವರಿತ ಸೆಲ್ಫಿ.",
+    "text_3": "ಸೆಲ್ಫಿ ಕ್ಲಿಕ್ ಮಾಡಿ",
+    "text_4": "ಪುನಃ ತೆಗೆದುಕೊಳ್ಳಿ"
+  },
+  "addBankAccount": {
+    "text_1": "ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಖಾತೆಯನ್ನು ಸೇರಿಸಿ",
+    "text_2": "ನಿಮ್ಮ ಸಾಲ ಮತ್ತು ಸ್ವಯಂ-ಡೆಬಿಟ್ EMI ಗಳನ್ನು ಸ್ವೀಕರಿಸಲು ಸಂಬಳ ಖಾತೆಯನ್ನು ಸೇರಿಸಿ.",
+    "text_3": "ಬ್ಯಾಂಕ್ ಖಾತೆ ಸಂಖ್ಯೆ",
+    "text_4": "ಬ್ಯಾಂಕ್ ಖಾತೆ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ",
+    "text_5": "ಖಾತೆ ಸಂಖ್ಯೆಯನ್ನು ಮರು-ನಮೂದಿಸಿ",
+    "text_6": "ಬ್ಯಾಂಕ್ IFSC ಕೋಡ್",
+    "text_7": "ಬ್ಯಾಂಕ್ IFSC ಕೋಡ್ ನಮೂದಿಸಿ",
+    "text_8": "ಈ ಬ್ಯಾಂಕ್ ಖಾತೆ {{name}} ಅವರ ಹೆಸರಿನಲ್ಲಿ ನೋಂದಾಯಿಸಲಾಗಿದೆ",
+    "text_9": "ನಿಮ್ಮ ಇ-ಮ್ಯಾಂಡೇಟ್ ಅನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ",
+    "text_10": "ಇ-ಮ್ಯಾಂಡೇಟ್ ಪ್ರಕ್ರಿಯೆಯನ್ನು ಪೂರ್ಣಗೊಳಿಸಿದ ನಂತರ, ಮುಂದಿನ ಪ್ರಕ್ರಿಯೆಗಾಗಿ ಅರ್ಜಿಗೆ ಹಿಂತಿರುಗಿ."
+  },
+  "pennyDrop": {
+    "text_1": "ನಿಮ್ಮ ಪೆನ್ನಿ ಡ್ರಾಪ್ ಪೂರ್ಣಗೊಳಿಸಿ",
+    "text_2": "ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ವಿವರಗಳನ್ನು ದೃಢೀಕರಿಸಲು <br/> ನಾವು ನಿಮ್ಮ ಖಾತೆಗೆ ₹1 ಕಳುಹಿಸುತ್ತೇವೆ.",
+    "text_3": "ದೃಢೀಕರಿಸಲು ನಿಮ್ಮ ಬ್ಯಾಂಕ್‌ಗೆ ₹1 ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ",
+    "text_4": "ಇ-ಮ್ಯಾಂಡೇಟ್"
+  },
+  "kfs": {
+    "text_1": "ಪ್ರಮುಖ ಸಂಗತಿಗಳ ಹೇಳಿಕೆ",
+    "text_2": "ಈ ದಾಖಲೆಯು ನಿಮ್ಮ ಸಾಲದ ಬಗ್ಗೆ ಪ್ರಮುಖ ವಿವರಗಳನ್ನು ಒಳಗೊಂಡಿದೆ",
+    "text_3": "ವಿತರಣೆ ಬ್ಯಾಂಕ್ ಖಾತೆ",
+    "text_4": "ನಾನು ಪ್ರಮುಖ ಸಂಗತಿಗಳ ಹೇಳಿಕೆಯನ್ನು ಮತ್ತು ಅದರಲ್ಲಿ ಉಲ್ಲೇಖಿಸಲಾದ ಒಪ್ಪಂದವನ್ನು ಓದಿದ್ದೇನೆ ಮತ್ತು ಅರ್ಥಮಾಡಿಕೊಂಡಿದ್ದೇನೆ ಎಂದು ಒಪ್ಪಿಕೊಳ್ಳುತ್ತೇನೆ ಹಾಗೂ ಮೇಲೆ ತಿಳಿಸಲಾದ ಬ್ಯಾಂಕ್ ಖಾತೆ ನನ್ನದು ಎಂದು ದೃಢೀಕರಿಸುತ್ತೇನೆ. ಒದಗಿಸಲಾದ ಎಲ್ಲಾ ಮಾಹಿತಿಯ ನಿಖರತೆಗೆ ನಾನು ಸಂಪೂರ್ಣ ಜವಾಬ್ದಾರಿಯನ್ನು ತೆಗೆದುಕೊಳ್ಳುತ್ತೇನೆ."
+  },
+  "disbursed": {
+    "text_1": "ಅಭಿನಂದನೆಗಳು!!",
+    "text_2": "ನಿಮ್ಮ ಸಾಲ ವಿತರಣೆ ಯಶಸ್ವಿಯಾಗಿದೆ!",
+    "text_3": "ಸಾಲದ ಮೊತ್ತವನ್ನು 1-2 ಗಂಟೆಗಳಲ್ಲಿ ನಿಮ್ಮ <br /> ಖಾತೆಗೆ ಜಮಾ ಮಾಡಲಾಗುತ್ತದೆ."
+  },
+  "loanRejected": {
+    "text_1": "ಅರ್ಜಿಯನ್ನು ಅನುಮೋದಿಸಲಾಗಿಲ್ಲ",
+    "text_2": "ನಿಮ್ಮ ಅರ್ಜಿ ನಮ್ಮ ಕ್ರೆಡಿಟ್ ಅನುಮೋದನಾ ಅವಶ್ಯಕತೆಗಳನ್ನು ಪೂರೈಸಲಿಲ್ಲ. ದಯವಿಟ್ಟು <strong>45 ದಿನಗಳ ನಂತರ</strong> ಮತ್ತೆ ಅರ್ಜಿ ಸಲ್ಲಿಸಿ.",
+    "text_3": "ಸಂಭವನೀಯ ಕಾರಣಗಳನ್ನು ತಿಳಿಯಿರಿ"
+  },
+  "finboxError": {
+    "text_1": "ದೃಢೀಕರಣ ವಿಫಲವಾಗಿದೆ"
+  },
+  "submit": "ಸಲ್ಲಿಸಿ",
+  "continue": "ಮುಂದುವರಿಸಿ",
+  "continue_securely": "ಸುರಕ್ಷಿತವಾಗಿ ಮುಂದುವರಿಸಿ",
+  "sign_in_with_google": "Google ಮೂಲಕ ಸೈನ್ ಇನ್ ಮಾಡಿ",
+  "okGotIt": "ಸರಿ, ಅರ್ಥವಾಯಿತು",
+  "seconds": "ಸೆಕೆಂಡುಗಳು",
+  "tryAgain": "ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+  "sorry": "ಕ್ಷಮಿಸಿ!!",
+  "verifyOTP": "OTP ದೃಢೀಕರಿಸಿ",
+  "minute": "ನಿಮಿಷ",
+  "second": "ಸೆಕೆಂಡು",
+  "loaderMsg": {
+    "ENTER_MOBILE": "ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "OTP_VERIFY": "OTP ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "FETCH_PAN": "ನಿಮ್ಮ PAN ವಿವರಗಳನ್ನು ಪಡೆಯಲಾಗುತ್ತಿದೆ...",
+    "ENTER_PAN": "ನಿಮ್ಮ PAN ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "PAN_VERIFY": "ನಿಮ್ಮ PAN ವಿವರಗಳನ್ನು ದೃಢೀಕರಿಸಲಾಗುತ್ತಿದೆ...",
+    "EMPLOYMENT_DETAILS_LOAD": "ಉದ್ಯೋಗ ವಿವರಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    "EMPLOYMENT_DETAILS_CLICK": "ನಿಮ್ಮ ಉದ್ಯೋಗ ವಿವರಗಳನ್ನು ಸೇವ್ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    "SELECT_TENURE": "ನಿಮಗಾಗಿ ಅತ್ಯುತ್ತಮ ಆಫರ್ ಹುಡುಕಲಾಗುತ್ತಿದೆ...",
+    "LOAN_APPROVAL_LOAD": "ನಿಮ್ಮ ಸಾಲದ ಅನುಮೋದನೆ ಅಂತಿಮಗೊಳಿಸಲಾಗುತ್ತಿದೆ...",
+    "LOAN_APPROVAL_CLICK": "ನಿಮ್ಮ ಸಾಲದ ವಿನಂತಿಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ...",
+    "LOAN_REJECTED": "ನಿಮ್ಮ ಅರ್ಜಿಯ ಸ್ಥಿತಿಯನ್ನು ನವೀಕರಿಸಲಾಗುತ್ತಿದೆ...",
+    "YOUR_EMAIL": "ನಿಮ್ಮ ಇಮೇಲ್ ವಿಳಾಸವನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "REFERENCE_DETAILS": "ರೆಫರೆನ್ಸ್ ವಿವರಗಳನ್ನು ಸೇವ್ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    "AADHAAR_VERIFICATION_LOAD": "ವಿಷಯಗಳನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ...",
+    "AADHAAR_GENERATE_OTP": "ಆಧಾರ್ ಪರಿಶೀಲನೆಗಾಗಿ OTP ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ...",
+    "AADHAAR_OTP_VERIFY": "ನಿಮ್ಮ ಆಧಾರ್ ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "Email_OTP_VERIFY": "ನಿಮ್ಮ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "AADHAAR_INITIATE_DIGILOCKER": "ಆಧಾರ್ ಪರಿಶೀಲನೆಗಾಗಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ...",
+    "SELFIE_VERIFICATION": "ನಿಮ್ಮ ಸೆಲ್ಫಿ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    "ADD_BANK_DETAILS_LOAD": "ಬ್ಯಾಂಕ್ ವಿವರಗಳ ಫಾರ್ಮ್ ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ...",
+    "ADD_BANK_DETAILS_CLICK": "ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "EMANDATE_VERIFY": "ನಿಮ್ಮ ಪೇಮೆಂಟ್ ಮಂಡೇಟ್ ಸೆಟ್ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    "PENNY_VERIFY": "ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಖಾತೆಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "KFS_LOAD": "ನಿಮ್ಮ ಸಾಲ ಒಪ್ಪಂದವನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ...",
+    "KFS_CLICK": "ನಿಮ್ಮ ಒಪ್ಪಂದವನ್ನು ಸೇವ್ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    "DISBURSED_LOAD": "ನಿಮ್ಮ ಸಾಲದ ವಿವರಗಳನ್ನು ಪಡೆಯಲಾಗುತ್ತಿದೆ...",
+    "DISBURSED_CLICK": "ನಿಮ್ಮ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್‌ಗೆ ಕರೆದೊಯ್ಯಲಾಗುತ್ತಿದೆ...",
+    "WAITING": "ದಯವಿಟ್ಟು ನಿರೀಕ್ಷಿಸಿ...",
+    "VERIFYING_BANK": "ಬ್ಯಾಂಕ್ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "LOADING": "ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
+    "FINBOX_PROCESS": "ನಿಮ್ಮ ಆರ್ಥಿಕ ಪ್ರೊಫೈಲ್ ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...",
+    "LOGOUT": "ನಿಮ್ಮನ್ನು ಸೈನ್ ಔಟ್ ಮಾಡಲಾಗುತ್ತಿದೆ..."
+  },
+  "mobileValidation": {
+    "text_1": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ",
+    "text_2": "ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ ಮೊಬೈಲ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ",
+    "text_3": "ಅಮಾನ್ಯವಾದ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ"
+  },
+  "aadhaarValidation": {
+    "text_1": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಆಧಾರ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ",
+    "text_2": "ಮಾನ್ಯ 12 ಅಂಕೆಗಳ ಆಧಾರ್ ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ",
+    "text_3": "ಅಮಾನ್ಯ ಆಧಾರ್ ಸಂಖ್ಯೆ"
+  },
+  "panValidation": {
+    "text_1": "PAN ಸಂಖ್ಯೆ ಅಗತ್ಯವಿದೆ",
+    "text_2": "ಅಮಾನ್ಯ PAN ಸಂಖ್ಯೆ ಸ್ವರೂಪ",
+    "text_3": "ಪಿನ್ ಕೋಡ್ ಅಗತ್ಯವಿದೆ",
+    "text_4": "ಅಮಾನ್ಯ ಪಿನ್ ಕೋಡ್ (6 ಅಂಕೆಗಳಿರಬೇಕು)",
+    "text_5": "ಸಾಲದ ಉದ್ದೇಶದ ಅಗತ್ಯವಿದೆ"
+  },
+  "employmentDetailsValidation": {
+    "text_1": "ಮಾಸಿಕ ಆದಾಯ ಅಗತ್ಯವಿದೆ",
+    "text_2": "ಮಾಸಿಕ ಆದಾಯವು ಒಂದು ಸಂಖ್ಯೆಯಾಗಿರಬೇಕು",
+    "text_3": "ಮಾಸಿಕ ಆದಾಯ ಕನಿಷ್ಠ ₹5,000 ಇರಬೇಕು",
+    "text_4": "ಮಾಸಿಕ ಆದಾಯ ₹99,99,999 ಮೀರಬಾರದು",
+    "text_5": "ಉದ್ಯೋಗದ ಪ್ರಕಾರದ ಅಗತ್ಯವಿದೆ",
+    "text_6": "ಆದಾಯದ ವಿಧಾನದ ಅಗತ್ಯವಿದೆ",
+    "text_7": "ಸಂಬಳ/ಆದಾಯದ ದಿನಾಂಕ ಅಗತ್ಯವಿದೆ"
+  },
+  "addBankAccountValidation": {
+    "text_1": "ಖಾತೆ ಸಂಖ್ಯೆ ಅಗತ್ಯವಿದೆ",
+    "text_2": "ಖಾತೆ ಸಂಖ್ಯೆಗಳು ಹೊಂದಿಕೆಯಾಗಬೇಕು",
+    "text_3": "ದಯವಿಟ್ಟು ಖಾತೆ ಸಂಖ್ಯೆಯನ್ನು ದೃಢೀಕರಿಸಿ",
+    "text_4": "IFSC ಕೋಡ್ ಅಗತ್ಯವಿದೆ",
+    "text_5": "ಅಮಾನ್ಯ IFSC ಕೋಡ್"
+  },
+  "emailValidation": {
+    "text_1": "ಮಾನ್ಯ Email ವಿಳಾಸವನ್ನು ನಮೂದಿಸಿ",
+    "text_2": "Email ಅಗತ್ಯವಿದೆ"
+  },
+  "installApp": {
+    "text_1": "ಮೊಬೈಲ್ ಆ್ಯಪ್ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ",
+    "text_2": "ವೇಗವಾದ, ಸುರಕ್ಷಿತ ಪ್ರವೇಶವನ್ನು ಆನಂದಿಸಿ—ಈ ಆ್ಯಪ್ ಅನ್ನು ನಿಮ್ಮ ಹೋಮ್ ಸ್ಕ್ರೀನ್‌ಗೆ ಸೇರಿಸಿ ಮತ್ತು ಕೇವಲ ಒಂದು ಟ್ಯಾಪ್ ದೂರದಲ್ಲಿರಿ.",
+    "text_3": "ರದ್ದುಮಾಡಿ",
+    "text_4": "ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ"
+  },
+  "12MonthError": {
+    "text_1": "ನೀವು 12 ತಿಂಗಳ ಸಾಲಕ್ಕೆ ಅರ್ಹರಾಗಿಲ್",
+    "text_2": "ಚಿಂತೆಯಿಲ್ಲ!",
+    "text_3": "ನೀವು ಇನ್ನೂ ಇತರ ಸಾಲದ ಆಯ್ಕೆಗಳಿಂದ <br /> ಆಯ್ಕೆ ಮಾಡಬಹುದು"
+  },
+  "bankAccount": {
+    "text_1": "ಬ್ಯಾಂಕ್ ಖಾತೆ",
+    "text_2": "ಬ್ಯಾಂಕ್ ಆಯ್ಕೆಮಾಡಿ",
+    "text_3": "ಖಾತೆ ಸೇರಿಸಿ",
+    "text_4": "ಖಾತೆ",
+    "text_5": "IFSC",
+    "text_6": "ದೃಢೀಕರಿಸಲಾಗಿದೆ",
+    "text_7": "ವೇಗವಾದ ವಿತರಣೆಗಾಗಿ ನಾವು ಈ ಬ್ಯಾಂಕ್ ಖಾತೆಯನ್ನು ಶಿಫಾರಸು ಮಾಡುತ್ತೇವೆ. ಮುಂದುವರಿಸಲು ಅಥವಾ ಬೇರೆ ಖಾತೆಯನ್ನು ಸೇರಿಸಲು ದೃಢೀಕರಿಸಿ."
+  },
+  "loanPurpose": {
+    "medical": "ವೈದ್ಯಕೀಯ ತುರ್ತು ಪರಿಸ್ಥಿತಿ",
+    "salary": "ಸಂಬಳ ವಿಳಂಬ",
+    "personal": "ವೈಯಕ್ತಿಕ ತುರ್ತು ಪರಿಸ್ಥಿತಿ",
+    "education": "ಶಿಕ್ಷಣ",
+    "rent": "ಬಾಡಿಗೆ / ಬಿಲ್‌ಗಳು",
+    "other": "ಇತರೆ"
+  },
+  "progressStep": {
+    "basic": "ಮೂಲ <br/> ವಿವರಗಳನ್ನು ನಮೂದಿಸಿ",
+    "approved": "ಅನುಮೋದಿತ <br/> ಆಫರ್",
+    "complete": "ಸಂಪೂರ್ಣ <br/> KYC",
+    "disburse": "ಸಾಲ <br/> ವಿತರಣೆ"
+  },
+  "employmentType": {
+    "salaried": "ಸಂಬಳದ ಉದ್ಯೋಗ",
+    "selfEmployed": "ಸ್ವ-ಉದ್ಯೋಗ"
+  },
+  "incomeMode": {
+    "bankTransfer": "ಬ್ಯಾಂಕ್ ವರ್ಗಾವಣೆ",
+    "cash": "ನಗದು",
+    "cheque": "ಚೆಕ್"
+  },
+  "kycMethod": {
+    "1": "ಆಧಾರ್ OTP ಯೊಂದಿಗೆ ದೃಢೀಕರಿಸಿ",
+    "2": "ಡಿಜಿಲಾಕರ್ ಮೂಲಕ ದೃಢೀಕರಿಸಿ"
+  },
+  "panVerifyReject": {
+    "text_1": "ನಿರಾಕರಿಸಿದ ಪ್ರಕ್ರಿಯೆ",
+    "text_2": "ನಿಮ್ಮ ವಯಸ್ಸಿನ ಆಧಾರದ ಮೇಲೆ ನೀವು ಈ ಸಾಲಕ್ಕೆ ಅರ್ಹರಾಗಿಲ್ಲ."
+  }
+}
+</file>
+
+<file path="src/i18n/index.js">
+.use(LanguageDetector) // auto-detect browser language
+</file>
+
+<file path="src/lib/clevertap.js">
+const initializeCleverTap = () =>
+⋮----
+// Optional: Set privacy controls (optOut and useIP) before initialization
+// clevertap.privacy.push({ optOut: false }); // Set to true if the user opts out
+clevertap.privacy.push({ useIP: true }); // Set to true if the user agrees to share their IP
+⋮----
+// Initialize CleverTap with your account ID, region, and optional target domain
+⋮----
+// For SPA apps
+⋮----
+// Log initialization for debugging
+</file>
+
+<file path="src/lib/razorpay.js">
+// Rozarpay Mandate
+export const razorpayEmandate = async (data, callback_url = "") =>
+⋮----
+script.onload = () =>
+⋮----
+// callback_url: host[0] + "//" + host[2] + callback_url,
+⋮----
+// Redirect if user closes the Razorpay modal
+</file>
+
+<file path="src/pages/AadhaarVerification.jsx">
+export default function AadhaarVerification()
+⋮----
+const fetchAPI = async () =>
+⋮----
+const fetchEvent = async () =>
+⋮----
+const handleDigilocker = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* Enter Aadhaar */}
+⋮----
+{/* Aadhaar OTP Verify */}
+</file>
+
+<file path="src/pages/AddBankAccount.jsx">
+export default function AddBankAccount()
+⋮----
+const fetchBankData = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* Account Number */}
+⋮----
+// onPaste={(e) => e.preventDefault()}
+⋮----
+{/* Confirm Account Number */}
+⋮----
+// onPaste={(e) => e.preventDefault()}
+⋮----
+{/* IFSC Code */}
+⋮----
+{/* Amount Info */}
+{/* <div className="flex gap-2 p-3 bg-gray-100/80 rounded-lg">
+                <div>
+                  <Info color="#333333" size={18} />
+                </div>
+                <div className="text-xs">
+                  <span className="font-semibold">₹{data?.finalAmountReceived?.toLocaleString("en-IN")}</span> will be transferred to this bank account after completion of all the steps
+                </div>
+              </div> */}
+⋮----
+{/* Submit Button */}
+⋮----
+{/* Emandate Loader */}
+{/* <CompleteEmandate open={open} setOpen={setOpen} /> */}
+</file>
+
+<file path="src/pages/AutoLogin.jsx">
+export default function AutoLogin()
+⋮----
+const handleAutoLogin = async () =>
+⋮----
+// localStorage.clear();
+</file>
+
+<file path="src/pages/CameraPermission.jsx">
+export default function CameraPermission()
+⋮----
+const handleCameraAccess = async () =>
+⋮----
+// Stop the camera stream immediately after permission granted
+</file>
+
+<file path="src/pages/DigilockerVerify.jsx">
+export default function DigilockerVerify()
+⋮----
+const fetchApis = () =>
+⋮----
+const handleVerifyDigilockerV1 = async () =>
+⋮----
+const handleVerifyDigilockerV2 = async () =>
+</file>
+
+<file path="src/pages/Disbursed.jsx">
+export default function Disbursed()
+⋮----
+const fetchEvent = async () =>
+⋮----
+const handleRedirect = async () =>
+⋮----
+{/* Google Rating & Review */}
+</file>
+
+<file path="src/pages/Emandate.jsx">
+export default function Emandate()
+⋮----
+const handlePennyDrop = async () =>
+⋮----
+// if (!accountId) {
+//   navigate("/select-tenure");
+//   return;
+// }
+⋮----
+// try {
+//   const res = await pennyDropAPI(accountId);
+⋮----
+//   if (res?.data?.pennyStatus === "completed") {
+//     navigate("/loan-approval", {
+//       state: {
+//         leadID: selectedLoanOffer.leadID,
+//         productID: selectedLoanOffer.productID,
+//         amount: selectedLoanOffer.amount,
+//         tenureDays: selectedLoanOffer.tenureDays,
+//         roi: selectedLoanOffer.roi,
+//       },
+//     });
+⋮----
+//     return;
+//   }
+⋮----
+//   if (res?.data?.pennyStatus === "created") {
+//     await delay(5000);
+//     setResendTrigger((prev) => prev + 1);
+//   }
+// } catch (error) {
+//   console.error("Penny Drop Failed:", error);
+// }
+</file>
+
+<file path="src/pages/EmploymentDetails.jsx">
+export default function EmploymentDetails()
+⋮----
+const handleSelectTenure = async () =>
+⋮----
+// Initial Values
+⋮----
+{/* Monthly Income */}
+⋮----
+{/* Employment Type */}
+⋮----
+{/* Mode Of Income */}
+⋮----
+{/* Salary Date */}
+⋮----
+{/* <div className="grid grid-cols-7 gap-3 bg-gray-50 p-5 rounded-2xl">
+                    {SALARY_DATE.map((btn) => (
+                      <button
+                        key={btn}
+                        type="button"
+                        onClick={async () => {
+                          setFieldValue("salaryDate", `${btn}`);
+                          await eventsFunnelAPI("Select_Salary_Date", { salary_date: btn });
+                          await clevertap__employ_details_sal_date_sel(btn);
+                        }}
+                        className={`rounded-lg border text-sm font-medium py-2.5 transition-all duration-200
+          ${values.salaryDate === String(btn) ? "bg-green-50 border-green-500 text-green-600" : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"}`}
+                      >
+                        {btn}
+                      </button>
+                    ))}
+                  </div> */}
+⋮----
+{/* Submit Button */}
+⋮----
+{/* Offer Generating */}
+</file>
+
+<file path="src/pages/Finbox.jsx">
+export default function Finbox()
+⋮----
+const handleFinboxCreate = async () =>
+</file>
+
+<file path="src/pages/FinboxError.jsx">
+export default function FinboxError()
+⋮----
+const handleLoader = async () =>
+</file>
+
+<file path="src/pages/FinboxStatus.jsx">
+export default function FinboxStatus()
+⋮----
+const handleBankingSurrogateAPI = async () =>
+⋮----
+const handleFinboxConnect = async () =>
+</file>
+
+<file path="src/pages/KFS.jsx">
+export default function KFS()
+⋮----
+const fetchKFS = async () =>
+⋮----
+const handleAcceptKFS = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* Fixed Button */}
+⋮----
+{/* Bank Details */}
+⋮----
+{/* Accept Terms */}
+</file>
+
+<file path="src/pages/LoanApproval.jsx">
+export default function LoanApproval()
+⋮----
+const fetchLoanApproval = async () =>
+⋮----
+const handlePaydayToEMIConversion = async () =>
+⋮----
+const handleConfirmBankAccount = async () =>
+⋮----
+const handleEMIProduct = async () =>
+⋮----
+const processingAndGst = () =>
+⋮----
+{/* Offer Tags */}
+{/* {data?.expiryDate && <SpecialOfferTimer expiryDate={data?.expiryDate} />} */}
+⋮----
+{/* Approved Amount */}
+⋮----
+{/* Loan Details */}
+⋮----
+{/* Bank Accounts */}
+⋮----
+{/* Repayment Plan */}
+⋮----
+{/* Payday Details */}
+⋮----
+{/* EMI Details */}
+⋮----
+{/* Action Button */}
+</file>
+
+<file path="src/pages/LoanRejected.jsx">
+export default function LoanRejected()
+⋮----
+const handleLoader = async () =>
+</file>
+
+<file path="src/pages/Login.jsx">
+export default function Login()
+⋮----
+// useEffect(() => {
+//   clevertap__sv_enter_mobile();
+// }, []);
+⋮----
+{/* Verify OTP */}
+</file>
+
+<file path="src/pages/Logout.jsx">
+export default function Logout()
+⋮----
+// Clear Redux state
+⋮----
+// Remove Local Storage
+</file>
+
+<file path="src/pages/NotFound.jsx">
+export default function NotFound()
+</file>
+
+<file path="src/pages/PANVerify.jsx">
+export default function PANVerify()
+⋮----
+// fetchPanData();
+⋮----
+const fetchPanData = async () =>
+⋮----
+{/* Stepper */}
+⋮----
+{/* Banner */}
+⋮----
+{/* PAN Number */}
+⋮----
+{/* PIN Code */}
+⋮----
+// Invalid repeated-digit PIN
+⋮----
+// Valid Pin
+⋮----
+{/* Loan Purpose */}
+⋮----
+{/* Submit Button */}
+⋮----
+{/* CKYC OTP Verification */}
+⋮----
+{/* PAN Confirmation Drawer */}
+</file>
+
+<file path="src/pages/PANVerifyRejected.jsx">
+export default function PANVerifyRejected()
+⋮----
+//   useEffect(() => {
+//     handleLoader();
+//   }, []);
+⋮----
+//   const handleLoader = async () => {
+//     dispatch(setLoading({ status: true, message: t("loaderMsg.LOAN_REJECTED") }));
+//     await clevertap__rejection_screen("page_view");
+⋮----
+//     await delay(3000);
+//     dispatch(resetLoading());
+//   };
+</file>
+
+<file path="src/pages/PennyDrop.jsx">
+export default function PennyDrop()
+⋮----
+const handlePennyDrop = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* Submit Button */}
+</file>
+
+<file path="src/pages/SelectTenure.jsx">
+export default function SelectTenure()
+⋮----
+const handleSelectTenure = async () =>
+⋮----
+// 12 month plan status
+⋮----
+// 12 month plan approved
+⋮----
+// 12 month plan not eligible
+⋮----
+{/* Title */}
+⋮----
+{/* Loan Offers */}
+⋮----
+{/* Month 12 Plan */}
+⋮----
+{/* Other Plans */}
+⋮----
+{/* <Slider
+                      progress
+                      defaultValue={11000}
+                      onChange={(value) => {
+                        console.log(value);
+                      }}
+                      min={1000}
+                      max={12000}
+                      className="!text-blue-900"
+                    />
+                    <div className="flex justify-between mt-2">
+                      <span className="text-xs text-gray-500">Min. 1k</span>
+                      <span className="text-xs text-gray-500">Min. 12k</span>
+                    </div> */}
+⋮----
+{/* Submit Button */}
+⋮----
+// dispatch(setLoading({ status: true, message: t("loaderMsg.WAITING") }));
+⋮----
+{/* Month 12 Loan Rejected Modal */}
+</file>
+
+<file path="src/pages/Selfie.jsx">
+export default function Selfie()
+⋮----
+const checkHyperVergeFeature = async () =>
+⋮----
+const capture = async () =>
+⋮----
+// capture images
+⋮----
+// set image & call selfie liveness api
+⋮----
+const retake = () =>
+⋮----
+const handleVerifySelfie = async (screenshot) =>
+⋮----
+// const file = base64ToFile(screenshot, "selfie.jpg");
+⋮----
+const checkPermissionDenied = async (error) =>
+⋮----
+const fetchEvent = async () =>
+⋮----
+{/* Title */}
+⋮----
+{/* Capture / Retake Buttons */}
+</file>
+
+<file path="src/pages/SelfieHyperVerge.jsx">
+export default function SelfieHyperVerge()
+⋮----
+const hypervergeOnboarding = async () =>
+</file>
+
+<file path="src/pages/SelfieHyperVergeResult.jsx">
+export default function SelfieHyperVergeResult()
+⋮----
+const hypervergeOnboarding = async () =>
+</file>
+
+<file path="src/pages/Stepper.jsx">
+export default function Stepper()
+⋮----
+// const { fetchStepperOnReload } = useStepper();
+⋮----
+// useEffect(() => {
+//   fetchStepperOnReload();
+// }, []);
+</file>
+
+<file path="src/pages/YourEmail.jsx">
+export default function YourEmail()
+⋮----
+const customersDetails = async () =>
+⋮----
+{/* Email Input */}
+⋮----
+{/* Submit Button */}
+⋮----
+{/* Divider */}
+⋮----
+{/* GOOGLE SIGN IN */}
+⋮----
+{/* Faster Image */}
+⋮----
+{/* OTP Drawer */}
+</file>
+
+<file path="src/redux/slices/appSlice.js">
+setLoading: (state, action) =>
+⋮----
+resetLoading: (state) =>
+⋮----
+setStepperDisable: (state, action) =>
+⋮----
+setTriggerInstallOnce: (state, action) =>
+⋮----
+clearAppData: ()
+</file>
+
+<file path="src/redux/slices/userSlice.js">
+setMobile: (state, action) =>
+⋮----
+setRequestId: (state, action) =>
+⋮----
+setCustomer: (state, action) =>
+⋮----
+setLead: (state, action) =>
+⋮----
+setEmployment: (state, action) =>
+⋮----
+setAccountId: (state, action) =>
+⋮----
+setSelectedLoanOffer: (state, action) =>
+⋮----
+setHasLoanOffer: (state, action) =>
+⋮----
+setUpgradeLoanAmount: (state, action) =>
+⋮----
+setMonth12Clicked: (state, action) =>
+⋮----
+setIsNewDigilocker: (state, action) =>
+⋮----
+clearUserData: ()
+</file>
+
+<file path="src/redux/store.js">
+// Combine reducers
+⋮----
+// Redux Persist configuration
+⋮----
+whitelist: ["user", "app"], // Persist only these reducers
+⋮----
+// Create persisted reducer
+⋮----
+// Create store
+⋮----
+middleware: (getDefaultMiddleware)
+⋮----
+serializableCheck: false, // Needed to avoid warnings with redux-persist
+⋮----
+// Create persistor
+</file>
+
+<file path="src/routes/AppRoutes.jsx">
+export default function AppRoutes()
+⋮----
+{/* Inactivity Logout */}
+⋮----
+{/* Public Routes */}
+⋮----
+{/* Protected Routes */}
+⋮----
+{/* <Route path="camera-permission" element={<CameraPermission />} />
+          <Route path="selfie-verification" element={<Selfie />} /> */}
+</file>
+
+<file path="src/routes/ProtectedRoutes.jsx">
+export default function ProtectedRoutes()
+</file>
+
+<file path="src/services/dashboardService.js">
+
+</file>
+
+<file path="src/services/userService.js">
+// Customer Login API
+export async function customerLoginAPI(mobile, options =
+⋮----
+// Verify OTP API
+export async function verifyOTPAPI(requestId, otp)
+⋮----
+// const search = new URLSearchParams(window.location.search);
+⋮----
+// try {
+//   const urlBase = "customers/verify-otp";
+⋮----
+//   const utmSource = search.get("utm_source");
+⋮----
+//   const url = utmSource ? `${urlBase}?utm_source=${utmSource}` : urlBase;
+⋮----
+//   const req = {
+//     url: url,
+//     method: "POST",
+//     data: {
+//       request_id: requestId,
+//       otp,
+//       whatsapp_consent: true,
+//       consent: true,
+//       bankfetch_consent: true,
+//     },
+//   };
+//   const res = await callApi(req, 1000);
+//   return res;
+// } catch (error) {
+//   throw error;
+// }
+⋮----
+// bankfetch_consent: true,
+⋮----
+// PAN Verification API
+export async function panAutoFetchAPI()
+⋮----
+// PAN Verification API
+export async function panVerificationAPI(
+⋮----
+// PAN Confirmation API
+export async function panConfirmationAPI(panNumber)
+⋮----
+// Basic Details API
+export async function basicDetailsAPI(data)
+// Verify Email OTP API
+export async function verifyEmailOTPAPI(email, otp)
+⋮----
+// Generate Aadhaar OTP API
+export async function generateAadhaarOTPAPI(aadharNo, accountId)
+⋮----
+// Verify Aadhaar OTP API
+export async function verifyAadhaarOTPAPI(aadharNo, otp, accountId)
+⋮----
+// Aadhaar PAN Verify API
+export async function aadhaarPANVerifyAPI()
+⋮----
+// Verify Aadhaar OTP API
+export async function selfieLivenessAPI(blob, accountId)
+⋮----
+// Get Bank Details API
+export async function getBankDetailsAPI(ifsc)
+⋮----
+// Verify Aadhaar OTP API
+export async function addBankDetailsAPI(values, previousAccountID)
+⋮----
+// Initiate Digilocker API
+export async function initiateDigilockerAPI(accountId, isNewDigilocker)
+⋮----
+// Webjook Digilocker
+export async function webhookDigilockerAPI(params)
+⋮----
+// Aadhaar Digilocker Status Check API
+export async function aadhaarDigilockerStatusCheckAPI(params)
+⋮----
+// Get KYC Feature
+export async function getKYCFeatureAPI()
+⋮----
+// Finbox Connect API
+export async function finboxConnectAPI(entityId)
+⋮----
+// Select Tenure Node API
+export async function selectTenureAPI()
+⋮----
+// Select Tenure API
+// export async function selectTenureAPI() {
+//   const jwt_token = Storage.get(KEYS.JWT_TOKEN);
+//   const access_token = Storage.get(KEYS.ACCESS_TOKEN);
+//   const leadID = Number(Storage.get(KEYS.LEAD_ID));
+⋮----
+//   if (!access_token || !leadID) {
+//     throw new Error("Missing access token or leadID");
+//   }
+⋮----
+//   const data = { access_token, leadID };
+⋮----
+//   try {
+//     const res = await axios.post(PHP_BASE_URL + "loanapply/ramfincorp_api/payday_emi_loan_list_view", data, {
+//       headers: {
+//         "Content-Type": "application/json",
+//         Authorization: jwt_token ? `Bearer ${jwt_token}` : undefined,
+//       },
+//     });
+⋮----
+//     return res.data;
+//   } catch (error) {
+//     throw error;
+//   }
+// }
+⋮----
+// Loan Approval View API
+export async function loanApprovalViewAPI(data)
+⋮----
+// Bank Account Lists API
+export async function bankAccountsListAPI()
+⋮----
+// Customer Details
+export async function customerDetailsAPI(accountId)
+⋮----
+// Emandate V2
+export async function emandateV2API(accountId)
+⋮----
+// Emandate V2
+export async function getLenderPaymentDetailsAPI()
+⋮----
+// Penny Drop
+export async function pennyDropAPI(accountId = "")
+⋮----
+// Penny Drop
+export async function createFinboxUrlAPI()
+⋮----
+// KFS Payday
+export async function kfsPaydayAPI()
+⋮----
+// Penny Drop
+export async function keyfactsAcceptanceAPI(latitude, longitude)
+⋮----
+// Step Checker API
+export async function stepCheckerAPI(accountId, isReload)
+⋮----
+export async function paydayToEMIConversionAPI(values)
+⋮----
+// Confirm Bank Account API
+export async function confirmBankAccountAPI(mandateId, accountID)
+⋮----
+// Google Auth API
+export async function googleAuthAPI(token)
+⋮----
+// Get Employment API
+export async function getEmploymentAPI()
+⋮----
+// Banking Surrogate API
+export async function bankingSurrogateAPI()
+⋮----
+// Auto Login API
+export async function autoLoginAPI(token)
+⋮----
+// Events Funnel API
+export async function eventsFunnelAPI(eventName, attributes =
+⋮----
+// Clever Tap Events
+export async function createClevertapEvents(eventName, name, attributes =
+⋮----
+// Hyper Verge Feature API
+export async function hyperVergeFeatureAPI()
+⋮----
+// Hyper Verge Onboarding API
+export async function hyperVergeOnboardingAPI()
+⋮----
+// Hyper Verge Result API
+export async function hyperVergeResultAPI()
+⋮----
+// customers details API
+export async function customersDetailsAPI()
+⋮----
+// Language Tracking API
+export async function languageTrackingAPI(language)
+⋮----
+// customers details API
+export async function checkMandateFeatureAPI(accountId)
+⋮----
+// Initiate CKYC
+export async function initiateCKYC(
+⋮----
+export async function verifyCKYC(transaction_id, otp)
+</file>
+
+<file path="src/styles/global.css">
+/* ============ Loader Style ============ */
+⋮----
+.loader {
+⋮----
+/* ============ Forms Style ============ */
+input:focus {
+⋮----
+button {
+⋮----
+.input-base {
+⋮----
+.rs-picker-toggle-placeholder {
+.rs-picker-toggle {
+⋮----
+/* ============ Drawer Style ============ */
+.rs-drawer-content {
+⋮----
+/* ============ App Install Style ============ */
+.app-install-modal .rs-modal-content {
+⋮----
+/* background-image: url("../assets/modal-bg.jpg"); */
+⋮----
+.app-install-modal .rs-modal-dialog {
+⋮----
+/* ============ Button Style ============ */
+.rs-btn-primary {
+⋮----
+.fixed-button {
+⋮----
+/* ============ Slider ============ */
+.rs-slider-progress-bar {
+.rs-slider-handle::before {
+.rs-slider-bar {
+⋮----
+background-color: #d6e1f6 !important; /* Tailwind gray-200 */
+⋮----
+.rendered-html table {
+⋮----
+/* ============ userConsent ============ */
+⋮----
+.userConsentCheckbox .rs-checkbox-checker {
+⋮----
+.userConsentCheckbox .rs-checkbox-control {
+⋮----
+.userConsentCheckbox .rs-checkbox-control [type="checkbox"] {
+⋮----
+.google-btn-wrapper {
+⋮----
+& > div, & > div > div {
+</file>
+
+<file path="src/utils/apiClient.js">
+// export const BASE_URL = import.meta.env.VITE_BASE_URL;
+// export const PHP_BASE_URL = import.meta.env.VITE_PHP_BASE_URL;
+⋮----
+export async function callApi(req, delayMs = 0)
+⋮----
+// "ngrok-skip-browser-warning": 69420, //remove later
+⋮----
+// delay after getting response
+⋮----
+// else if (error.response && error.response.status === 422) {
+//   window.location.href = "/stepper";
+//   return error?.response?.data;
+// }
+</file>
+
+<file path="src/utils/encryption.js">
+export async function getDecryptedValue(base64Data)
+⋮----
+// Utility function to decode Base64 to ArrayBuffer
+function base64ToArrayBuffer(base64)
+</file>
+
+<file path="src/utils/env.js">
+
+</file>
+
+<file path="src/utils/helper.js">
+// Delay
+export const delay = (ms)
+⋮----
+// Base 64 to Image
+export const base64ToImageFile = (base64) =>
+⋮----
+img.onload = () =>
+⋮----
+export const handleRedirect = () =>
+⋮----
+// const seprator = REDIRECT_URL.includes("?") ? "&" : "?";
+// const finalUrl = `${REDIRECT_URL}${seprator}token=${token}`;
+// window.location.href = finalUrl;
+⋮----
+// clear data BEFORE redirect
+⋮----
+// clear cookies
+⋮----
+// redirect after cleanup
+⋮----
+// Get UTM Source Name
+export const getUTMSourceName = () =>
+⋮----
+// Hash Mobile
+export const hashMobileSHA256 = async (mobile) =>
+⋮----
+// Check Product Type
+export const checkProductType = () =>
+⋮----
+// Track Google Events
+export const trackG4Events = (name, params =
+⋮----
+// Clear Login Storage
+export const clearLoginStorage = () =>
+⋮----
+export const getGeolocation = () =>
+</file>
+
+<file path="src/utils/storage.js">
+// Storage Utility
+⋮----
+set: (key, value) =>
+⋮----
+get: (key) =>
+⋮----
+return JSON.parse(value); // Try to parse JSON
+⋮----
+return value; // Not JSON, return raw string
+⋮----
+remove: (key) =>
+⋮----
+clearAll: () =>
+⋮----
+// Storage Keys
+⋮----
+// import Storage, { KEYS } from './storage';
+⋮----
+// Storage.set(KEYS.CUSTOMER_ID, "12345");
+⋮----
+// Storage.get(KEYS.USER_INFO);
+⋮----
+// Storage.remove("customerId");
+⋮----
+// Storage.clearAll();
+</file>
+
+<file path="src/utils/validation.js">
+// Mobile validation schema
+export const mobileValidation = (t) =>
+⋮----
+// Aadhaar validation schema
+export const aadhaarValidation = (t) =>
+⋮----
+// PAN validation schema
+export const panValidation = (t) =>
+⋮----
+// Employment details validation schema
+export const employmentDetailsValidation = (t) =>
+⋮----
+// Add bank account validation schema
+export const addBankAccountValidation = (t) =>
+⋮----
+// Email validation schema
+export const emailValidation = (t) =>
+</file>
+
+<file path="src/App.jsx">
+export default function App()
+⋮----
+{/* <ProgressiveWebApp /> */}
+</file>
+
+<file path="src/index.css">
+*:focus-visible {
+⋮----
+body {
+⋮----
+a {
+⋮----
+p {
+⋮----
+ul {
+⋮----
+button {
+⋮----
+img {
+</file>
+
+<file path="src/main.jsx">
+// Redux
+⋮----
+// Google Auth Provider
+⋮----
+// Initialize Apps
+⋮----
+onNeedRefresh()
+onOfflineReady()
+</file>
+
+<file path=".cgcignore">
+# Auto-generated by CodeGraphContext
+# Default ignore patterns for binary/media files
+# Add your own patterns below
+
+node_modules/
+venv/
+.venv/
+env/
+.env/
+dist/
+build/
+target/
+out/
+.git/
+__pycache__/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.mp4
+*.mp3
+*.zip
+*.tar
+*.gz
+</file>
+
+<file path=".gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependency directories
+node_modules
+package-lock.json
+dist
+dist-ssr
+*.local
+
+# Environment variables
+.env
+.env.*       # includes .env.development, .env.production, etc.
+!.env.example # keep a safe example file for reference
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+</file>
+
+<file path="dev.txt">
+----------------------------------------
+ Env Examples
+----------------------------------------
+# RAMFIN KEYS
+VITE_BASE_URL=
+VITE_PHP_BASE_URL=
+VITE_USER_SERVICE_BASE_URL=
+
+VITE_ROZAR_PAY_KEY=
+VITE_LENDER_ENCRYPTION_KEY=
+
+VITE_GOOGLE_OAUTH_CLIENT_ID=
+VITE_CLEVERTAP_ACCOUNT_ID=
+
+VITE_REDIRECT_URL=
+VITE_WEBSITE_URL=
+
+
+# LINTRA KEYS
+VITE_LENTRA_TOKEN_BASE_URL=https://7104365897031.serviceurl.in/
+VITE_LENTRA_LEAD_BASE_URL=https://7104365897002.serviceurl.in/
+VITE_LENTRA_sClientIdentifier=72c14462-25f6-3555-9cf2-d930c237fa10
+VITE_LENTRA_sClientSecret=4d34e5e4-9662-3ddd-bf40-452ca246a872
+VITE_LENTA_Institution_Name=RAMFIN
+
+
+----------------------------------------
+ Demo & Preprod
+----------------------------------------
+https://demoonb.ramfincorp.co.in
+https://onb-preprod.ramfincorp.co.in
+
+
+----------------------------------------
+ Production
+----------------------------------------
+https://loan.ramfincorp.com/
+https://loan-api.ramfincorp.com/
+
+
+----------------------------------------
+ Google Login
+----------------------------------------
+ramfincorp99@gmail.com
+Ramfincorp@2025
+
+
+----------------------------------------
+ CleverTap Credentials
+----------------------------------------
+https://sso.clevertap.com/u/login/password
+Userid :- mrigank@ramfincorp.com
+pass :- Ramfincorp@108
+
+
+
+---------------------------------------------------------
+ Demo (https://demoonb.ramfincorp.co.in)
+---------------------------------------------------------
+BASE_URL=https://preprod.ramfincorp.co.in/onb-api/
+PHP_BASE_URL=https://staging.ramfincorp.co.in/
+USER_SERVICE_BASE_URL=https://staging.ramfincorp.co.in/
+
+
+---------------------------------------------------------
+ Demo (https://onb-dev.ramfincorp.co.in)
+---------------------------------------------------------
+BASE_URL=https://staging.ramfincorp.co.in/onb-api-dev/
+PHP_BASE_URL=https://staging.ramfincorp.co.in/
+USER_SERVICE_BASE_URL=https://staging.ramfincorp.co.in/userservice/
+
+
+--------------------------------------------------------------------------
+ Preprod (https://onb-preprod.ramfincorp.co.in)
+---------------------------------------------------------
+BASE_URL=https://preprod.ramfincorp.co.in/onb-preprod-api/
+PHP_BASE_URL=https://staging.ramfincorp.co.in/
+USER_SERVICE_BASE_URL=https://preprod.ramfincorp.co.in/userservice/
+
+
+---------------------------------------------------------
+ Production (https://loan.ramfincorp.com)
+---------------------------------------------------------
+BASE_URL=https://loan-api.ramfincorp.com/
+PHP_BASE_URL=https://www.ramfincorp.com/
+USER_SERVICE_BASE_URL=https://userservice.ramfincorp.com/
+</file>
+
+<file path="eslint.config.js">
+
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+
+    <!-- Meta -->
+    <meta name="theme-color" content="#094db2" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+
+    <!-- Primary SEO -->
+    <meta
+      name="description"
+      content="Ram Fincorp offers fast and secure business loans, personal loans, and financial solutions with instant approval. Check your eligibility and apply online easily."
+    />
+    <meta name="keywords" content="Ram Fincorp, business loan, personal loan, instant loan, finance, loan services" />
+
+    <!-- Title -->
+    <title>Ram Fincorp - Personal Loans, Business Loan, Finance Solutions</title>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W55TK1ES3Z"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+
+      gtag("js", new Date());
+      gtag("config", "G-W55TK1ES3Z");
+    </script>
+
+    <!-- Clarity -->
+    <script type="text/javascript">
+      (function (c, l, a, r, i, t, y) {
+        c[a] =
+          c[a] ||
+          function () {
+            (c[a].q = c[a].q || []).push(arguments);
+          };
+        t = l.createElement(r);
+        t.async = 1;
+        t.src = "https://www.clarity.ms/tag/" + i;
+        y = l.getElementsByTagName(r)[0];
+        y.parentNode.insertBefore(t, y);
+      })(window, document, "clarity", "script", "s50gvgd10v");
+    </script>
+
+    <!-- Meta Pixel Code -->
+    <script>
+      !(function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = "2.0";
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+      fbq("init", "869872032296025");
+      fbq("track", "PageView");
+    </script>
+    <!-- End Meta Pixel Code -->
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet" />
+
+    <style>
+      body {
+        font-family: "Outfit", sans-serif !important;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Meta Pixel noscript MUST be here -->
+    <noscript><img height="1" width="1" style="display: none" src="https://www.facebook.com/tr?id=869872032296025&ev=PageView&noscript=1" /></noscript>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+</file>
+
+<file path="package.json">
+{
+  "name": "dsa-loan-journey",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-oauth/google": "^0.12.2",
+    "@reduxjs/toolkit": "^2.9.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "axios": "^1.12.2",
+    "clevertap-web-sdk": "^2.3.3",
+    "formik": "^2.4.6",
+    "i18next": "^25.8.3",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "lucide-react": "^0.544.0",
+    "moment": "^2.30.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-i18next": "^16.5.4",
+    "react-otp-input": "^3.1.1",
+    "react-redux": "^9.2.0",
+    "react-router": "^7.9.3",
+    "react-webcam": "^7.2.0",
+    "redux-persist": "^6.0.0",
+    "rsuite": "^5.83.3",
+    "tailwindcss": "^4.1.14",
+    "vite-plugin-node-polyfills": "^0.24.0",
+    "yup": "^1.7.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.22",
+    "globals": "^16.4.0",
+    "vite": "^7.1.7",
+    "vite-plugin-pwa": "^1.2.0"
+  }
+}
+</file>
+
+<file path="README.md">
+# React + Vite
+ss
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+</file>
+
+<file path="vite.config.js">
+// https://vite.dev/config/
+⋮----
+globPatterns: ["**/*.{js,css,html,png,svg,ico}"], // add file types you actually have
+</file>
+
+</files>

@@ -168,12 +168,19 @@ Graph job state is persisted to Postgres when `DATABASE_URL` is configured, so r
 
 The repositories tab also supports downloadable code analysis reports. Select one or more repositories and click **Download Code Analysis** to generate a Markdown document from local clone inspection plus Neo4j graph context when available. The backing endpoint is `POST /graph-admin/code-analysis-report`.
 
+The Ticket Insights tab can download a Jira test-case quantity, quality, and clarity Excel workbook. The sheet excludes `AIGOV` by default, compares already-present ticket test cases against actual `/testcases/generate` output for a bounded sample of filtered tickets, includes the auto-detected `grounded_repos` from RepoTree/Anthropic using Repomix directory previews, and uses Anthropic Opus (`TEST_CASE_COMPARISON_MODEL`) to write a narrative tab. Add `format=md` to the endpoint if you need the older Markdown report.
+
 Environment:
 
 ```text
 N8N_GRAPH_WEBHOOK_URL=https://your-n8n-host/webhook/graph-db-admin
 N8N_API_KEY=optional-shared-secret
 JIRA_PROJECT_KEYS=ABC,DEF
+JIRA_EXCLUDED_PROJECT_KEYS=AIGOV
+TEST_CASE_COMPARISON_MODEL=claude-opus-4-5
+TEST_CASE_COMPARISON_MAX_TOKENS=6000
+TEST_CASE_COMPARISON_PIPELINE_LIMIT=5
+TEST_CASE_COMPARISON_PIPELINE_TOP_K=15
 REPOSITORY_SEARCH_ROOT=/home/ubuntu
 REPOSITORY_HOST_ROOT=/home/ubuntu
 EXCLUDED_REPOSITORY_NAMES=JIRA-AI
@@ -190,6 +197,12 @@ REPO_TREE_SRC_PATH=/home/ubuntu/JIRA-AI
 REPO_TREE_CONFIG_PATH=/home/ubuntu/JIRA-AI/repo_tree/config/repos.yaml
 REPO_TREE_WORKSPACE_DIR=/home/ubuntu/JIRA-AI/repo_tree/workspace
 ```
+
+`JIRA_PROJECT_KEYS` is optional when the Jira API user can discover projects
+with Browse Projects permission. Set it to a comma-separated list such as
+`QTM` when you want to ingest selected projects or when global project
+discovery returns no projects. The `JIRA_EMAIL`/`JIRA_API_TOKEN` pair must
+authenticate as a Jira user that can browse those projects.
 
 Actions sent to n8n:
 

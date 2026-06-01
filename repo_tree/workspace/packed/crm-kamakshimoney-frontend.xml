@@ -1,0 +1,6685 @@
+<directory_structure>
+.github/
+  workflows/
+    deploy-main.yml
+src/
+  components/
+    collection/
+      DNDCustomer/
+        editDndModal.jsx
+      paydayPaymentPendingEmi/
+        DetailModal.jsx
+        TableData.jsx
+      waiveOff/
+        AddWaiveOffModel.jsx
+        LoanDetails.jsx
+        WaiveOffList.jsx
+        WaiverLoanDetails.jsx
+    collectionManager/
+      BulkUploadAddModel.js
+      CollectionMode.js
+      EmiTable.js
+      OnlinePaymentTable.js
+      PaydayEmiDropDown.js
+      PayDayTable.js
+    common/
+      showFormError/
+        ShowFormError.js
+        style.scss
+      AppLoader.js
+      ConformationModal.js
+      DisplayAmount.js
+      DownloadButton.jsx
+      DynamicIcon.jsx
+      Filter.js
+      PageTitle.js
+      Pagination.js
+      Status.js
+      TopHeading.js
+      UsersDropDown.jsx
+    errors/
+      Error404.js
+      ErrorMessage.js
+    Form/
+      ErrorMessage.js
+    Header/
+      Header.js
+      Header.module.scss
+    Loader/
+      Loader.js
+      Loader.scss
+    Navbar/
+      Navbar.js
+    Pagination/
+      Pagination.js
+    reports/
+      dateWiseCollectionReportTable.jsx
+      dateWiseCollectionReportTable.scss
+      Filter.jsx
+      filter.scss
+      PaginationWrapper.jsx
+      TabularData.jsx
+    index.js
+  constants/
+    constant.js
+    dropdown.js
+    endpoints.js
+    master.js
+    menu.js
+    report.js
+  hoc/
+    withDownloadPermission.jsx
+    withViewAccess.jsx
+  hooks/
+    useFetchWithFilter.js
+    useResetPagination.js
+    useRouteCheck.js
+    useWindowSize.js
+  layout/
+    Layout.js
+    layout.scss
+  lib/
+    file.js
+    helper.js
+  pages/
+    AppFunctionManagement/
+      AutoDisbursalStatus/
+        filter/
+          Filter.js
+        top-heading/
+          TopHeading.js
+        index.js
+      HolidayList/
+        add-holiday/
+          AddHoliday.js
+        delete-holiday/
+          DeleteHoliday.js
+        holiday-list-table/
+          HolidayListTable.js
+        top-heading/
+          TopHeading.js
+        index.js
+      RepaymentGatewayType/
+        filter/
+          Filter.js
+        top-heading/
+          TopHeading.js
+        index.js
+    Authentication/
+      Auth.module.scss
+      AutoLogin.jsx
+      ChangePassword.js
+      ForgotPassword.js
+      IntroScreen.jsx
+      IntroScreen.module.scss
+      Login.js
+      Logout.js
+      VerifyOTP.js
+    Blacklisted/
+      BlacklistCustomers/
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+      BlacklistPancard/
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+    CallbackRequest/
+      table-data/
+        TableData.js
+      top-heading/
+        TopHeading.js
+      index.js
+    Cibil/
+      CibilData/
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+    Collection/
+      AddNotRequired/
+        filter/
+          Filter.js
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+      BulkEmandate/
+        filter/
+          Filter.js
+        top-heading/
+          TopHeading.js
+        BulkEmandate.js
+        BulkEmandate.scss
+      Closed/
+        add-modal/
+          AddModal.js
+        heading/
+          TopHeading.js
+        table-data/
+          TableData.js
+        index.js
+      DNDCustomer/
+        add-modal/
+          AddModal.js
+        heading/
+          TopHeading.js
+        table-data/
+          dnd-delete-model/
+            DndDeleteModel.js
+          TableData.js
+        index.js
+      PartPaid/
+        all-part-paid/
+          AllPartPaid.js
+        top-heading/
+          TopHeading.js
+        index.js
+      PaydayPaymentPendingEmi/
+        heading/
+          TopHeading.js
+        index.jsx
+      PendingCollection/
+        detail-modal/
+          DetailModal.js
+        heading/
+          TopHeading.js
+        table-data/
+          TableData.js
+        index.js
+      Refund/
+        csv-upload/
+          CsvUpload.jsx
+        heading/
+          TopHeading.jsx
+        refund-dashboard/
+          RefundDashboard.jsx
+        refund-transactions/
+          RefundTransactions.jsx
+          RefundTransactions1.jsx
+        total-refund-status-report/
+          TotalRefundStatusReport.jsx
+        upload-status/
+          UploadStatus.jsx
+        index.jsx
+      Settled/
+        all-settled/
+          AllSettled.js
+        top-heading/
+          TopHeading.js
+        index.js
+      WaivedOff/
+        index.js
+    CollectionManager/
+      ApprovalPending/
+        index.js
+        style.scss
+      Approved/
+        index.js
+      BulkUpload/
+        index.js
+        style.scss
+      OnlinePayments/
+        index.js
+      Rejected/
+        index.js
+      collectionManager.js
+    CollectionSetting/
+      SettlementReport/
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+    CRMManagement/
+      DSAPartner/
+        add-dsa-partner-modal/
+          AddDSAPartnerModal.jsx
+        table-data/
+          TableData.jsx
+        top-heading/
+          TopHeading.jsx
+        update-dsa-partner-modal/
+          updateDASPartnerModal.jsx
+        index.jsx
+      HavePermission/
+        role-have-permissions/
+          roleHavePermissions.js
+        index.js
+      IPWhiteListing/
+        add-ip-white-listing/
+          AddIPWhiteListing.js
+        delete-ip-white-listing/
+          DeleteIPWhiteListing.js
+        ip-white-listing/
+          IPWhiteListing.js
+        top-heading/
+          TopHeading.js
+        index.js
+      Logins/
+        all-login/
+          AllLogin.js
+        top-heading/
+          TopHeading.js
+        index.js
+      PermissionsList/
+        all-permissions-list/
+          AllPermissionsList.js
+        permissions-list-add/
+          PermissionsListAdd.js
+        permissions-list-update/
+          PermissionsListUpdate.js
+        top-heading/
+          TopHeading.js
+        index.js
+      RolesList/
+        all-roles-list/
+          AllRolesList.js
+        role-list-update/
+          RoleListUpdate.js
+        roles-list-add/
+          RoleListAdd.js
+        top-heading/
+          TopHeading.js
+        index.js
+      SourcingPartners/
+        add-source-partner/
+          AddSourcePartner.js
+        source-partner-table/
+          SourcePartnerTable.js
+        top-heading/
+          TopHeading.js
+        update-source-partner/
+          UpdateSourcePartner.js
+        index.js
+      UserListAccess/
+        all-user-list-access/
+          AllUserListAccess.js
+        top-heading/
+          TopHeading.js
+        index.js
+      UserListAdd/
+        all-user-list-add/
+          AllUserListAdd.js
+        top-heading/
+          TopHeading.js
+        index.js
+      UserListUpdate/
+        all-user-list-update/
+          AllUserListUpdate.js
+        top-heading/
+          TopHeading.js
+        index.js
+      Users/
+        all-user/
+          AllUser.js
+        filter/
+          Filter.js
+        top-heading/
+          TopHeading.js
+        index.js
+      index.js
+    CustomerProfile/
+      ApiLogs/
+        response-modal/
+          ResponseModal.js
+        index.js
+      Collection/
+        bank-account-details/
+          BankAccountDetails.js
+        collection-details/
+          AddCollectionEMI.js
+          AddCollectionPayday.js
+          AddPaymentModal.js
+          CollectionDetails.js
+          RefundedAmountDetails.js
+          UpdateRecalculateCollectionPayday.jsx
+        collection-follow-up/
+          AddCollectionFollowUp.js
+          CollectionFollowUp.js
+        emandate-charges/
+          EmandateChanges.js
+        statement-account/
+          StatementAccount.js
+        virtual-account-details/
+          VirtualAccountDetails.js
+        index.js
+      Communication/
+        email-history/
+          EmailHistory.js
+        sanction-follow-up/
+          AddFollowUp.js
+          FollowUpDetails.js
+          SanctionFollowUp.js
+        sms-history/
+          SMSHistory.js
+        whats-app-message-history/
+          WhatsAppMessageHistory.js
+        index.js
+      Documents/
+        DobMatch/
+          DobMatch.js
+          ViewModel.js
+        NameMatch/
+          NameMatch.js
+          ViewModel.js
+        PanAadharMatch/
+          PanAadharMatch.js
+          ViewModel.js
+        index.js
+      HistoricalData/
+        address-history/
+          addAddressModel.js
+          AddressHistory.js
+        app-location-history/
+          AppLocationHistory.js
+        bank-account-aggregator-link/
+          BankAccountAggregatorLinks.js
+        employment-history/
+          EmploymentHistory.js
+        lead-history/
+          LeadHistory.js
+        loan-history/
+          LoanHistory.js
+        referral-history/
+          ReferralHistory.js
+        referral-summary/
+          ReferralSummary.js
+        salary-history/
+          SalaryHistory.js
+        index.js
+      LoanApplication/
+        address-reference-details/
+          AddReferencesDetails.js
+          AddressDetails.js
+          AllReference.js
+          ReferencesDetails.js
+          UpdateAddressDetails.js
+        emandate-details/
+          Charge.js
+          DisableMandate.js
+          EmandateDetails.js
+          GenerateMandate.js
+        employment-details/
+          EmployementDetails.js
+          LeadSummary.js
+          LoanApplyStatus.js
+          UpdateEmployment.js
+        loan-details/
+          CreditDetails.js
+          EMISchedule.js
+          LoanDetails.js
+          ModifyEMILoan.js
+          ModifyLoanDeatil.jsx
+          ModifyPaydayLoan.js
+          PaydayToEmiLoan.jsx
+        penny-drop/
+          check-name-modal/
+            CheckNameModal.js
+          PennyDrop.js
+        index.js
+      TimeLine/
+        index.js
+      UserInfo/
+        approved/
+          Approved.js
+          ApprovedEMI.js
+          ApprovedPayday.js
+        approved-process/
+          ApprovedProcess.js
+        bank-update/
+          BankUpdate.js
+        blacklist/
+          BlackList.js
+        common-status/
+          CommonStatus.js
+        disbursed/
+          Disbursed.js
+          ManualDisbursal.js
+          RazorpayUpdate.js
+        hold/
+          Hold.js
+        lead-button/
+          LeadButton.js
+        lead-status/
+          LeadStatusModal.js
+        loan/
+          EMILoan.js
+          PaydayLoan.js
+        not-required/
+          NotRequired.js
+        AddtoBlacklistModal.jsx
+        UserInfo.js
+        UserInfo.scss
+        whiteListModal.jsx
+      index.js
+    Customers/
+      all-customer/
+        AllCustomer.js
+      customer-details-update/
+        CustomerDetailsUpdate.js
+      filter/
+        Filter.js
+      top-heading/
+        TopHeading.js
+      index.js
+    Dashboard/
+      emi-report/
+        EMIReport.js
+      payday-report/
+        PaydayReport.js
+      total-status-report/
+        TotalStatusReport.js
+      index.js
+    Disbursal/
+      BankUpdate/
+        allocated-all-disbursal/
+          AllocatedAllDisbursal.js
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+      BankUpdateRejected/
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+      Disbursed/
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+      ManualDisbursal/
+        top-heading/
+          TopHeading.js
+        upload-data/
+          UploadData.js
+        index.js
+    Feedback/
+      table-data/
+        TableData.jsx
+      index.jsx
+    LeadActions/
+      ManualSelfieConfirmation/
+        index.jsx
+        style.css
+      ManualSelfieVerification/
+        table-data/
+          TableData.jsx
+        top-heading/
+          TopHeading.jsx
+        index.jsx
+      NameMismatchManager/
+        table-data/
+          FinboxTable.jsx
+          PennyDropTable.jsx
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+      PaymentModeManager/
+        payment-bank-mode/
+          PaymentBankMode.js
+          paymentModeManager.scss
+        payment-mode/
+          PaymentMode.js
+        table-data/
+          TableData.js
+        top-heading/
+          TopHeading.js
+        index.js
+      RepaymentDateManager/
+        table-data/
+          DateChangeModel.js
+          TableData.js
+        index.js
+    Leads/
+      AllLeads/
+        all-lead/
+          AllLead.js
+        allocated-all-leads/
+          AllocatedAllLeads.js
+        top-heading/
+          TopHeading.js
+        index.js
+      CreditLeads/
+        allocated-credit-leads/
+          AllocatedCreditLeads.js
+        credit-leads-table/
+          CreditLeadsTable.js
+        top-heading/
+          TopHeading.js
+        index.js
+      HotLeads/
+        add-modal/
+          AddModal.js
+        all-hot-leads/
+          AllHotLeads.js
+        top-heading/
+          TopHeading.js
+        index.js
+      SanctionLeads/
+        allocated-filter-leads/
+          AallocatedFilterLeads.js
+        sanction-leads-table/
+          SanctionLeadsTable.js
+        top-heading/
+          TopHeading.js
+        index.js
+      Filter.js
+      index.js
+      sixtyDaysValidation.js
+    Logs/
+      APILogs/
+        all-logs/
+          AllApiLogs.js
+          LogResponse.js
+        top-heading/
+          TopHeading.js
+        index.js
+      AppInstallations/
+        all-logs/
+          AllAppInstallations.js
+          AllAppsModal.js
+        top-heading/
+          TopHeading.js
+        index.js
+      ChatLogs/
+        all-logs/
+          AllChatLogs.js
+          LogResponse.js
+        top-heading/
+          TopHeading.js
+        index.js
+      DialerLogs/
+        all-logs/
+          AllDialerLogs.js
+          LogResponse.js
+        top-heading/
+          TopHeading.js
+        index.js
+      KaleyraLogs/
+        all-logs/
+          AllKaleyraLogs.js
+          LogResponse.js
+        top-heading/
+          TopHeading.js
+        index.js
+      RazorpayLogs/
+        all-logs/
+          AllRazorpayLogs.js
+          LogResponse.js
+        top-heading/
+          TopHeading.js
+        index.js
+      SendInBlueLogs/
+        all-logs/
+          ALlSendInBlueLogs.js
+          LogResponse.js
+        top-heading/
+          TopHeading.js
+        index.js
+      WhatsappLogs/
+        all-logs/
+          AllWhatsappLogs.js
+          LogResponse.js
+        top-heading/
+          TopHeading.js
+        index.js
+    Reports/
+      allLeadReports.js
+      appIssueListReport.js
+      collectionDataReport.js
+      collectionEmiDataReport.js
+      collectionPaymentMode.js
+      CreditHODReport.jsx
+      CreditModificationReport.jsx
+      customerFeedback.js
+      dateWiseCollectionReport.js
+      dateWiseLeadReport.js
+      disbursalReportDashboard.js
+      disbursedDataReport.js
+      disbursedReport.js
+      EventFunnelReport.js
+      index.js
+      landingPartnerLeads.js
+      payDayPendingReport.js
+      quickReportDownloadRequest.jsx
+      quickReports.js
+      quickReportsWrapper.js
+      refundReport.js
+      report.js
+      style.scss
+  redux/
+    middlewares/
+      thunk.js
+    slices/
+      apiSlice.js
+      apiSlices.js
+      appSlice.js
+      navbarSlice.js
+      paginationSlice.js
+      userSlice.js
+    store.js
+  routes/
+    AppRouter.js
+    Router.js
+  scss/
+    _breakpoints.scss
+    _customize.scss
+    _mixins.scss
+    _utilities.scss
+    _variables.scss
+    main.scss
+  services/
+    AdminAPI.js
+    AppFunctionManagementAPI.js
+    AuthAPI.js
+    BaseAPI.js
+    CollectionAPI.js
+    CollectionSettingAPI.js
+    CommonAPI.js
+    CRMManagementAPI.js
+    CustomerProfileAPI.js
+    DashboardAPI.js
+    Disbursal.js
+    LeadActions.js
+    LeadsAPI.js
+    LogsAPI.js
+    QuickReportAPI.js
+    RefundAPI.js
+    ReportAPI.js
+    upload-api.js
+  utils/
+    api.js
+    autoLogout.js
+    environment.js
+    storage.js
+    utils.js
+  validation/
+    AuthValidation.js
+    CRMManagementValidation.js
+    CustomerProfileValidation.js
+    DndAddValidation.js
+    Leads.js
+  App.js
+  index.js
+  index.scss
+  reportWebVitals.js
+  setupTests.js
+.babelrc
+.cgcignore
+.gitignore
+jsconfig.json
+package.json
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".github/workflows/deploy-main.yml">
+name: Deploy to main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, self-hosted-kamakshimoney]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy latest code
+        run: |
+          echo ">>> Switching to project directory"
+          cd /home/ubuntu/api_code/crm-kamakshimoney-frontend
+
+          echo ">>> Fetching latest code from master branch"
+          git pull origin main
+
+          echo ">>> Install dependency"
+          npm install --legacy-peer-deps
+          CI=false npm run build
+
+          echo ">>> rm from s3"
+          aws s3 rm s3://crm.kamakshimoney.com --recursive
+
+          echo ">>> upload on s3"
+          aws s3 cp build/ s3://crm.kamakshimoney.com/ --recursive
+          
+          aws cloudfront create-invalidation --distribution-id E3KVVACOIT7Q7W --paths "/*" --profile default
+          
+          echo ">>> Showing last 10 commits"
+          git log -10 --oneline
+          echo ">>> Deployment completed successfully!"
+</file>
+
+<file path="src/components/collection/DNDCustomer/editDndModal.jsx">
+const EditDndModal = (
+⋮----
+const formattedDateStr = (dateStr='')
+</file>
+
+<file path="src/components/collection/paydayPaymentPendingEmi/DetailModal.jsx">
+export default function DetailModal(props)
+</file>
+
+<file path="src/components/collection/paydayPaymentPendingEmi/TableData.jsx">
+
+</file>
+
+<file path="src/components/collection/waiveOff/AddWaiveOffModel.jsx">
+export default function AddWaiveOffModel(props)
+⋮----
+// call waveoff list api
+</file>
+
+<file path="src/components/collection/waiveOff/LoanDetails.jsx">
+const LoanDetails = (
+</file>
+
+<file path="src/components/collection/waiveOff/WaiveOffList.jsx">
+const WaiveOffList = (
+⋮----
+const fetchAPI = async () =>
+⋮----
+const handleCancelWaiverOff = async (leadId, collectionID) =>
+</file>
+
+<file path="src/components/collection/waiveOff/WaiverLoanDetails.jsx">
+// icons
+⋮----
+// components
+⋮----
+// functionality
+⋮----
+export default function WaiverLoanDetails(
+⋮----
+{/* <Text>
+                            <span>Admin Fee:</span> ₹
+                            {loanDetails?.data?.adminFee || 0}
+                          </Text> */}
+⋮----
+{/* EMO Schedule */}
+</file>
+
+<file path="src/components/collectionManager/BulkUploadAddModel.js">
+const BulkUploadAddModel = (
+⋮----
+const validateFile = (file) =>
+⋮----
+const handleUploadWithXhr = async (file) =>
+⋮----
+if (onUpload) onUpload(); // Callback to refresh parent table
+⋮----
+const handleDrop = (e) =>
+⋮----
+const handleDragOver = (e) =>
+⋮----
+const handleChooseFileClick = () =>
+⋮----
+const handleFileInputChange = (e) =>
+⋮----
+const handleManualUploadClick = () =>
+⋮----
+accept=".csv, .xlsx, .xls" // Ensure correct MIME types
+</file>
+
+<file path="src/components/collectionManager/CollectionMode.js">
+const CollectionMode = (props) =>
+</file>
+
+<file path="src/components/collectionManager/EmiTable.js">
+const EmiTableData = (props) =>
+</file>
+
+<file path="src/components/collectionManager/OnlinePaymentTable.js">
+export const OnlinePaymentTableData = ({
+    data,
+}) =>
+</file>
+
+<file path="src/components/collectionManager/PaydayEmiDropDown.js">
+const PaydayEmiDropDown = (
+</file>
+
+<file path="src/components/collectionManager/PayDayTable.js">
+const PaydayTableData = (props) =>
+</file>
+
+<file path="src/components/common/showFormError/ShowFormError.js">
+const ShowFormError = (
+⋮----
+// ShowFormError.propTypes = {}
+</file>
+
+<file path="src/components/common/showFormError/style.scss">
+.form-error-message-wrapper {
+    display: none;
+    position: absolute;
+    font-size: 10px;
+    padding: 5px 12px;
+    color: #D94948;
+    background: #fff;
+    border-radius: 20px;
+    margin: auto;
+    transition: 0.8s 0.2s;
+    border: 1px solid #e5e5ea;
+    top: calc(100% - 3px);
+    z-index: 10;
+    -webkit-filter: drop-shadow(0 0 6px rgba(0,0,0,.1));
+    filter: drop-shadow(0 0 6px rgba(0,0,0,.1));
+
+    &.form-error-message-show {
+        // -webkit-animation-duration: .3s;
+        // animation-duration: .3s;
+        // -webkit-animation-timing-function: ease-out;
+        // animation-timing-function: ease-out;
+        display: block
+    }
+
+    .triangle-border {
+        position: absolute;
+        width: 0;
+        height: 0;
+        top: -5px;
+        left: 12px;
+        &::before {
+            content: '';
+            position: absolute;
+            top: -1px; /* adjust for border thickness */
+            left: -1px;
+            width: 0;
+            height: 0;
+            border-left: 7px solid transparent;   /* 8px + 1px border */
+            border-right: 7px solid transparent;
+            border-bottom: 7px solid #e5e5ea;       /* border color */
+        }
+        .triangle-inner {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 0;
+          height: 0;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-bottom: 6px solid #fff;
+          z-index: 1;
+        }
+      }
+      
+}
+</file>
+
+<file path="src/components/common/AppLoader.js">
+export default function AppLoader()
+</file>
+
+<file path="src/components/common/ConformationModal.js">
+openModal: ()
+⋮----
+const handleClose = () =>
+⋮----
+const handleConfirm = () =>
+</file>
+
+<file path="src/components/common/DisplayAmount.js">
+export default function DisplayAmount(
+</file>
+
+<file path="src/components/common/DownloadButton.jsx">
+function DownloadButton(
+</file>
+
+<file path="src/components/common/DynamicIcon.jsx">
+// Map library keys to actual imports
+⋮----
+fa: ()
+md: ()
+ai: ()
+bi: ()
+bs: ()
+// Add more as needed
+⋮----
+const DynamicIcon = (
+</file>
+
+<file path="src/components/common/Filter.js">
+const fetchAPI = async () =>
+⋮----
+const handleChange = (value, id) =>
+⋮----
+const handleClean = (id) =>
+⋮----
+const handleSubmit = (data, clearCalled=false) =>
+⋮----
+const navigateToQuery = (isFetch = false) =>
+⋮----
+const clearSelectedValues = () =>
+⋮----
+const handleOpenModal = () =>
+⋮----
+const handleConfirmation = (confirmed) =>
+⋮----
+const updateError = (name) =>
+⋮----
+{/* Loader */}
+</file>
+
+<file path="src/components/common/PageTitle.js">
+const PageTitle = (
+</file>
+
+<file path="src/components/common/Pagination.js">
+export default function Pagination()
+⋮----
+// setTimeout(() => {
+⋮----
+// }, 1000);
+⋮----
+const handlePageChange = (page) =>
+</file>
+
+<file path="src/components/common/Status.js">
+export default function Status(
+⋮----
+? BadgeStatus?.getPercentageColor(parseFloat(text.replace("%", ""))) // Extract number & get color
+</file>
+
+<file path="src/components/common/TopHeading.js">
+
+</file>
+
+<file path="src/components/common/UsersDropDown.jsx">
+export const UsersDropDown = (
+⋮----
+const fetchUsers = async () =>
+</file>
+
+<file path="src/components/errors/Error404.js">
+export default function Error404()
+⋮----
+return <div>{/* <p>Error 404</p> */}</div>;
+</file>
+
+<file path="src/components/errors/ErrorMessage.js">
+const ErrorMessage = (
+</file>
+
+<file path="src/components/Form/ErrorMessage.js">
+const ErrorMessage = (
+</file>
+
+<file path="src/components/Header/Header.js">
+export default function Header()
+⋮----
+const fetchUser = async () =>
+⋮----
+const fetchData = async () =>
+</file>
+
+<file path="src/components/Header/Header.module.scss">
+// Header CSS
+.header {
+  background-color: #ffffff;
+  padding: 12px;
+  border-radius: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  .search {
+    width: 50%;
+
+    .searchInner {
+      width: 100%;
+      position: relative;
+      background-color: #f7f7fa;
+      border-radius: 5px;
+    }
+
+    .icon {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+    }
+
+    .dropdownMenu {
+      position: absolute;
+      top: 0;
+      right: 0;
+    }
+
+    input {
+      background-color: #f7f7fa;
+      border: none;
+      height: 36px;
+      padding-left: 35px;
+
+      &:focus {
+        outline: 0px solid !important;
+        border-color: #f7f7fa;
+      }
+    }
+
+    .autoComplete {
+      position: absolute;
+      background-color: #ffffff;
+      border-radius: 10px;
+      left: 0;
+      width: 90%;
+      top: 38px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      z-index: 99999;
+    }
+
+    .list {
+      padding: 12px 20px;
+      border-bottom: 1px solid #e5e5e5;
+      cursor: pointer;
+    }
+  }
+
+  .user {
+    display: flex;
+    align-items: center;
+  }
+
+  .notification {
+    width: 40px;
+    height: 40px;
+    background-color: #f6f6f6;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 20px;
+  }
+
+  .userInfo {
+    display: flex;
+    align-items: flex-end;
+    margin-left: 12px;
+  }
+
+  .userName {
+    margin-left: 7px;
+
+    p {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+
+    div {
+      background-color: #f6f6f6;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 20px;
+    }
+  }
+}
+</file>
+
+<file path="src/components/Loader/Loader.js">
+export default function Loader()
+</file>
+
+<file path="src/components/Loader/Loader.scss">
+// Loader.module.scss
+.loader__styles {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  z-index: 99999999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loader {
+  width: 48px;
+  height: 48px;
+  border: 6px solid #c0d9f2;
+  border-bottom-color: #3498ff;
+  border-radius: 50%;
+  display: inline-block;
+  box-sizing: border-box;
+  animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+</file>
+
+<file path="src/components/Navbar/Navbar.js">
+function Navbar(
+⋮----
+// eslint-disable-next-line react-hooks/exhaustive-deps
+</file>
+
+<file path="src/components/Pagination/Pagination.js">
+export default function Pagination()
+</file>
+
+<file path="src/components/reports/dateWiseCollectionReportTable.jsx">
+export const DateWiseCollectionReportTable = (
+⋮----
+const NestedColumn = (
+⋮----
+const NestedHeader = ({data=[]}) => (
+    <div className="nestedHeader">
+      {
+       data?.map((name, index) => <span key={`nestedHeader_${index}`}>{name}</span>)
+      }
+    </div>
+  );
+</file>
+
+<file path="src/components/reports/dateWiseCollectionReportTable.scss">
+.dateWiseCollectionReportPanel {
+  .rs-panel-body {
+      padding: 0;
+  }
+}
+
+.dateWiseCollectionTable {
+  height: auto !important;
+  .rs-table-header-row-wrapper {
+    height: 59px;
+    .rs-table-row-header {
+      height: 100px !important; /* Adjust height as needed */
+      line-height: 50px !important; /* Ensure text is vertically centered */
+      .rs-table-cell-content {
+        min-height: 50px;
+        padding-left: 0;
+        padding-right: 0;
+        padding-bottom: 0;
+        align-items: center;
+      }
+      .rs-table-cell-content,
+      .rs-table-cell {
+        height: 100px !important;
+      }
+    }
+  }
+
+  .nestedHeader{
+    height: 50%;
+    align-self: flex-end;
+  }
+
+  .nestedColumn,
+  .nestedHeader {
+    width: 100%;
+    display: flex;
+    span {
+      flex: 1;
+      flex-shrink: 0;
+      text-align: center;
+      border: 1px solid #f2f2f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+}
+</file>
+
+<file path="src/components/reports/Filter.jsx">
+const Filter = ({
+  pageName,
+  handleSearch,
+  customFilter=null,
+  clearSearhCallback=() => {}
+}) =>
+⋮----
+const handleSelect = (key, value) =>
+⋮----
+const selectPickerList = (data) =>
+⋮----
+const handleClearFilter = () =>
+⋮----
+const handleInputChange = (val, evt, name) =>
+⋮----
+const handleOnChange = (key, value) =>
+⋮----
+const onCleanHandler = (name) =>
+</file>
+
+<file path="src/components/reports/filter.scss">
+.rs-loader-backdrop-wrapper {
+    z-index: 9999;
+}
+.reportFilters {
+    border-bottom: 1px solid #ccc;
+    .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 25px;
+        &:not(:last-of-type) {
+            margin-bottom: 15px;
+        } 
+        @media screen and (min-width: 769px){
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+        }
+    }
+    .rs-picker-toggle-value {
+        color: #343434 !important;
+    }
+}
+</file>
+
+<file path="src/components/reports/PaginationWrapper.jsx">
+const PaginationWrapper = (
+</file>
+
+<file path="src/components/reports/TabularData.jsx">
+const TabularData = ({
+  columnsConfig = [],
+  data = [],
+  isLoading,
+  makeLink = {image: {
+      base: '',
+      key: '',
+      label: '',
+      openInNewWindow: true,
+  }},
+}) =>
+⋮----
+const keyToLabel = (columnKey) =>
+⋮----
+const transformColumnValue = (columnKey, value, rowData) =>
+⋮----
+const NestedTable = (
+⋮----
+const dataArray = Array.isArray(nestedData) ? nestedData : [nestedData]; // Ensure array format
+⋮----
+const reorderColumns = () =>
+</file>
+
+<file path="src/components/index.js">
+
+</file>
+
+<file path="src/constants/constant.js">
+export const MINIMUM_PF = 7; // Processing Fee
+</file>
+
+<file path="src/constants/dropdown.js">
+// Work Experience
+⋮----
+// Your Designation
+⋮----
+// Mode of Payment
+⋮----
+// Industry
+⋮----
+// Relation
+⋮----
+// Your Residence
+⋮----
+// Employment Details
+⋮----
+// Marital Status
+⋮----
+// Gender
+⋮----
+// Loan Purpose
+⋮----
+// Collection Dropdown
+⋮----
+// Communication Dropdown
+⋮----
+// Status Dropdown
+⋮----
+// Branch Dropdown
+⋮----
+// Collection Dropdown
+⋮----
+// Address Dropdown
+⋮----
+// Dropdown for deletion status
+⋮----
+// Waiver
+</file>
+
+<file path="src/constants/endpoints.js">
+
+</file>
+
+<file path="src/constants/master.js">
+// Lead Search Dropdown
+⋮----
+// Lead Status Reason Dropdown
+⋮----
+// Process Fee
+⋮----
+// Rio
+// export const RioFee = ["1.00", ...Array.from({ length: 100 }, (_, i) => (i / 100).toFixed(2))];
+⋮----
+// Tenure
+⋮----
+// Badge Status (red, orange, yellow, green, cyan, blue, violet)
+⋮----
+// Employment History
+⋮----
+// Timeline
+⋮----
+// Penny Drop
+⋮----
+// E- Mandate Details
+⋮----
+//Pancard
+⋮----
+// Collection Details
+⋮----
+// Collection Follow Up
+⋮----
+// Documents Details
+⋮----
+// Lead Status
+⋮----
+// Emi Schedule
+⋮----
+// Waive Off
+⋮----
+// Name Match , Dob Match , Pan AAdhar Match
+getPercentageColor: (percentage) =>
+⋮----
+return "red"; // Below 70%
+⋮----
+// Logs
+⋮----
+// annum days
+⋮----
+// Refund Page Nav List
+⋮----
+// refund search By Keys
+⋮----
+//refund User Status Dropdown
+⋮----
+// Active Inactive status Options
+</file>
+
+<file path="src/constants/menu.js">
+// Menu
+⋮----
+// App Function Management
+⋮----
+// Lead Actions
+⋮----
+// Reports Links
+⋮----
+// Cibil
+⋮----
+//Customers
+⋮----
+//Disbursal
+⋮----
+// Collection Setting
+</file>
+
+<file path="src/constants/report.js">
+// urls
+</file>
+
+<file path="src/hoc/withDownloadPermission.jsx">
+function withDownloadPermission(Component)
+</file>
+
+<file path="src/hoc/withViewAccess.jsx">
+const withViewAccess = (Component) =>
+</file>
+
+<file path="src/hooks/useFetchWithFilter.js">
+const useFetchWithFilter = () =>
+⋮----
+const resetData = (data = null) =>
+⋮----
+const getFilters = (includeParams, excludeParams) =>
+⋮----
+const hasFilterCount = (extraFilter) =>
+</file>
+
+<file path="src/hooks/useResetPagination.js">
+const useResetPagination = () =>
+</file>
+
+<file path="src/hooks/useRouteCheck.js">
+const useRouteCheck = () =>
+⋮----
+const handlePermissionCheck = () =>
+</file>
+
+<file path="src/hooks/useWindowSize.js">
+const useWindowSize = () =>
+⋮----
+// Define the size event listener
+const handleResize = () =>
+⋮----
+// Add the resize event listener to the window
+</file>
+
+<file path="src/layout/Layout.js">
+export default function Layout(props)
+⋮----
+{/* <NavToggle expand={expand} onChange={() => setExpand(!expand)} /> */}
+⋮----
+const NavToggle = (
+⋮----
+const Brand = (
+⋮----
+{/* <FaReact size={26} />
+      {expand && <Text>Brand</Text>} */}
+</file>
+
+<file path="src/layout/layout.scss">
+// Layout.module.scss
+
+.top__header {
+  text-align: center;
+  padding: 0 0 10px 0;
+  color: var(--brand-color);
+  font-weight: bold;
+  font-size: 15px;
+  margin-top: -5px;
+}
+
+.sidebar {
+  // background-color: #bc0f1d;
+  background-color: var(--brand-color-darker-900);
+  position: fixed;
+  left: 0;
+  z-index: 10;
+}
+
+.sidebar__body {
+  overflow-y: auto;
+  position: relative;
+}
+
+.sidebar__body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar__body:hover::-webkit-scrollbar {
+  width: 6px;
+  transition: width 0.2s ease-in-out;
+}
+
+.sidebar__body::-webkit-scrollbar-thumb {
+  background-color: rgb(from var(--brand-color) r g b / 85%);
+  border-radius: 10px;
+}
+
+.sidebar__body::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(from var(--brand-color) r g b / 55%);
+}
+
+.sidebar__body::-webkit-scrollbar-track {
+  background-color: var(--brand-color-darker-900);
+}
+
+@media (max-width: 992px) {
+  .sidebar__body {
+    overflow: inherit;
+  }
+}
+</file>
+
+<file path="src/lib/file.js">
+class File
+⋮----
+// Download Excel for file
+async downloadExcelFile(data, dispatch, fileExtension = "csv")
+⋮----
+let filename = `data.${fileExtension}`; // Default filename
+⋮----
+// Ensure the filename is properly formatted and doesn't include unwanted characters
+⋮----
+// Download Add Not Required File for Collection
+async downloadFileAddNotRequiredCollection(fileId, dispatch)
+</file>
+
+<file path="src/lib/helper.js">
+const commonAPIInstance = new CommonAPI(); // ✅ create instance here
+⋮----
+class Helper
+⋮----
+// Capitalize First Letter
+capitalizeFirstLetter(string)
+⋮----
+// Download Files
+downloadFiles(url)
+⋮----
+// Update Pagination
+updatePagination(totalPages, totalRecords, dispatch)
+⋮----
+// Calculate Three Month Salary Average
+calculateThreeMonthSalaryAverage(salaries)
+⋮----
+// Generate EMI Repayment Date
+generateEMIRepaymentDate()
+⋮----
+// Copy Link
+handleCopy(value)
+⋮----
+// Add Query String
+addQueryString(key, value)
+⋮----
+// Add Query String (Ensures only one query parameter at a time)
+addOnlyOneQueryString(key, value)
+⋮----
+// Reset Query String
+resetQueryString()
+⋮----
+// Update Multiple Parameter
+updateMultipleParameter(filter)
+⋮----
+// window.history.replaceState({}, "", `?${params.toString()}`);
+⋮----
+// Fetch Updated Query Parameters
+fetchUpdatedQuery(search = window.location.search)
+⋮----
+showToast(msg, options)
+⋮----
+dismissToastById(id)
+⋮----
+dismissAllToast()
+⋮----
+getQueryStrbyObj(obj, dateFormate = "YYYY-MM-DD")
+⋮----
+debouncing(func, delay = 300)
+⋮----
+getDownloadFileName(name = '', fileExtension = '.xlsx')
+⋮----
+removeSingleKeyFromObj(obj, notAllowedKeys)
+⋮----
+formateDate(date, formate = "DD MMM, YYYY HH:mm:ss")
+⋮----
+categorizeDataBasedDash(data)
+⋮----
+updateAngleBracketStr(str, val)
+⋮----
+// Handle Open File From API
+async handleResourceView(evt, id)
+</file>
+
+<file path="src/pages/AppFunctionManagement/AutoDisbursalStatus/filter/Filter.js">
+const Filter = (
+⋮----
+value={values.status} // Bind to Formik values
+onChange={(value) => setFieldValue("status", value)} // Update Formik state
+</file>
+
+<file path="src/pages/AppFunctionManagement/AutoDisbursalStatus/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/AppFunctionManagement/AutoDisbursalStatus/index.js">
+// components
+⋮----
+export default function AutoDisbursalStatus()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Filter */}
+</file>
+
+<file path="src/pages/AppFunctionManagement/HolidayList/add-holiday/AddHoliday.js">
+export default function AddHoliday(
+⋮----
+//format="YYYY-MM-DD"
+</file>
+
+<file path="src/pages/AppFunctionManagement/HolidayList/delete-holiday/DeleteHoliday.js">
+export default function DeleteHoliday(props)
+</file>
+
+<file path="src/pages/AppFunctionManagement/HolidayList/holiday-list-table/HolidayListTable.js">
+export default function HolidayListTable(
+</file>
+
+<file path="src/pages/AppFunctionManagement/HolidayList/top-heading/TopHeading.js">
+export default function TopHeading(
+</file>
+
+<file path="src/pages/AppFunctionManagement/HolidayList/index.js">
+// components
+⋮----
+export default function Holiday()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Holiday List Table */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/AppFunctionManagement/RepaymentGatewayType/filter/Filter.js">
+const Filter = (
+⋮----
+{/* Status Select */}
+⋮----
+{/* Search Button */}
+</file>
+
+<file path="src/pages/AppFunctionManagement/RepaymentGatewayType/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/AppFunctionManagement/RepaymentGatewayType/index.js">
+// components
+⋮----
+export default function RepaymentGatewayType()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+</file>
+
+<file path="src/pages/Authentication/Auth.module.scss">
+// Login CSS
+.top__header {
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  padding: 10px 20px 10px 20px;
+  color: var(--brand-color);
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.container {
+  background-color: #f4f4f5;
+  min-height: calc(100vh - 40px);
+  padding: 20px;
+}
+
+.login__card {
+  width: 100%;
+  max-width: 450px;
+  margin: 0 auto;
+  padding-top: 30px;
+
+  input {
+    background-color: #f4f5f8 !important;
+  }
+}
+
+.panel {
+  background-color: #ffffff;
+  padding: 10px 15px 20px 15px;
+}
+
+.logo {
+  text-align: center;
+
+  img {
+    width: 200px;
+    margin: 15px auto;
+  }
+}
+</file>
+
+<file path="src/pages/Authentication/AutoLogin.jsx">
+export default function AutoLogin()
+⋮----
+// here is testing
+⋮----
+isIntroImageLoadCallback.current = (
+⋮----
+const handleAutoLogin = async () =>
+</file>
+
+<file path="src/pages/Authentication/ChangePassword.js">
+export default function ChangePassword()
+</file>
+
+<file path="src/pages/Authentication/ForgotPassword.js">
+export default function ForgotPassword()
+</file>
+
+<file path="src/pages/Authentication/IntroScreen.jsx">
+const imageCache = {}; // Persist across renders
+⋮----
+export const IntroScreen = (
+⋮----
+img.onload = async () =>
+</file>
+
+<file path="src/pages/Authentication/IntroScreen.module.scss">
+.introWrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 100vh;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s ease-in-out;
+  z-index: -1;
+
+  img {
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .imageContainer {
+    position: relative;
+  }
+
+  .close {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    cursor: pointer;
+  }
+}
+</file>
+
+<file path="src/pages/Authentication/Login.js">
+export default function Login()
+⋮----
+isIntroImageLoadCallback.current = (
+</file>
+
+<file path="src/pages/Authentication/Logout.js">
+export default function Logout()
+</file>
+
+<file path="src/pages/Authentication/VerifyOTP.js">
+export default function VerifyOTP()
+⋮----
+isIntroImageLoadCallback.current = (
+</file>
+
+<file path="src/pages/Blacklisted/BlacklistCustomers/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/Blacklisted/BlacklistCustomers/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Blacklisted/BlacklistCustomers/index.js">
+// components
+⋮----
+export default function BlacklistCustomers()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Table Data */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Blacklisted/BlacklistPancard/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/Blacklisted/BlacklistPancard/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Blacklisted/BlacklistPancard/index.js">
+// components
+⋮----
+export default function BlacklistPancard()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Table Data */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CallbackRequest/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/CallbackRequest/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CallbackRequest/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function CallbackRequest()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Table Data */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Cibil/CibilData/table-data/TableData.js">
+export default function TableData()
+</file>
+
+<file path="src/pages/Cibil/CibilData/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Cibil/CibilData/index.js">
+// components
+⋮----
+export default function CibilData()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Settled */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/AddNotRequired/filter/Filter.js">
+export default function Filter(
+⋮----
+// Handle file upload
+const handleUpload = async () =>
+⋮----
+{/* Status Select */}
+</file>
+
+<file path="src/pages/Collection/AddNotRequired/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/Collection/AddNotRequired/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Collection/AddNotRequired/index.js">
+// components
+⋮----
+export default function AddNotRequired()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+</file>
+
+<file path="src/pages/Collection/BulkEmandate/filter/Filter.js">
+export const Filter = () =>
+⋮----
+{/* Status Select */}
+⋮----
+{/* Search Button */}
+⋮----
+{/* Clear Filter Button */}
+</file>
+
+<file path="src/pages/Collection/BulkEmandate/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Collection/BulkEmandate/BulkEmandate.js">
+export default function BulkEmandate()
+⋮----
+const fetchAPI = async () =>
+⋮----
+const uploadFile = async () =>
+⋮----
+const formatDate = (value) =>
+⋮----
+const handleDownloadFile = async (link, type) =>
+⋮----
+const fileDownloader = (url) =>
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/BulkEmandate/BulkEmandate.scss">
+// BulkEmandate.module.scss
+@import "../../../scss/main";
+</file>
+
+<file path="src/pages/Collection/Closed/add-modal/AddModal.js">
+export default function AddModal(props)
+</file>
+
+<file path="src/pages/Collection/Closed/heading/TopHeading.js">
+export default function TopHeading(
+⋮----
+const handleDownload = () =>
+</file>
+
+<file path="src/pages/Collection/Closed/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/Collection/Closed/index.js">
+export default function Closed()
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Table Data */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/DNDCustomer/add-modal/AddModal.js">
+export default function AddModal(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Collection/DNDCustomer/heading/TopHeading.js">
+export default function TopHeading(
+⋮----
+const handleDownload = () =>
+</file>
+
+<file path="src/pages/Collection/DNDCustomer/table-data/dnd-delete-model/DndDeleteModel.js">
+export default function DndDeleteModel(props)
+</file>
+
+<file path="src/pages/Collection/DNDCustomer/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/Collection/DNDCustomer/index.js">
+export default function DNDCustomer()
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Table Data */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/PartPaid/all-part-paid/AllPartPaid.js">
+export default function AllPartPaid(
+</file>
+
+<file path="src/pages/Collection/PartPaid/top-heading/TopHeading.js">
+export default function TopHeading(
+⋮----
+const handleDownload = () =>
+</file>
+
+<file path="src/pages/Collection/PartPaid/index.js">
+// components
+⋮----
+export default function PartPaid()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Part Paid */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/PaydayPaymentPendingEmi/heading/TopHeading.js">
+export default function TopHeading(
+</file>
+
+<file path="src/pages/Collection/PaydayPaymentPendingEmi/index.jsx">
+// components
+⋮----
+// import TopHeading from "components/common/TopHeading";
+⋮----
+export default function PaydayPaymentPendingEmi()
+⋮----
+const showToastMsg = (msg, type, option) =>
+⋮----
+const handleSelectedLeads = (e, leadId) =>
+⋮----
+const onUserChangeHandler = (userID) =>
+⋮----
+const handleFileDownload = () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Allocate User */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/PendingCollection/detail-modal/DetailModal.js">
+export default function DetailModal(props)
+</file>
+
+<file path="src/pages/Collection/PendingCollection/heading/TopHeading.js">
+export default function TopHeading(
+⋮----
+const handleDownload = () =>
+</file>
+
+<file path="src/pages/Collection/PendingCollection/table-data/TableData.js">
+export default function TableData(
+⋮----
+const handleCheckboxChange = (rowData, checked) =>
+const handleAllocateLeads = async () =>
+⋮----
+{/* <Column width={200}>
+              <HeaderCell>Repay Amount</HeaderCell>
+              <Cell dataKey="remainingCollection" />
+            </Column> */}
+⋮----
+{/* Details Modal */}
+⋮----
+{/* Allocate User */}
+</file>
+
+<file path="src/pages/Collection/PendingCollection/index.js">
+export default function PendingCollection()
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Table Data */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/Refund/csv-upload/CsvUpload.jsx">
+export default function CsvUpload()
+⋮----
+// Validate file size and type
+const validateFile = (file) =>
+⋮----
+const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+⋮----
+const handleDrag = (e) =>
+⋮----
+const handleDrop = (e) =>
+⋮----
+const handleFileInput = (e) =>
+⋮----
+const handleBrowse = () =>
+⋮----
+const handleRemoveFile = (e) =>
+⋮----
+// Reset file input
+⋮----
+const handleStartBulkRefund = async () =>
+⋮----
+// Simulate upload progress
+⋮----
+// Clear the uploaded file after successful upload
+⋮----
+const getUploadAreaStyle = () =>
+⋮----
+const getButtonStyle = () =>
+⋮----
+const FileDisplay = () =>
+⋮----
+{/* Upload Progress */}
+⋮----
+{/* Upload Result */}
+⋮----
+const EmptyState = () =>
+⋮----
+const RequirementsList = () =>
+⋮----
+{/* Header Section */}
+⋮----
+{/* Upload Panel */}
+⋮----
+{/* Drag & Drop Area */}
+⋮----
+{/* CSV Format Requirements */}
+⋮----
+{/* Action Button */}
+</file>
+
+<file path="src/pages/Collection/Refund/heading/TopHeading.jsx">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Collection/Refund/refund-dashboard/RefundDashboard.jsx">
+export default function RefundDashboard()
+⋮----
+// Handle start date change
+const handleStartDateChange = (date) =>
+⋮----
+// If end date is selected and is before the new start date, clear end date
+⋮----
+// Handle end date change
+const handleEndDateChange = (date) =>
+⋮----
+// Get minimum date for end date picker
+const getMinEndDate = () =>
+⋮----
+const handleSubmitFilter = () =>
+⋮----
+const handleClearFilter = () =>
+⋮----
+const handleStatusDownload = async (status) =>
+⋮----
+{/* Date Filter Panel */}
+⋮----
+disabledDate={(date) => date > new Date()} // Disable future dates
+⋮----
+disabled={!startDate} // Disable end date picker until start date is selected
+⋮----
+{/* Dashboard Stats */}
+⋮----
+{/* Add CSS for spinner animation */}
+</file>
+
+<file path="src/pages/Collection/Refund/refund-transactions/RefundTransactions.jsx">
+export default function RefundTransactions()
+⋮----
+// New filter states
+⋮----
+// Date range states
+⋮----
+// Initialize filters from URL params
+⋮----
+// Parse dates from URL params
+⋮----
+// Handle date changes
+const handleStartDateChange = (date) =>
+⋮----
+// Clear end date if it's before the new start date
+⋮----
+const handleEndDateChange = (date) =>
+⋮----
+// Handle advanced filter submission
+const handleAdvancedFilter = () =>
+⋮----
+page: 1, // Reset to first page when filtering
+⋮----
+// Remove undefined values
+⋮----
+// Handle clear filters
+const handleClearFilters = () =>
+⋮----
+// Remove filter params but keep other params like tab
+⋮----
+// Reset to page 1
+⋮----
+// Checkbox handlers based on leadID
+const handleCheckboxChange = (leadID, checked) =>
+⋮----
+const handleCheckAll = (checked) =>
+⋮----
+// Optimized fetchAPI with proper pagination
+⋮----
+// Build filter parameters
+⋮----
+status: urlParams.status || "All", // Always pass status, default to "All"
+⋮----
+limit: 20, // Items per page
+⋮----
+// Remove undefined values
+⋮----
+setCheckedKeys([]); // Clear selections on new data load
+⋮----
+// Handle search input change with debouncing
+const handleSearchInputChange = (value) =>
+⋮----
+// Clear existing timeout
+⋮----
+// Set new timeout for debounced search
+⋮----
+}, 500); // 500ms delay
+⋮----
+// If search is empty, fetch normal data
+⋮----
+// Determine search type and perform appropriate search
+const performSearch = async (searchValue) =>
+⋮----
+// Check if the search value looks like a payment ID (long number)
+⋮----
+// Check if the search value looks like an order ID (starts with 'order_' or similar pattern)
+⋮----
+// For mobile numbers, loan numbers, or other general searches
+// Use the general search endpoint
+⋮----
+// Handle search using API
+⋮----
+// If search is empty, fetch normal data
+⋮----
+// Update pagination for search results
+⋮----
+dispatch(updateTotalPage(1)); // Search results are single page
+⋮----
+// Handle search on Enter key press
+const handleKeyPress = (e) =>
+⋮----
+// Clear search and fetch original data
+const handleClearSearch = () =>
+⋮----
+// Cleanup timeout on unmount
+⋮----
+// Handle bulk refund processing
+const handleBulkProcess = async () =>
+⋮----
+const handleIndividualProcess = async (rowData) =>
+⋮----
+// Refresh the data to show updated status
+⋮----
+// Remove this leadID from the processing set
+⋮----
+const handleStatusChange = (value) =>
+⋮----
+const handleSubmit = () =>
+⋮----
+// Check if any field is missing
+⋮----
+// If any error is true, don't proceed
+⋮----
+status: statusFilter || "All", // Always pass status, default to "All"
+⋮----
+page: 1, // Reset to first page when applying filters
+⋮----
+// Remove any undefined params
+⋮----
+const handleExportDownload = async () =>
+⋮----
+// setDownloadingStatus(null);
+⋮----
+{/* Header Panel */}
+⋮----
+disabledDate={(date) => date > new Date()} // Disable future dates
+⋮----
+disabled={!startDate} // Disable end date picker until start date is selected
+⋮----
+{/* Table Panel */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/Refund/refund-transactions/RefundTransactions1.jsx">
+export default function RefundTransactions()
+⋮----
+// New filter states
+⋮----
+// Initialize filters from URL params
+⋮----
+// Handle advanced filter submission
+const handleAdvancedFilter = () =>
+⋮----
+page: 1, // Reset to first page when filtering
+⋮----
+// Remove undefined values
+⋮----
+// Handle clear filters
+const handleClearFilters = () =>
+⋮----
+// Remove filter params but keep other params like tab
+⋮----
+// Reset to page 1
+⋮----
+// Checkbox handlers based on leadID
+const handleCheckboxChange = (leadID, checked) =>
+⋮----
+const handleCheckAll = (checked) =>
+⋮----
+// Optimized fetchAPI with proper pagination
+⋮----
+// Build filter parameters
+⋮----
+status: urlParams.status || "All", // Always pass status, default to "All"
+⋮----
+limit: 20, // Items per page
+⋮----
+// Remove undefined values
+⋮----
+setCheckedKeys([]); // Clear selections on new data load
+⋮----
+// Handle search input change with debouncing
+const handleSearchInputChange = (value) =>
+⋮----
+// Clear existing timeout
+⋮----
+// Set new timeout for debounced search
+⋮----
+}, 500); // 500ms delay
+⋮----
+// If search is empty, fetch normal data
+⋮----
+// Determine search type and perform appropriate search
+const performSearch = async (searchValue) =>
+⋮----
+// Check if the search value looks like a payment ID (long number)
+⋮----
+// Check if the search value looks like an order ID (starts with 'order_' or similar pattern)
+⋮----
+// For mobile numbers, loan numbers, or other general searches
+// Use the general search endpoint
+⋮----
+// Handle search using API
+⋮----
+// If search is empty, fetch normal data
+⋮----
+// Update pagination for search results
+⋮----
+dispatch(updateTotalPage(1)); // Search results are single page
+⋮----
+// Handle search on Enter key press
+const handleKeyPress = (e) =>
+⋮----
+// Clear search and fetch original data
+const handleClearSearch = () =>
+⋮----
+// Cleanup timeout on unmount
+⋮----
+// Handle bulk refund processing
+const handleBulkProcess = async () =>
+⋮----
+const handleIndividualProcess = async (rowData) =>
+⋮----
+// Refresh the data to show updated status
+⋮----
+// Remove this leadID from the processing set
+⋮----
+const handleStatusChange = (value) =>
+⋮----
+const handleSubmit = () =>
+⋮----
+// Check if any field is missing
+⋮----
+// If any error is true, don't proceed
+⋮----
+status: statusFilter || "All", // Always pass status, default to "All"
+⋮----
+page: 1, // Reset to first page when applying filters
+⋮----
+// Remove any undefined params
+⋮----
+{/* Header Panel */}
+⋮----
+// Build query parameters manually to include pagination
+⋮----
+// Always add pagination parameters
+⋮----
+// Add filter parameters if they exist
+⋮----
+// Always pass status, default to "All" if not present
+⋮----
+// Custom download function to bypass the file.js limitation
+⋮----
+// Get filename from response headers
+⋮----
+let filename = `refund-report-page1-limit20.csv`; // Default filename with pagination info
+⋮----
+{/* Table Panel */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/Refund/total-refund-status-report/TotalRefundStatusReport.jsx">
+export default function TotalRefundStatusReport()
+⋮----
+const handleDownload = async (status) =>
+⋮----
+// Add status filter for download
+⋮----
+// If direct file response, create download link
+</file>
+
+<file path="src/pages/Collection/Refund/upload-status/UploadStatus.jsx">
+export default function UploadStatus()
+⋮----
+// Convert API data to component format
+const formatUploadData = (apiData) =>
+⋮----
+// Extract filename from full path
+⋮----
+// Determine status based on API status field
+⋮----
+// Format upload date
+⋮----
+// Calculate progress for processing files
+⋮----
+const fetchAPI = async () =>
+⋮----
+// Initial load
+⋮----
+const handleRefresh = async () =>
+⋮----
+const handleDownloadFailed = async (upload) =>
+⋮----
+// Check if failedS3Link exists in the original data
+⋮----
+// Open the S3 link directly
+⋮----
+const getStatusBadge = (status) =>
+⋮----
+const StatItem = (
+⋮----
+const ProgressBar = (
+⋮----
+const UploadCard = (
+⋮----
+{/* File Header */}
+⋮----
+{/* {getStatusBadge(upload.status)} */}
+⋮----
+{/* Statistics Grid */}
+⋮----
+{/* Progress Bar for Processing Status */}
+{/* {upload.status === "Processing" && (
+            <VStack spacing={8} alignItems="stretch">
+              <HStack justifyContent="space-between" alignItems="center">
+                <span style={{
+                  fontSize: "10px",
+                  fontWeight: "500",
+                  color: "#6c757d"
+                }}>
+                  Progress
+                </span>
+                <span style={{
+                  fontSize: "12px",
+                  fontWeight: "600"
+                }}>
+                  {upload.progress}%
+                </span>
+              </HStack>
+              <ProgressBar progress={upload.progress} />
+            </VStack>
+          )} */}
+⋮----
+const EmptyState = () =>
+⋮----
+{/* Header Section */}
+⋮----
+{/* Upload Status Cards */}
+</file>
+
+<file path="src/pages/Collection/Refund/index.jsx">
+export default function Refund()
+⋮----
+const handleTabSelect = (eventKey) =>
+⋮----
+const renderTabContent = () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Status Refund Dashboard */}
+⋮----
+{/* Tab Navigation */}
+⋮----
+{/* Tab Content */}
+</file>
+
+<file path="src/pages/Collection/Settled/all-settled/AllSettled.js">
+export default function AllSettled(
+</file>
+
+<file path="src/pages/Collection/Settled/top-heading/TopHeading.js">
+export default function TopHeading(
+⋮----
+const handleDownload = () =>
+</file>
+
+<file path="src/pages/Collection/Settled/index.js">
+// components
+⋮----
+export default function Settled()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Settled */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Collection/WaivedOff/index.js">
+// components
+⋮----
+export default function WaivedOff()
+⋮----
+const showAPIMsgTost = (message, type) =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Loan Details */}
+⋮----
+{/* Waive List */}
+</file>
+
+<file path="src/pages/CollectionManager/ApprovalPending/index.js">
+// components
+⋮----
+export default function ApprovalPending()
+⋮----
+const [selectedIds, setSelectedIds] = useState([]); //payday=collectionID and for emi=transactionID
+⋮----
+const handleAllChecked = (checked) =>
+⋮----
+const handleSelectedIds = (checked, id) =>
+⋮----
+const handleRowUpdate = async (action, ids, isBulk) =>
+⋮----
+const handleRowWaiverUpdate = async (action, data) =>
+⋮----
+// eslint-disable-next-line react-hooks/exhaustive-deps
+⋮----
+{/* Allocate User */}
+⋮----
+{/* Table Data - Lazy Loaded */}
+</file>
+
+<file path="src/pages/CollectionManager/ApprovalPending/style.scss">
+.approvalPending {
+    gap: 16px;
+    .rs-checkbox {
+        .rs-checkbox-control {
+            top: 0;
+        }
+    }
+}
+</file>
+
+<file path="src/pages/CollectionManager/Approved/index.js">
+// components
+⋮----
+{/* Table Data - Lazy Loaded */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CollectionManager/BulkUpload/index.js">
+const BulkUploadTable = (props) =>
+⋮----
+const onUpload = () =>
+⋮----
+{/* Modal component (split file) */}
+</file>
+
+<file path="src/pages/CollectionManager/BulkUpload/style.scss">
+.approvalPending {
+    gap: 16px;
+    .rs-checkbox {
+        .rs-checkbox-control {
+            top: 0;
+        }
+    }
+}
+</file>
+
+<file path="src/pages/CollectionManager/OnlinePayments/index.js">
+// components
+⋮----
+export default function ApprovalPending()
+⋮----
+{/* Table Data */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CollectionManager/Rejected/index.js">
+// components
+⋮----
+export default function Rejected()
+⋮----
+{/* Table Data */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CollectionManager/collectionManager.js">
+const CollectionManager = () =>
+⋮----
+const onSelectHandle = (event) =>
+⋮----
+const downLoadFileInstance = (endpoint)
+⋮----
+const downloadFile = () =>
+⋮----
+const downloadBulkUploadFile = (id) =>
+⋮----
+const downloadSampleCSV = (_, endpoint = "/collection_bulk_upload.csv", filename = "collection_bulk_upload.csv") =>
+⋮----
+const topHeading = () =>
+⋮----
+onClick: ()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Heading */}
+</file>
+
+<file path="src/pages/CollectionSetting/SettlementReport/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/CollectionSetting/SettlementReport/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CollectionSetting/SettlementReport/index.js">
+// components
+⋮----
+export default function SettlementReport()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Settled */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CRMManagement/DSAPartner/add-dsa-partner-modal/AddDSAPartnerModal.jsx">
+export default function AddDSAPartner(
+</file>
+
+<file path="src/pages/CRMManagement/DSAPartner/table-data/TableData.jsx">
+export default function TableData(
+</file>
+
+<file path="src/pages/CRMManagement/DSAPartner/top-heading/TopHeading.jsx">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/DSAPartner/update-dsa-partner-modal/updateDASPartnerModal.jsx">
+export default function UpdateDSAPartner(
+</file>
+
+<file path="src/pages/CRMManagement/DSAPartner/index.jsx">
+export default function DSAPartners()
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* DSA Partner List */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CRMManagement/HavePermission/role-have-permissions/roleHavePermissions.js">
+const RoleHavePermissions = (
+⋮----
+// Check All Update
+⋮----
+const handleUpdatePermissions = (data, checked) =>
+</file>
+
+<file path="src/pages/CRMManagement/HavePermission/index.js">
+export default function HavePermission()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Role Have Permissions */}
+</file>
+
+<file path="src/pages/CRMManagement/IPWhiteListing/add-ip-white-listing/AddIPWhiteListing.js">
+export default function AddIPWhiteListing(
+</file>
+
+<file path="src/pages/CRMManagement/IPWhiteListing/delete-ip-white-listing/DeleteIPWhiteListing.js">
+export default function DeleteIPWhiteListing(props)
+</file>
+
+<file path="src/pages/CRMManagement/IPWhiteListing/ip-white-listing/IPWhiteListing.js">
+export default function IpWhiteListing(
+</file>
+
+<file path="src/pages/CRMManagement/IPWhiteListing/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/IPWhiteListing/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function IPWhiteListing()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top Header */}
+⋮----
+{/* Ip White Listing  */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CRMManagement/Logins/all-login/AllLogin.js">
+export default function AllLogin(
+</file>
+
+<file path="src/pages/CRMManagement/Logins/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/Logins/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function Logins()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Login */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CRMManagement/PermissionsList/all-permissions-list/AllPermissionsList.js">
+export default function AllPermissionsList(
+</file>
+
+<file path="src/pages/CRMManagement/PermissionsList/permissions-list-add/PermissionsListAdd.js">
+export default function PermissionsListAdd(
+⋮----
+const fetchPermissionType = async () =>
+</file>
+
+<file path="src/pages/CRMManagement/PermissionsList/permissions-list-update/PermissionsListUpdate.js">
+export default function PermissionsListUpdate(
+⋮----
+const fetchPermissionType = async () =>
+⋮----
+{/* <ErrorMessage name="permission_name">
+                        {(msg) => <div className="error-message">{msg}</div>}
+                      </ErrorMessage> */}
+</file>
+
+<file path="src/pages/CRMManagement/PermissionsList/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/PermissionsList/index.js">
+export default function PermissionsList()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Permissions List */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CRMManagement/RolesList/all-roles-list/AllRolesList.js">
+export default function AllRolesList(
+</file>
+
+<file path="src/pages/CRMManagement/RolesList/role-list-update/RoleListUpdate.js">
+export default function RoleListUpdate(
+</file>
+
+<file path="src/pages/CRMManagement/RolesList/roles-list-add/RoleListAdd.js">
+export default function RoleListAdd(
+</file>
+
+<file path="src/pages/CRMManagement/RolesList/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/RolesList/index.js">
+export default function RolesList()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Roles List */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CRMManagement/SourcingPartners/add-source-partner/AddSourcePartner.js">
+export default function AddSourcePartner(
+</file>
+
+<file path="src/pages/CRMManagement/SourcingPartners/source-partner-table/SourcePartnerTable.js">
+export default function SourcingPartnerTable(
+</file>
+
+<file path="src/pages/CRMManagement/SourcingPartners/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/SourcingPartners/update-source-partner/UpdateSourcePartner.js">
+export default function UpdateSourcePartner(
+</file>
+
+<file path="src/pages/CRMManagement/SourcingPartners/index.js">
+export default function SourcingPartners()
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Permissions List */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CRMManagement/UserListAccess/all-user-list-access/AllUserListAccess.js">
+const AllUserListAccess = (
+⋮----
+const handleUpdateViewReport = (id, value) =>
+⋮----
+const handleUpdateViewDownload = (id, value) =>
+⋮----
+const handleViewAccessAllChecked = (value) =>
+⋮----
+const handleDownloadAllChecked = (value) =>
+⋮----
+const handleSubmit = async () =>
+</file>
+
+<file path="src/pages/CRMManagement/UserListAccess/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/UserListAccess/index.js">
+export default function UserListAccess()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* User List Add */}
+</file>
+
+<file path="src/pages/CRMManagement/UserListAdd/all-user-list-add/AllUserListAdd.js">
+const AllUserListAdd = (
+</file>
+
+<file path="src/pages/CRMManagement/UserListAdd/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/UserListAdd/index.js">
+export default function UserListAdd()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+{/* <Filter /> */}
+⋮----
+{/* User List Add */}
+</file>
+
+<file path="src/pages/CRMManagement/UserListUpdate/all-user-list-update/AllUserListUpdate.js">
+const AllUserListUpdate = (
+⋮----
+// Check All Update
+⋮----
+const handleUpdatePermissions = (data, checked) =>
+⋮----
+// Remove password if not provided
+⋮----
+// Updated Permission
+</file>
+
+<file path="src/pages/CRMManagement/UserListUpdate/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/CRMManagement/UserListUpdate/index.js">
+export default function UserListUpdate()
+⋮----
+const { userID } = useParams(); // Get userID from route params
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Pass only the selected user to AllUserListUpdate */}
+</file>
+
+<file path="src/pages/CRMManagement/Users/all-user/AllUser.js">
+export default function AllUser(
+</file>
+
+<file path="src/pages/CRMManagement/Users/filter/Filter.js">
+const Filter = (
+</file>
+
+<file path="src/pages/CRMManagement/Users/top-heading/TopHeading.js">
+export default function TopHeading(
+</file>
+
+<file path="src/pages/CRMManagement/Users/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function Users()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Users */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/CRMManagement/index.js">
+
+</file>
+
+<file path="src/pages/CustomerProfile/ApiLogs/response-modal/ResponseModal.js">
+export default function ResponseModal(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/ApiLogs/index.js">
+export default function Apilogs()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Pagination */}
+⋮----
+{/* API Response Modal */}
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/bank-account-details/BankAccountDetails.js">
+export default function BankAccountDetails(
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/collection-details/AddCollectionEMI.js">
+export default function AddCollectionEMI(props)
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/collection-details/AddCollectionPayday.js">
+export default function AddCollectionPayday(props)
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/collection-details/AddPaymentModal.js">
+export default function AddPaymentModal(props)
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/collection-details/CollectionDetails.js">
+export default function CollectionDetails(
+⋮----
+today.setHours(0, 0, 0, 0); // remove time part
+⋮----
+{/* Collection Table */}
+⋮----
+{/* Add Collection Details Modal */}
+⋮----
+{/* Refuned Amount Modal */}
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/collection-details/RefundedAmountDetails.js">
+export default function RefundedAmountDetails(props)
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/collection-details/UpdateRecalculateCollectionPayday.jsx">
+export default function UpdateRecalculateModel(props)
+⋮----
+const fetchAPI = async (settle) =>
+⋮----
+{/* <Cell>{(rowData, index) => index + 1}</Cell> */}
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/collection-follow-up/AddCollectionFollowUp.js">
+export default function AddCollectionFollowUp(
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/collection-follow-up/CollectionFollowUp.js">
+export default function CollectionFollowUp(
+⋮----
+{/* Add Collection Follow Up */}
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/emandate-charges/EmandateChanges.js">
+export default function EmandateChanges(
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/statement-account/StatementAccount.js">
+export default function StatementAccount(
+⋮----
+// margin: 20,
+// filename: "report.pdf",
+// image: { type: "jpeg", quality: 0.98 },
+// html2canvas: { scale: 2 },
+⋮----
+const handleGenerateSOA = async (type, leadId) =>
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/virtual-account-details/VirtualAccountDetails.js">
+export default function VirtualAccountDetails(
+⋮----
+const handleGenerateVirtualAccount = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/Collection/index.js">
+export default function Collection(
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/Communication/email-history/EmailHistory.js">
+export default function EmailHistory(
+⋮----
+const handleSentDisbursalLetter = async () =>
+⋮----
+const handleSanctionLetter = async () =>
+⋮----
+const handleNocLetter = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/Communication/sanction-follow-up/AddFollowUp.js">
+export default function AddFollowUp(
+⋮----
+const handleSubmit = async (values) =>
+⋮----
+// console.log("Values-------------", values);
+</file>
+
+<file path="src/pages/CustomerProfile/Communication/sanction-follow-up/FollowUpDetails.js">
+export default function FollowUpDetails(
+</file>
+
+<file path="src/pages/CustomerProfile/Communication/sanction-follow-up/SanctionFollowUp.js">
+export default function SanctionFollowUp(
+⋮----
+{/* Add Follow Up */}
+</file>
+
+<file path="src/pages/CustomerProfile/Communication/sms-history/SMSHistory.js">
+export default function SMSHistory()
+</file>
+
+<file path="src/pages/CustomerProfile/Communication/whats-app-message-history/WhatsAppMessageHistory.js">
+export default function WhatsAppMessageHistory()
+</file>
+
+<file path="src/pages/CustomerProfile/Communication/index.js">
+export default function Communication()
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/Documents/DobMatch/DobMatch.js">
+export default function DobMatch(
+</file>
+
+<file path="src/pages/CustomerProfile/Documents/DobMatch/ViewModel.js">
+export default function ViewModel(
+</file>
+
+<file path="src/pages/CustomerProfile/Documents/NameMatch/NameMatch.js">
+export default function NameMatch(
+</file>
+
+<file path="src/pages/CustomerProfile/Documents/NameMatch/ViewModel.js">
+export default function ViewModel(
+</file>
+
+<file path="src/pages/CustomerProfile/Documents/PanAadharMatch/PanAadharMatch.js">
+export default function PanAadharMatch(
+</file>
+
+<file path="src/pages/CustomerProfile/Documents/PanAadharMatch/ViewModel.js">
+export default function ViewModel(
+</file>
+
+<file path="src/pages/CustomerProfile/Documents/index.js">
+export default function Documents(userInfo)
+⋮----
+const fetchAPI = async () =>
+⋮----
+const handleDownloadFile = async (entityID, type) =>
+⋮----
+// const entityID = "MWIzOGRlYmUtMDNmOS00MTgyLThlZTItNGI5YmRhNjkwZjJi";
+// const type = "bank_statement";
+⋮----
+const checkFraudHandler = async (rowData) =>
+⋮----
+{/* <Cell dataKey="type" /> */}
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/address-history/addAddressModel.js">
+export default function AddAddressModel(
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/address-history/AddressHistory.js">
+export default function AddressHistory(
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/app-location-history/AppLocationHistory.js">
+export default function AppLocationHistory(
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/bank-account-aggregator-link/BankAccountAggregatorLinks.js">
+export default function BankAccountAggregatorLinks(
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/employment-history/EmploymentHistory.js">
+export default function EmploymentHistory(
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/lead-history/LeadHistory.js">
+export default function LeadHistory(
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/loan-history/LoanHistory.js">
+export default function LoanHistory(
+⋮----
+const redirectToLead = (leadID) =>
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/referral-history/ReferralHistory.js">
+export default function ReferralHistory()
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/referral-summary/ReferralSummary.js">
+export default function ReferralSummary()
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/salary-history/SalaryHistory.js">
+export default function SalaryHistory(
+</file>
+
+<file path="src/pages/CustomerProfile/HistoricalData/index.js">
+// components
+// import ReferralSummary from "./referral-summary/ReferralSummary";
+// import ReferralHistory from "./referral-history/ReferralHistory";
+⋮----
+// methods
+⋮----
+export default function HistoricalData(
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* <ReferralSummary />
+      <Divider className="h-2" /> */}
+{/* <ReferralHistory />
+      <Divider className="h-2" /> */}
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/address-reference-details/AddReferencesDetails.js">
+export default function AddReferencesDetails(props)
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/address-reference-details/AddressDetails.js">
+// import UpdateAddressModal from "./UpdateAddressModal";
+// import AddReferenceModal from "./AddReferenceModal";
+⋮----
+export default function AddressDetails(props)
+⋮----
+{/* Update Address Modal */}
+⋮----
+{/* Reference Details */}
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/address-reference-details/AllReference.js">
+export default function AllReference(props)
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/address-reference-details/ReferencesDetails.js">
+export default function ReferencesDetails(
+⋮----
+{/* Add Reference Details */}
+⋮----
+{/* All Reference */}
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/address-reference-details/UpdateAddressDetails.js">
+export default function UpdateAddressDetails(props)
+⋮----
+// setFieldValue("pincode", value);
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/emandate-details/Charge.js">
+export default function Charge(props)
+⋮----
+const handleUpdateLeadStatus = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/emandate-details/DisableMandate.js">
+export default function DisableMandate(props)
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/emandate-details/EmandateDetails.js">
+export default function EmandateDetails(
+⋮----
+const handleDisableEmandate = async () =>
+⋮----
+{/* {(roleName === "Admin" || roleName === "SuperAdmin" || roleName === "Credit HOD") && (
+            <Button
+              color={emandateDetails.data.emandateEnabled ? "red" : "blue"}
+              appearance="primary"
+              size="xs"
+              onClick={() => {
+                if (emandateDetails.data.emandateEnabled) {
+                  setDisableModalShow(true);
+                } else {
+                  handleDisableEmandate();
+                }
+              }}
+            >
+              {emandateDetails.data.emandateEnabled ? "Disable E-Mandate" : "Enable E-Mandate"}
+            </Button>
+          )} */}
+⋮----
+{/* Disable, Generate & Charge Modal */}
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/emandate-details/GenerateMandate.js">
+export default function GenerateMandate(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/employment-details/EmployementDetails.js">
+export default function EmployementDetails(props)
+⋮----
+{/* <Col md={12} className="vertical-spacing-15">
+              <VStack spacing={4}>
+                <Heading level={6} className="fs-14">
+                  {employmentDetails.data.officialEmailId
+                    ? employmentDetails.data.officialEmailId
+                    : "-"}
+                </Heading>
+                <Text muted size={13}>
+                  Official Email ID
+                </Text>
+              </VStack>
+            </Col> */}
+⋮----
+{/* Update Employment Modal */}
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/employment-details/LeadSummary.js">
+export default function LeadSummary(
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/employment-details/LoanApplyStatus.js">
+export default function LoanApplyStatus(
+⋮----
+const getStatusIcon = (status)
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/employment-details/UpdateEmployment.js">
+export default function UpdateEmployment(props)
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/loan-details/CreditDetails.js">
+// components
+⋮----
+export default function CreditDetails()
+⋮----
+const renderDPDDisplay = () =>
+⋮----
+{/* Update Loan Details */}
+⋮----
+{/* <ModifyPaydayLoan
+          loanModalOpen={loanModalOpen}
+          setLoanModalOpen={setLoanModalOpen}
+          creditDetails={creditDetails}
+        /> */}
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/loan-details/EMISchedule.js">
+export default function EMISchedule(
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/loan-details/LoanDetails.js">
+// import { FiEdit } from "react-icons/fi";
+⋮----
+// components
+⋮----
+import { AnnumDayList } from "../../../../constants/master"; // Adjust path accordingly
+⋮----
+export default function LoanDetails(
+⋮----
+{/* <ButtonToolbar>
+            {leadStatus === "Approved Process" && (
+              <IconButton
+                onClick={() => {
+                  if (loanDetails.data.productID === 1) {
+                    setEMIModalOpen(true);
+                  } else {
+                    setLoanModalOpen(true);
+                  }
+                }}
+                circle
+                icon={<FiEdit size={20} color="#4e4e4e" />}
+                appearance="subtle"
+              />
+            )}
+          </ButtonToolbar> */}
+⋮----
+{/* <Text>
+                            <span>Admin Fee:</span> ₹
+                            {loanDetails?.data?.adminFee || 0}
+                          </Text> */}
+⋮----
+{/* EMO Schedule */}
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/loan-details/ModifyEMILoan.js">
+export default function ModifyEMILoan(props)
+⋮----
+const isAdminFeeLow = (val) =>
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/loan-details/ModifyLoanDeatil.jsx">
+const ModifyLoanDeatil = (
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/loan-details/ModifyPaydayLoan.js">
+export default function ModifyPaydayLoan(props)
+⋮----
+const isAdminFeeLow = (val) =>
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/loan-details/PaydayToEmiLoan.jsx">
+function PaydayToEmiLoan(
+⋮----
+const isAdminFeeLow = (val) =>
+⋮----
+const calCulateAdminFee = (approvalAmount, processingFee)
+⋮----
+const handleEMICalculation = async (
+⋮----
+const handleSubmit = async (formValues,
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/penny-drop/check-name-modal/CheckNameModal.js">
+export default function CheckNameModal(props)
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/penny-drop/PennyDrop.js">
+export default function PennyDrop(props)
+⋮----
+{/* Penny Check Name Modal */}
+</file>
+
+<file path="src/pages/CustomerProfile/LoanApplication/index.js">
+// components
+// import EmployementDetails from "./components/EmployementDetails";
+⋮----
+// import AddressDetails from "./components/AddressDetails";
+⋮----
+// import LoanDetails from "./components/LoanDetails";
+⋮----
+// import PennyDrop from "./components/PennyDrop";
+⋮----
+// import MandateDetails from "./components/MandateDetails";
+⋮----
+// methods
+⋮----
+export default function LoanApplication(props)
+⋮----
+const fetchAPI = async () =>
+⋮----
+// loanRes,
+⋮----
+// apiInstance.loanDetailsAPI(),
+⋮----
+// setLoanDetails(loanRes);
+</file>
+
+<file path="src/pages/CustomerProfile/TimeLine/index.js">
+export default function Timeline()
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/approved/Approved.js">
+export default function Approved(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/approved/ApprovedEMI.js">
+export default function ApprovedEMI(
+⋮----
+// salary details
+⋮----
+const handleEMICalculator = async (values) =>
+⋮----
+{/* <DatePicker
+                  oneTap
+                  placeholder="Select Repayment Date"
+                  date={values.repaymentDate}
+                  onChange={(value) => {
+                    setFieldValue("repaymentDate", moment(value).format("YYYY-MM-DD"));
+                  }}
+                  block
+                  onClean={() => setFieldValue("repaymentDate", "")}
+                  shouldDisableDate={(date) => {
+                    const today = new Date();
+
+                    const sixDaysFromToday = new Date();
+                    sixDaysFromToday.setDate(sixDaysFromToday.getDate() + 6);
+
+                    const thirtySixDaysFromToday = new Date();
+                    thirtySixDaysFromToday.setDate(thirtySixDaysFromToday.getDate() + 36);
+
+                    return date < today || date > thirtySixDaysFromToday || date <= sixDaysFromToday;
+                  }}
+                /> */}
+⋮----
+// setFieldValue(
+//   "adminFee",
+//   (values.loanAmtApproved * value) / 100
+// );
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/approved/ApprovedPayday.js">
+export default function ApprovedPayday(
+⋮----
+// const res = await apiInstance.changeStatusAPI(updatedValues);
+// if (res.statusCode === 200) {
+//   toast.success(res.message);
+//   setOpen(false);
+//   dispatch(updateRefreshData());
+// }
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/approved-process/ApprovedProcess.js">
+export default function ApprovedProcess(props)
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/bank-update/BankUpdate.js">
+export default function BankUpdate(
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/blacklist/BlackList.js">
+// Functionality
+⋮----
+export default function BlackList(
+⋮----
+const handleConfirmBlacklist = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/common-status/CommonStatus.js">
+export default function CommonStatus(
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/disbursed/Disbursed.js">
+export default function Disbursed(props)
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/disbursed/ManualDisbursal.js">
+export default function ManualDisbursal(
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/disbursed/RazorpayUpdate.js">
+export default function RazorpayUpdate(
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/hold/Hold.js">
+export default function Hold(
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/lead-button/LeadButton.js">
+export default function LeadButton(
+⋮----
+const fetchAPI = async () =>
+⋮----
+const handleLeadStatus = () =>
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/lead-status/LeadStatusModal.js">
+// lead status components
+⋮----
+export default function LeadStatusModal(props)
+⋮----
+const handleModalSizes = (status) =>
+⋮----
+// data={relationList.map((item) => ({
+//   label: item,
+//   value: item,
+// }))}
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/loan/EMILoan.js">
+export default function EMILoan(
+⋮----
+const isAdminFeeLow = (val) =>
+⋮----
+// salary details
+⋮----
+const handleEMICalculator = async (values) =>
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/loan/PaydayLoan.js">
+export default function PaydayLoan(
+⋮----
+const isAdminFeeLow = (val) =>
+⋮----
+// salary details
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/not-required/NotRequired.js">
+export default function NotRequired(
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/AddtoBlacklistModal.jsx">
+export default function AddtoBlacklistModal(
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/UserInfo.js">
+export default function UserInfo(
+⋮----
+// const [showAlert, setShowAlert] = useState(false);
+⋮----
+const handleVerifyLink = (type) =>
+⋮----
+const SendAllignVisitMailHandler = async () =>
+⋮----
+{/* <Modal open={showAlert} onClose={() => setShowAlert(false)} size="xs">
+        <Modal.Body className="text-center-modal">Customer has not Paid.</Modal.Body>
+        <Modal.Footer className="text-center-modal">
+          <Button onClick={() => setShowAlert(false)} appearance="primary">
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal> */}
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/UserInfo.scss">
+// User Info Styles
+.user-info-card {
+  background-color: #ffffff;
+  padding: 12px;
+  border-radius: 15px;
+  margin: 12px 0;
+
+  .customer-img {
+    width: 76px;
+    height: 75px;
+    border-radius: 6px;
+  }
+
+  .name {
+    font-size: 16px;
+    text-transform: capitalize;
+  }
+
+  .identity {
+    background: rgba(229, 229, 229, 0.25);
+    padding: 8px 15px;
+    border-radius: 10px;
+
+    h6 {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+  }
+
+  .lender-name-block {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    // margin-top: 5px;
+
+    .name-block {
+      position: relative;
+    }
+
+    .name {
+      font-size: 10px;
+      font-weight: bold;
+      padding: 0 7px;
+      position: relative;
+      z-index: 999;
+    }
+
+    .background {
+      opacity: 0.1;
+      padding: 11px 0;
+      position: absolute;
+      width: 100%;
+      top: -2px;
+      z-index: 0;
+      right: 0px;
+      z-index: 0;
+      border-radius: 3px;
+    }
+  }
+
+  .user_id {
+    width: fit-content;
+    padding: 3px 10px 3px 10px;
+    margin-top: 3px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    font-size: 10px;
+  }
+
+  .btn-approved {
+    width: 100%;
+    height: 52px;
+    padding: 14px 10px;
+    border-radius: 16px;
+    background: var(--brand-color);
+    color: #fff;
+    margin-top: 7px;
+
+    &:hover {
+      background: var(--brand-color-darker-900);
+    }
+
+    &:disabled {
+      background-color: #d3d3d3;
+      color: #696969;
+    }
+  }
+
+  .bottom-info {
+    border-top: 1px solid #dddddd;
+    padding: 12px 12px 0 12px;
+    margin-top: 15px;
+    margin-left: -12px;
+    margin-right: -12px;
+  }
+  .button-group-right {
+  display: flex;
+  justify-content: flex-end; 
+  gap: 10px; 
+  flex-wrap: wrap;
+  align-items: center;
+}
+.blacklisted-message {
+  background-color: #ffe5ec;
+  font-size: 11px;
+  padding: 12px 6px; 
+  border-radius: 4px;
+  color: red;
+}
+.send-allign-button {
+  font-size: 11px;
+}
+.add-to-blacklist{
+  font-size: 11px;
+}
+  
+}
+.text-center-modal {
+  text-align: center;
+  font-size: 14px;
+}
+</file>
+
+<file path="src/pages/CustomerProfile/UserInfo/whiteListModal.jsx">
+export default function WhiteListModal(
+</file>
+
+<file path="src/pages/CustomerProfile/index.js">
+export default function CustomerProfile()
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Customers/all-customer/AllCustomer.js">
+export default function AllCustomer(
+</file>
+
+<file path="src/pages/Customers/customer-details-update/CustomerDetailsUpdate.js">
+export default function CustomerDetailsUpdate(
+⋮----
+const GetOTPHandler = async (type, values) =>
+⋮----
+const VerifyOTPHandler = async (
+    { emailOTP, mobileOTP, aadharOtp, type, email, mobile }
+) =>
+⋮----
+// Handlers for verification buttons
+const handleVerifyEmailOTP = async (values) =>
+⋮----
+const handleVerifyMobileOTP = async (values) =>
+⋮----
+const handleFieldChange = (field, value) =>
+⋮----
+{/* First Name */}
+⋮----
+{/* Email with OTP */}
+⋮----
+{/* Date of Birth */}
+⋮----
+{/* Aadhaar Number */}
+⋮----
+{/* Right Column */}
+⋮----
+{/* Mobile with OTP */}
+⋮----
+{/* Gender */}
+⋮----
+{/* Pancard */}
+⋮----
+{/* Submit Button */}
+</file>
+
+<file path="src/pages/Customers/filter/Filter.js">
+const Filter = () =>
+</file>
+
+<file path="src/pages/Customers/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Customers/index.js">
+export default function Customers()
+⋮----
+{/* Header */}
+⋮----
+{/* Top Heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* All Customer  */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Dashboard/emi-report/EMIReport.js">
+
+</file>
+
+<file path="src/pages/Dashboard/payday-report/PaydayReport.js">
+
+</file>
+
+<file path="src/pages/Dashboard/total-status-report/TotalStatusReport.js">
+export default function TotalStatusReport(
+⋮----
+const redirectTo = (routeCase) =>
+</file>
+
+<file path="src/pages/Dashboard/index.js">
+// components
+⋮----
+export default function Dashboard()
+⋮----
+const fetchAPI = async (lenderID) =>
+⋮----
+{/* Header */}
+⋮----
+{/* TotalStatusReport */}
+⋮----
+{/* PaydayReport */}
+⋮----
+{/* EMIReport */}
+</file>
+
+<file path="src/pages/Disbursal/BankUpdate/allocated-all-disbursal/AllocatedAllDisbursal.js">
+const AllocatedAllDisbursal = (
+⋮----
+const handleFilterClick = (tabType) =>
+</file>
+
+<file path="src/pages/Disbursal/BankUpdate/table-data/TableData.js">
+export default function TableData(
+⋮----
+const handleCheckboxChange = (rowData, checked) =>
+⋮----
+const handleAllCheckbox = () =>
+⋮----
+const handleSubmitBtn = async () =>
+⋮----
+{/* <Column width={150}>Whisper
+              <HeaderCell>Action</HeaderCell>
+              <Cell dataKey="is_failure_case" />
+            </Column> */}
+</file>
+
+<file path="src/pages/Disbursal/BankUpdate/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Disbursal/BankUpdate/index.js">
+// components
+⋮----
+export default function BankUpdate()
+⋮----
+const fetchData = (withConfirmation = false) =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Allocated Disbursal */}
+⋮----
+{/* Settled */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Disbursal/BankUpdateRejected/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/Disbursal/BankUpdateRejected/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Disbursal/BankUpdateRejected/index.js">
+// components
+⋮----
+export default function BankUpdateRejected()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Settled */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Disbursal/Disbursed/table-data/TableData.js">
+export default function TableData(
+</file>
+
+<file path="src/pages/Disbursal/Disbursed/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Disbursal/Disbursed/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function Disbursed()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Settled */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Disbursal/ManualDisbursal/top-heading/TopHeading.js">
+export default function TopHeading(
+</file>
+
+<file path="src/pages/Disbursal/ManualDisbursal/upload-data/UploadData.js">
+export default function UploadData()
+⋮----
+const uploadFile = async () =>
+</file>
+
+<file path="src/pages/Disbursal/ManualDisbursal/index.js">
+// components
+⋮----
+export default function ManualDisbursal()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Settled */}
+</file>
+
+<file path="src/pages/Feedback/table-data/TableData.jsx">
+export default function AllFeedback(
+</file>
+
+<file path="src/pages/Feedback/index.jsx">
+export default function Feedback()
+⋮----
+const fetchData = () =>
+⋮----
+{/* Header */}
+⋮----
+{/*Top Heading */}
+⋮----
+{/* All Feedback  */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/LeadActions/ManualSelfieConfirmation/index.jsx">
+export default function ManualSelfieConfirmation()
+⋮----
+const fetchAPI = async () =>
+⋮----
+const statusHandler = async (status) =>
+</file>
+
+<file path="src/pages/LeadActions/ManualSelfieConfirmation/style.css">
+.header {
+⋮----
+.panel-image {
+⋮----
+.api-score {
+⋮----
+/* Flex container */
+⋮----
+/* Center horizontally */
+⋮----
+.button-row {
+</file>
+
+<file path="src/pages/LeadActions/ManualSelfieVerification/table-data/TableData.jsx">
+export default function TableData(
+</file>
+
+<file path="src/pages/LeadActions/ManualSelfieVerification/top-heading/TopHeading.jsx">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/LeadActions/ManualSelfieVerification/index.jsx">
+// components
+⋮----
+export default function ManualSelfieVerification()
+⋮----
+{/* Main Header */}
+⋮----
+{/* Filter */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/* TableData */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/LeadActions/NameMismatchManager/table-data/FinboxTable.jsx">
+export default function FinboxTable(
+</file>
+
+<file path="src/pages/LeadActions/NameMismatchManager/table-data/PennyDropTable.jsx">
+export default function PennyDropTable(
+</file>
+
+<file path="src/pages/LeadActions/NameMismatchManager/table-data/TableData.js">
+export default function TableData(
+⋮----
+const handleAction = async (customerID, id, type, status) =>
+</file>
+
+<file path="src/pages/LeadActions/NameMismatchManager/top-heading/TopHeading.js">
+export default function TopHeading(
+⋮----
+const handleButtonType = () =>
+</file>
+
+<file path="src/pages/LeadActions/NameMismatchManager/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function NameMismatchManager()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Main Header */}
+⋮----
+{/* Filter */}
+</file>
+
+<file path="src/pages/LeadActions/PaymentModeManager/payment-bank-mode/PaymentBankMode.js">
+const PaymentBankMode = () =>
+⋮----
+const [data, setData] = useState([]);  // Stores table data
+const [searchInput, setSearchInput] = useState(""); // Input value for search
+const [bankResults, setBankResults] = useState([]); // Dropdown options
+const [selectedBank, setSelectedBank] = useState(""); // Final selected value
+const [showDropdown, setShowDropdown] = useState(false); // Controls visibility of dropdown
+⋮----
+// Debounced API Call when user types
+⋮----
+const fetchBanks = async () =>
+⋮----
+// Debounce the API call (Wait 500ms after user stops typing)
+⋮----
+return () => clearTimeout(timer); // Cleanup timer
+⋮----
+const handleData = (data) =>
+⋮----
+{/* Dropdown with search results */}
+⋮----
+{/* Radio Buttons */}
+⋮----
+{/* Submit Button */}
+</file>
+
+<file path="src/pages/LeadActions/PaymentModeManager/payment-bank-mode/paymentModeManager.scss">
+.responsive-payment-mode-bank {
+    width: 100%;
+    max-width: 500px;
+    flex-direction: row;
+}
+
+.dropdown {
+    position: absolute;
+    width: 100%;
+    background: white;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+    .responsive-payment-mode-bank {
+        width: 100%;
+        flex-direction: column;
+    }
+}
+</file>
+
+<file path="src/pages/LeadActions/PaymentModeManager/payment-mode/PaymentMode.js">
+const PaymentMode = () =>
+⋮----
+const fetchPaymentMode = async () =>
+</file>
+
+<file path="src/pages/LeadActions/PaymentModeManager/table-data/TableData.js">
+export default function TableData(
+⋮----
+const handleDelete = async (id) =>
+</file>
+
+<file path="src/pages/LeadActions/PaymentModeManager/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/LeadActions/PaymentModeManager/index.js">
+// components
+⋮----
+export default function PaymentModeManager()
+⋮----
+{/* Main Header */}
+⋮----
+{/* PaymentMode */}
+⋮----
+{/* Bank Update */}
+</file>
+
+<file path="src/pages/LeadActions/RepaymentDateManager/table-data/DateChangeModel.js">
+export default function DateChangeModel(props)
+⋮----
+const handleSubmit = async () =>
+</file>
+
+<file path="src/pages/LeadActions/RepaymentDateManager/table-data/TableData.js">
+export default function TableData(
+⋮----
+{/* Date Change Response Modal */}
+</file>
+
+<file path="src/pages/LeadActions/RepaymentDateManager/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function RepaymentDateManager()
+⋮----
+const fetchAPI = async () =>
+⋮----
+// Call API only if searchBy and customerSearch exist
+⋮----
+{/* Main Header */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Table */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Leads/AllLeads/all-lead/AllLead.js">
+export default function AllLead(
+⋮----
+const handleCheckboxChange = (rowData, checked) =>
+⋮----
+const handleAllocateLeads = async () =>
+⋮----
+const handleStatusCss = (value) =>
+⋮----
+const fetchUsers = async () =>
+⋮----
+{/* Allocate User */}
+</file>
+
+<file path="src/pages/Leads/AllLeads/allocated-all-leads/AllocatedAllLeads.js">
+const AllocatedAllLeads = (
+⋮----
+const handleFilterClick = (queryParam, value) =>
+⋮----
+const handleLeadAllocation = async () =>
+⋮----
+{/* Search Button */}
+⋮----
+{/* Clear Filter Button */}
+⋮----
+{/* Clear Filter Button */}
+</file>
+
+<file path="src/pages/Leads/AllLeads/top-heading/TopHeading.js">
+export default function TopHeading(
+</file>
+
+<file path="src/pages/Leads/AllLeads/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function AllLeads()
+⋮----
+filterUpdateCallbackRef.current = (
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* AllocatedAllLeads */}
+⋮----
+{/* Hot Leads */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Leads/CreditLeads/allocated-credit-leads/AllocatedCreditLeads.js">
+const AllocatedCreditLeads = (
+⋮----
+const handleFilterClick = (queryParam, value) =>
+⋮----
+{/* Search Button */}
+⋮----
+{/* Clear Filter Button */}
+</file>
+
+<file path="src/pages/Leads/CreditLeads/credit-leads-table/CreditLeadsTable.js">
+const CreditLeadsTable = (
+</file>
+
+<file path="src/pages/Leads/CreditLeads/top-heading/TopHeading.js">
+export default function TopHeading(
+</file>
+
+<file path="src/pages/Leads/CreditLeads/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function CreditLeads()
+⋮----
+filterUpdateCallbackRef.current = (
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Allocated Credit Leads */}
+⋮----
+{/* Credit Leads Table */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Leads/HotLeads/add-modal/AddModal.js">
+export default function AddModal(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Leads/HotLeads/all-hot-leads/AllHotLeads.js">
+const AllHotLeads = (
+</file>
+
+<file path="src/pages/Leads/HotLeads/top-heading/TopHeading.js">
+export default function TopHeading(
+</file>
+
+<file path="src/pages/Leads/HotLeads/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function HotLeads()
+⋮----
+filterUpdateCallbackRef.current = (
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Hot Leads */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Leads/SanctionLeads/allocated-filter-leads/AallocatedFilterLeads.js">
+const AallocatedFilterLeads = (
+⋮----
+const handleFilterClick = (queryParam, value) =>
+⋮----
+{/* Search Button */}
+⋮----
+{/* Clear Filter Button */}
+</file>
+
+<file path="src/pages/Leads/SanctionLeads/sanction-leads-table/SanctionLeadsTable.js">
+const SanctionLeadsTable = (
+⋮----
+const handleStatusCss = (value) =>
+</file>
+
+<file path="src/pages/Leads/SanctionLeads/top-heading/TopHeading.js">
+export default function TopHeading(
+</file>
+
+<file path="src/pages/Leads/SanctionLeads/index.js">
+// components
+⋮----
+// functionality
+⋮----
+export default function SanctionLeads()
+⋮----
+filterUpdateCallbackRef.current = (
+⋮----
+{/* Main Header */}
+⋮----
+{/* Top heading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Aallocated Filter Leads */}
+⋮----
+{/* Sanction Leads Table */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Leads/Filter.js">
+export const FilterComponent = (
+⋮----
+const fetchLeadFilter = async () =>
+⋮----
+const formatSelectType = (value) =>
+⋮----
+const formatAllocatedTo = (value) =>
+⋮----
+const handleFilter = (name, value) =>
+</file>
+
+<file path="src/pages/Leads/index.js">
+
+</file>
+
+<file path="src/pages/Leads/sixtyDaysValidation.js">
+const maxDays = 59; // 60 days including today
+⋮----
+const getDateAfter15Days = (date)
+const getDateBefore15Days = (date)
+⋮----
+const updateFilters = (
+⋮----
+const disableDateDecider = (dateType, relatedDate) =>
+⋮----
+const getValidDate = (
+⋮----
+export const max60DaysValidation = (
+⋮----
+export const disableFutureDate = (date) =>
+</file>
+
+<file path="src/pages/Logs/APILogs/all-logs/AllApiLogs.js">
+export default function AllApiLogs(
+⋮----
+const supplierType = (type) =>
+⋮----
+{/* Log Response Modal */}
+</file>
+
+<file path="src/pages/Logs/APILogs/all-logs/LogResponse.js">
+export default function LogResponse(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Logs/APILogs/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Logs/APILogs/index.js">
+// components
+⋮----
+export default function APILogs()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Api Logs */}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Logs/AppInstallations/all-logs/AllAppInstallations.js">
+export default function AllAppInstallations(
+⋮----
+{/* All Apps Modal */}
+</file>
+
+<file path="src/pages/Logs/AppInstallations/all-logs/AllAppsModal.js">
+export default function AllAppsModal(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Logs/AppInstallations/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Logs/AppInstallations/index.js">
+export default function AppInstallations()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/*App Installations*/}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Logs/ChatLogs/all-logs/AllChatLogs.js">
+export default function AllChatLogs(
+⋮----
+{/* Log Response Modal */}
+</file>
+
+<file path="src/pages/Logs/ChatLogs/all-logs/LogResponse.js">
+export default function LogResponse(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Logs/ChatLogs/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Logs/ChatLogs/index.js">
+export default function ChatLogs()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Chat Logs*/}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Logs/DialerLogs/all-logs/AllDialerLogs.js">
+export default function AllDialerLogs(
+⋮----
+{/* All Apps Modal */}
+</file>
+
+<file path="src/pages/Logs/DialerLogs/all-logs/LogResponse.js">
+export default function LogResponse(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Logs/DialerLogs/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Logs/DialerLogs/index.js">
+export default function DialerLogs()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/* Filter */}
+⋮----
+{/*Dialer Logs*/}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Logs/KaleyraLogs/all-logs/AllKaleyraLogs.js">
+export default function AllKaleyraLogs(
+⋮----
+{/* Log Response Modal */}
+</file>
+
+<file path="src/pages/Logs/KaleyraLogs/all-logs/LogResponse.js">
+export default function LogResponse(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Logs/KaleyraLogs/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Logs/KaleyraLogs/index.js">
+export default function KaleyraLogs()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/* Filter */}
+⋮----
+{/* Kaleyra Logs*/}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Logs/RazorpayLogs/all-logs/AllRazorpayLogs.js">
+export default function AllRazorpayLogs(
+</file>
+
+<file path="src/pages/Logs/RazorpayLogs/all-logs/LogResponse.js">
+export default function LogResponse(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Logs/RazorpayLogs/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Logs/RazorpayLogs/index.js">
+export default function RazorpayLogs()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/* Filter */}
+⋮----
+{/*Razorpay Logs*/}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Logs/SendInBlueLogs/all-logs/ALlSendInBlueLogs.js">
+export default function ALlSendInBlueLogs(
+</file>
+
+<file path="src/pages/Logs/SendInBlueLogs/all-logs/LogResponse.js">
+export default function LogResponse(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Logs/SendInBlueLogs/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Logs/SendInBlueLogs/index.js">
+export default function SendInBlueLogs()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/*SendIn Blue Logs*/}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Logs/WhatsappLogs/all-logs/AllWhatsappLogs.js">
+export default function AllWhatsappLogs(
+⋮----
+{/* Log Response Modal */}
+</file>
+
+<file path="src/pages/Logs/WhatsappLogs/all-logs/LogResponse.js">
+export default function LogResponse(props)
+⋮----
+const fetchAPI = async () =>
+</file>
+
+<file path="src/pages/Logs/WhatsappLogs/top-heading/TopHeading.js">
+export default function TopHeading()
+</file>
+
+<file path="src/pages/Logs/WhatsappLogs/index.js">
+export default function WhatsappLogs()
+⋮----
+const fetchAPI = async () =>
+⋮----
+{/* Header */}
+⋮----
+{/* TopHeading */}
+⋮----
+{/*Whats App Logs*/}
+⋮----
+{/* Pagination */}
+</file>
+
+<file path="src/pages/Reports/allLeadReports.js">
+const AllLeadReports = () =>
+⋮----
+const transformLeadDetail = (data) =>
+⋮----
+const showToastMsg = (msg, type) =>
+⋮----
+const RenderTable = () =>
+</file>
+
+<file path="src/pages/Reports/appIssueListReport.js">
+const AppIssueListReport = () =>
+</file>
+
+<file path="src/pages/Reports/collectionDataReport.js">
+const CollectionDataReport = () =>
+</file>
+
+<file path="src/pages/Reports/collectionEmiDataReport.js">
+const CollectionEmiDataReport = () =>
+</file>
+
+<file path="src/pages/Reports/collectionPaymentMode.js">
+const CollectionPaymentMode = () =>
+</file>
+
+<file path="src/pages/Reports/CreditHODReport.jsx">
+export default function CreditHODReport()
+⋮----
+{/* Table Data */}
+</file>
+
+<file path="src/pages/Reports/CreditModificationReport.jsx">
+export default function CreditModificationReport()
+⋮----
+{/* Table Data */}
+⋮----
+{/* <Cell dataKey="modified_values" /> */}
+</file>
+
+<file path="src/pages/Reports/customerFeedback.js">
+// import Filter from "components/reports/Filter";
+⋮----
+const CustomerFeedback = () =>
+</file>
+
+<file path="src/pages/Reports/dateWiseCollectionReport.js">
+const DateWiseCollectionReport = () =>
+</file>
+
+<file path="src/pages/Reports/dateWiseLeadReport.js">
+const DateWiseLeadReport = () =>
+</file>
+
+<file path="src/pages/Reports/disbursalReportDashboard.js">
+const DisbursalReportDashboard = (
+</file>
+
+<file path="src/pages/Reports/disbursedDataReport.js">
+const DisbursedDataReport = () =>
+</file>
+
+<file path="src/pages/Reports/disbursedReport.js">
+const DisbursedReport = () =>
+</file>
+
+<file path="src/pages/Reports/EventFunnelReport.js">
+export default function EventFunnelReport()
+</file>
+
+<file path="src/pages/Reports/index.js">
+
+</file>
+
+<file path="src/pages/Reports/landingPartnerLeads.js">
+// import Filter from "components/reports/Filter";
+⋮----
+const LandingPartnerLeads = () =>
+</file>
+
+<file path="src/pages/Reports/payDayPendingReport.js">
+const PayDayPendingReport = () =>
+</file>
+
+<file path="src/pages/Reports/quickReportDownloadRequest.jsx">
+export default function QuickReportDownloadRequest()
+⋮----
+const fetchData = async () =>
+⋮----
+const downloadFile = async (id) =>
+⋮----
+link.href = data?.files; // Assuming the API returns the S3 URL in 'url' field
+link.download = ''; // Let the browser decide the file name
+⋮----
+return null; // Skip rendering the 'id' column
+</file>
+
+<file path="src/pages/Reports/quickReports.js">
+const keyToLabel = (columnKey) =>
+⋮----
+const downloadRequest = async (fileType) =>
+⋮----
+{/* <CheckPicker
+            data={checkPickerData}
+            value={downloadColumns}              // selected items here
+            onChange={setDownloadColumns}        // update selected items
+            style={{ width: 240 }}
+            placeholder="Select Columns For Download"
+            countable
+          /> */}
+⋮----
+{/* <Button
+            color="green"
+            appearance="primary"
+            size="xs"
+            disabled={!hasDownloadAccess?.includes(procedure) && !downloadToggle}
+            onClick={() => downloadRequest("xlsx")}
+          >
+            Excel Download
+          </Button> */}
+</file>
+
+<file path="src/pages/Reports/quickReportsWrapper.js">
+const QuickReportsWrapper = () =>
+⋮----
+onClose: () =>
+</file>
+
+<file path="src/pages/Reports/refundReport.js">
+// import { DOWNLOAD_REFUND_REPORT_END_POINT } from "constants/report";
+⋮----
+// import fileInstance from "lib/file";
+⋮----
+// import DownloadButton from "components/common/DownloadButton";
+// import { REPORTS_API_URL } from "utils/environment";
+⋮----
+const RefundReport = () =>
+⋮----
+/* restComponent={[<DownloadButton key="download_refund_report_cta" text="Excel Download" isDownloadDisable={!data?.refundReport?.length} onClick={() => {
+            fileInstance.downloadExcelFile({
+              endpoint: REPORTS_API_URL + DOWNLOAD_REFUND_REPORT_END_POINT,
+              query: search
+            }, dispatch)
+          }} />]} */
+</file>
+
+<file path="src/pages/Reports/report.js">
+const Report = () =>
+</file>
+
+<file path="src/pages/Reports/style.scss">
+.reportPages {
+    .capitalizeTxt {
+        text-transform: capitalize;
+    }
+    .dateWiseCollectionReportPanel {
+        height: auto !important;
+        .rs-panel-body {
+            padding: 0;
+        }
+    }
+    .allLeadTableCard {
+        box-shadow: 0 0.25rem 1rem rgba(165, 163, 174, 0.45);
+        padding: 20px;
+        border-radius: 6px;
+    }
+    
+    .rPanelMinHeight {
+        min-height: 250px;
+    }
+
+    .noDataFOund {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 200px;
+    }
+}
+</file>
+
+<file path="src/redux/middlewares/thunk.js">
+const createApiThunk = (type, endpoint) =>
+</file>
+
+<file path="src/redux/slices/apiSlice.js">
+// Helper function to generate thunks and reducers dynamically for any API
+const createApiSlice = (name, endpoint) =>
+⋮----
+extraReducers: (builder) =>
+</file>
+
+<file path="src/redux/slices/apiSlices.js">
+// Create slices for two different API endpoints
+</file>
+
+<file path="src/redux/slices/appSlice.js">
+updateRefreshData: (state) =>
+⋮----
+updateCollectionMode: (state, action) =>
+</file>
+
+<file path="src/redux/slices/navbarSlice.js">
+updateNavBarMenuIsLoad: (state, action) =>
+updateNavBarMenu: (state, action) =>
+resetNavbarMenu: (state) =>
+</file>
+
+<file path="src/redux/slices/paginationSlice.js">
+updateLoading: (state, action) =>
+updateCurrentPage: (state, action) =>
+updateTotalPage: (state, action) =>
+updateTotalItems: (state, action) =>
+resetPagination: (state) =>
+</file>
+
+<file path="src/redux/slices/userSlice.js">
+permissions: null, // permissions added
+⋮----
+updateUserLogin: (state, action) =>
+⋮----
+updateLeadStatus: (state, action) =>
+⋮----
+updatePermissions: (state, action) =>
+⋮----
+updateRoleName: (state, action) =>
+⋮----
+updateLeadType: (state, action) =>
+⋮----
+updateProductID: (state, action) =>
+⋮----
+updateRepayDate: (state, action) =>
+⋮----
+updateSalaryDate: (state, action) =>
+⋮----
+clearUserData: ()
+⋮----
+customerProfileInfo: (state, action) =>
+updateUserBlacklist: (state, action) =>
+</file>
+
+<file path="src/redux/store.js">
+import storage from "redux-persist/lib/storage"; // Uses localStorage
+⋮----
+// Persist config
+⋮----
+whitelist: ["user"], // You can choose which reducer to persist (e.g., 'user')
+⋮----
+// Combine reducers
+⋮----
+// Persist the rootReducer
+⋮----
+middleware: (getDefaultMiddleware)
+⋮----
+serializableCheck: false, // Disables the warning about non-serializable values in the state (needed for redux-persist)
+⋮----
+// Create a persistor
+</file>
+
+<file path="src/routes/AppRouter.js">
+// Pages
+⋮----
+export default function AppRouter()
+</file>
+
+<file path="src/routes/Router.js">
+// CRMManagement
+⋮----
+// App Management
+⋮----
+// Lead Actions
+⋮----
+// Collection
+⋮----
+//Collection Manager
+⋮----
+// Reports
+⋮----
+// Customers
+⋮----
+//CallbackRequest
+⋮----
+// Leads
+⋮----
+// Disbursal
+⋮----
+// Collection Setting
+⋮----
+// Logs
+⋮----
+// Black List
+⋮----
+// Customer Profile
+⋮----
+// Logout
+⋮----
+// Error404
+⋮----
+export default function LazyRoutes()
+⋮----
+{/* crm management */}
+⋮----
+{/* App Management */}
+⋮----
+{/* Lead Actions */}
+⋮----
+{/* Collection */}
+⋮----
+{/* Collection Manager */}
+⋮----
+{/* Reports */}
+⋮----
+{/* Customers */}
+⋮----
+{/* Customers */}
+⋮----
+{/* Leads */}
+⋮----
+{/* Disbursal */}
+⋮----
+{/* Collection Setting */}
+⋮----
+{/* Logs */}
+⋮----
+{/* Block Listed */}
+⋮----
+{/* Customer Profile */}
+⋮----
+{/* Feedback */}
+⋮----
+{/* Logout */}
+⋮----
+{/* Logout */}
+</file>
+
+<file path="src/scss/_breakpoints.scss">
+// Breakpoints
+@mixin screen-max($breakpoint) {
+  @media (max-width: $breakpoint) {
+    @content;
+  }
+}
+
+@mixin screen-min($breakpoint) {
+  @media (min-width: $breakpoint) {
+    @content;
+  }
+}
+
+.button {
+  font-size: 16px;
+  @include screen-max($md) {
+    font-size: 14px;
+  }
+}
+</file>
+
+<file path="src/scss/_customize.scss">
+// Customize CSS
+
+.pagination .page-link:hover {
+  background-color: #f3f4fa !important;
+  border-color: #e1dede !important;
+  color: #0d6efd !important;
+}
+
+.rs-heading {
+  font-weight: 600;
+}
+
+.rs-picker-toggle-wrapper {
+  display: block;
+}
+</file>
+
+<file path="src/scss/_mixins.scss">
+// Mixins
+
+@mixin flexbox($justify: center, $align: center, $direction: row) {
+  display: flex;
+  justify-content: $justify;
+  align-items: $align;
+  flex-direction: $direction;
+}
+
+@mixin center($type: absolute) {
+  position: $type;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@mixin border-radius($radius) {
+  -webkit-border-radius: $radius;
+  -moz-border-radius: $radius;
+  border-radius: $radius;
+}
+
+@mixin text-truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+</file>
+
+<file path="src/scss/_utilities.scss">
+/*------------------------------------------
+ Positions
+------------------------------------------*/
+
+.position-relative {
+  position: relative;
+}
+.position-absolute {
+  position: absolute;
+}
+.position-static {
+  position: static;
+}
+
+// Backgrounds Utilities
+.bg-white {
+  background-color: #ffffff;
+}
+.bg-primary {
+  background-color: #182bda;
+}
+.bg-gray {
+  background-color: #9f9f9f;
+}
+.bg-mid-gray {
+  background-color: #f1f1f1;
+}
+.bg-light-gray {
+  background-color: #f9f9f9;
+}
+.bg-green {
+  background-color: #0ebb53;
+}
+.bg-red {
+  background-color: #f33c3c;
+}
+.bg-gold {
+  background-color: #d4af37;
+}
+
+.link-color, a:focus, a:hover {
+  color: var(--brand-color);
+}
+
+// Text color Utilities
+.text-color-green {
+  color: #0ebb53;
+}
+.text-color-red {
+  color: #f33c3c;
+}
+
+// Border Col
+.border-col {
+  border: 1px solid rgb(207, 202, 202);
+  padding: 10px;
+}
+
+// Opacity
+.op-0 {
+  opacity: 0;
+}
+.op-05 {
+  opacity: 0.5;
+}
+.op-1 {
+  opacity: 1;
+}
+
+// Margin Bottom
+.mb-0 {
+  margin-bottom: 0 !important;
+}
+.mb-5 {
+  margin-bottom: 5px !important;
+}
+.mb-10 {
+  margin-bottom: 10px !important;
+}
+.mb-15 {
+  margin-bottom: 15px !important;
+}
+.mb-20 {
+  margin-bottom: 20px !important;
+}
+.mb-25 {
+  margin-bottom: 25px !important;
+}
+.mb-30 {
+  margin-bottom: 30px !important;
+}
+.mb-35 {
+  margin-bottom: 35px !important;
+}
+.mb-40 {
+  margin-bottom: 40px !important;
+}
+
+// Margin Top
+.mt-0 {
+  margin-top: 0 !important;
+}
+.mt-5 {
+  margin-top: 5px !important;
+}
+.mt-10 {
+  margin-top: 10px !important;
+}
+.mt-15 {
+  margin-top: 15px !important;
+}
+.mt-20 {
+  margin-top: 20px !important;
+}
+.mt-25 {
+  margin-top: 25px !important;
+}
+.mt-30 {
+  margin-top: 30px !important;
+}
+.mt-35 {
+  margin-top: 35px !important;
+}
+.mt-40 {
+  margin-top: 40px !important;
+}
+
+// Margin Top & Bottom
+.my-15 {
+  margin: 15px 0;
+}
+
+// Padding Utilities
+.p-0 {
+  padding: 0 !important;
+}
+.pb-0 {
+  padding-bottom: 0 !important;
+}
+
+.pr-5 {
+  padding-right: 5px !important;
+}
+
+.pr-0 {
+  padding-right: 0px !important;
+}
+
+.ml-10 {
+  margin-left: 10px;
+}
+
+// Class Utilities
+.page-title {
+  color: #212b37;
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.form-group {
+  position: relative;
+  margin-bottom: 18px;
+}
+
+.form-label {
+  font-weight: 500;
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  margin-top: 5px;
+}
+
+.form-error {
+  font-size: 9px;
+  color: #f33c3c;
+  margin-top: 2px;
+  position: absolute;
+}
+
+.filter-group {
+  position: relative;
+  margin: 7px 0;
+}
+
+.block {
+  display: block;
+}
+
+.flex {
+  display: flex;
+}
+
+
+/*------------------------------------------
+ Font Alignment
+------------------------------------------*/
+.text-left {
+  text-align: left;
+}
+.text-center {
+  text-align: center;
+}
+.text-right {
+  text-align: right;
+}
+
+/*------------------------------------------
+ Font Size
+------------------------------------------*/
+.fs-10 {
+  font-size: 10px !important;
+}
+.fs-11 {
+  font-size: 11px !important;
+}
+.fs-12 {
+  font-size: 12px !important;
+}
+.fs-13 {
+  font-size: 13px !important;
+}
+.fs-14 {
+  font-size: 14px !important;
+}
+.fs-15 {
+  font-size: 15px !important;
+}
+.fs-16 {
+  font-size: 16px !important;
+}
+.fs-17 {
+  font-size: 17px !important;
+}
+.fs-18 {
+  font-size: 18px !important;
+}
+.fs-19 {
+  font-size: 19px !important;
+}
+.fs-20 {
+  font-size: 20px !important;
+}
+.fs-21 {
+  font-size: 21px !important;
+}
+.fs-22 {
+  font-size: 22px !important;
+}
+.fs-23 {
+  font-size: 23px !important;
+}
+.fs-24 {
+  font-size: 24px !important;
+}
+.fs-25 {
+  font-size: 25px !important;
+}
+.fs-26 {
+  font-size: 26px !important;
+}
+.fs-27 {
+  font-size: 27px !important;
+}
+.fs-28 {
+  font-size: 28px !important;
+}
+.fs-29 {
+  font-size: 29px !important;
+}
+.fs-30 {
+  font-size: 30px !important;
+}
+.fs-31 {
+  font-size: 31px !important;
+}
+.fs-32 {
+  font-size: 32px !important;
+}
+.fs-33 {
+  font-size: 33px !important;
+}
+.fs-34 {
+  font-size: 34px !important;
+}
+.fs-35 {
+  font-size: 35px !important;
+}
+.fs-36 {
+  font-size: 36px !important;
+}
+.fs-37 {
+  font-size: 37px !important;
+}
+.fs-38 {
+  font-size: 38px !important;
+}
+.fs-39 {
+  font-size: 39px !important;
+}
+.fs-40 {
+  font-size: 40px !important;
+}
+
+/*------------------------------------------
+ Font Weight
+------------------------------------------*/
+.fw-100 {
+  font-weight: 100 !important;
+}
+.fw-200 {
+  font-weight: 200 !important;
+}
+.fw-300 {
+  font-weight: 300 !important;
+}
+.fw-400 {
+  font-weight: 400 !important;
+}
+.fw-500 {
+  font-weight: 500 !important;
+}
+.fw-600 {
+  font-weight: 600 !important;
+}
+.fw-700 {
+  font-weight: 700 !important;
+}
+.fw-800 {
+  font-weight: 800 !important;
+}
+.fw-900 {
+  font-weight: 900 !important;
+}
+
+/*------------------------------------------
+ Border Radius
+------------------------------------------*/
+.br-10 {
+  border-radius: 10px;
+}
+.br-11 {
+  border-radius: 11px;
+}
+.br-12 {
+  border-radius: 12px;
+}
+.br-13 {
+  border-radius: 13px;
+}
+.br-14 {
+  border-radius: 14px;
+}
+.br-15 {
+  border-radius: 15px;
+}
+.br-16 {
+  border-radius: 16px;
+}
+.br-17 {
+  border-radius: 17px;
+}
+.br-18 {
+  border-radius: 18px;
+}
+.br-19 {
+  border-radius: 19px;
+}
+.br-20 {
+  border-radius: 20px;
+}
+
+/*------------------------------------------
+ Height
+------------------------------------------*/
+.h-2 {
+  height: 2px;
+}
+.h-3 {
+  height: 3px;
+}
+.h-4 {
+  height: 4px;
+}
+.h-5 {
+  height: 5px;
+}
+.h-6 {
+  height: 6px;
+}
+.h-7 {
+  height: 7px;
+}
+.h-8 {
+  height: 8px;
+}
+.h-9 {
+  height: 9px;
+}
+.h-10 {
+  height: 10px;
+}
+
+/*------------------------------------------
+ Text Transform
+------------------------------------------*/
+.text-transform-capitalize {
+  text-transform: capitalize;
+}
+
+.text-transform-uppercase {
+  text-transform: uppercase;
+}
+
+/*------------------------------------------
+ Flex wrap
+------------------------------------------*/
+
+.flex-wrap-wrap {
+  flex-wrap: wrap;
+}
+
+/*------------------------------------------
+ gap
+------------------------------------------*/
+
+.gap-10{
+  gap: 10px;
+}
+
+
+.gap-30{
+  gap: 30px;
+}
+
+.ml-5 {
+  margin-left: 5px !important;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.text-truncate {
+  @include text-truncate;
+  width: inherit;
+}
+</file>
+
+<file path="src/scss/_variables.scss">
+:root {
+    --rs-btn-primary-active-bg: #1f1f1f;
+}
+// Sizes
+$sm: 576px;
+$md: 768px;
+$lg: 992px;
+$xl: 1200px;
+$xxl: 1400px;
+
+// Colors
+$primary-color: #182bda;
+$black-color: #1f1f1f;
+$blue-dark-color: #111c43;
+$gray-color: #585858;
+$light-gray-color: #9f9f9f;
+$white-color: #fdfdfd;
+$green-color: #0ebb53;
+$red-color: #f33c3c;
+$logo-color: #1777bb;
+$gold-color: #d4af37;
+$light-gray-color: #f9f9f9;
+$main-background-color: #f6faff;
+</file>
+
+<file path="src/scss/main.scss">
+@import "./variables";
+@import "./breakpoints";
+@import "./mixins";
+@import "./customize";
+@import "./utilities";
+</file>
+
+<file path="src/services/AdminAPI.js">
+// const { apiData } = require("utils/api");
+⋮----
+class AdminAPI extends BaseAPI
+⋮----
+// Customer Search API
+async customerSearchAPI(params)
+⋮----
+// Admin Profile API
+async adminProfileAPI()
+</file>
+
+<file path="src/services/AppFunctionManagementAPI.js">
+class AppFunctionManagementAPI extends BaseAPI
+⋮----
+// Holiday List API
+async holidayListAPI()
+⋮----
+// Holiday Delete API
+async holidayDeleteAPI(id)
+⋮----
+// Holiday Add API
+async holidayAddAPI(repaydate)
+⋮----
+// Auto Disbursal Status
+async autoDisbStatus()
+⋮----
+// Auto Disbursal Status update
+async autoDisbStatusUpdate(status)
+⋮----
+// repayment gateway type
+async repaymentGatewayType()
+⋮----
+// repayment gateway type
+async repaymentGatewayTypeUpdate(type)
+</file>
+
+<file path="src/services/AuthAPI.js">
+class AuthAPI extends BaseAPI
+⋮----
+// Login API
+async loginAPI(values)
+⋮----
+// Verify API
+async verifyOTPAPI(values, userID)
+⋮----
+// Forgot Password API
+async forgotPasswordAPI(values)
+⋮----
+// Change Password API
+async changePasswordAPI(values, userID)
+⋮----
+// Auto Login API
+async autoLoginAPI(params)
+</file>
+
+<file path="src/services/BaseAPI.js">
+class BaseAPI
+⋮----
+// Handle API Request
+async makeRequest(req, showError = false, contentType = "application/json")
+⋮----
+// For FormData, don't set Content-Type manually to let browser set boundary
+⋮----
+// Only set Content-Type if it's not FormData
+⋮----
+// Handle API Errors
+async handleError(error)
+⋮----
+// Display Error Notification
+showError(text)
+⋮----
+// Get CustomerID
+getCustomerID()
+</file>
+
+<file path="src/services/CollectionAPI.js">
+class CollectionAPI extends BaseAPI
+⋮----
+// Collection Manage Action Approved And Reject API
+async collectionManageApprovedRejectAPI(data)
+⋮----
+// Waiver Approved And Reject API
+async waiverApprovedRejectAPI(action, data)
+⋮----
+// Collection Manage Action API
+async collectionManageActionAPI(payload)
+⋮----
+// Collection Manage Download Excel API
+async collectionManageDownloadExcelAPI(type, collectionType, searchText)
+⋮----
+// Payday Pending Collection API
+⋮----
+// Closed  API
+async getAllocatedUsersAPI()
+⋮----
+// DND Customer API
+⋮----
+async deleteDndCustomerAPI(customerID, removedBy)
+⋮----
+async addDndAPI(data)
+⋮----
+// Closed  API
+⋮----
+// Part Payment API
+⋮----
+// Settlement API
+⋮----
+//Waive Off Loan Details API
+⋮----
+// Get Wailve Off List Table
+⋮----
+// Get Wailve Off List Table
+⋮----
+// Add Waive Off API
+async addWaiveOffAPI(data)
+⋮----
+// Get Api for Add Not Required
+async getAddNotRequiredAPI()
+⋮----
+async uploadPdfAddNotRequiredAPI(file)
+⋮----
+// Allocate Multiple Leads API
+async allocateMultipleLeadsAPI(leadIds, userId)
+⋮----
+async editDndAPI(data)
+⋮----
+//payment settlement again
+</file>
+
+<file path="src/services/CollectionSettingAPI.js">
+class CollectionSettingAPI extends BaseAPI
+⋮----
+async settlementReportAPI(pageName)
+</file>
+
+<file path="src/services/CommonAPI.js">
+class CommonAPI extends BaseAPI
+⋮----
+// Filter API
+async filterAPI(pageName, pageType)
+⋮----
+// Blacklisted API
+async blacklistedAPI(pageName)
+⋮----
+async getUserPermissionAPI()
+⋮----
+async fetchResourceUrlAPI(entityID, type = "agreement")
+</file>
+
+<file path="src/services/CRMManagementAPI.js">
+class CRMManagementAPI extends BaseAPI
+⋮----
+// Users
+async manageUserListAPI()
+⋮----
+// Users Update
+async manageUserUpdateAPI(values, userID)
+⋮----
+// User Permissions List
+async manageUserPermissionsList()
+⋮----
+// User Permissions Details Edit
+async UserPermissionsDetailsEdit(userID)
+⋮----
+// Users Add
+async manageUserAddAPI(values)
+⋮----
+// Users List Download
+async manageUserDownloadAPI()
+⋮----
+// Users Report Access
+async manageUserReportAccessAPI(userID)
+⋮----
+// Add User Report Access
+async manageAddUserReportAccessAPI(permissions, userID)
+⋮----
+//Logins
+async manageLoginListAPI(page)
+⋮----
+//IP Whitelisting
+async manageIPWhitelistingAPI(page)
+⋮----
+//DeleteIP Whitelisting
+async deleteIPWhitelistingAPI(id)
+⋮----
+//DeleteIP Whitelisting
+async AddIPWhitelistingAPI(id)
+⋮----
+//permissions list
+async permissionsList()
+⋮----
+// GET Permission type
+async permissionsTypeList()
+⋮----
+//update Permissions list
+async updatePermissionsList(data, permission_id)
+//add Permissions list
+async addPermissionsList(data)
+⋮----
+//Sourcing Partners
+⋮----
+//update source partner
+async updateSourcePartner(formData)
+⋮----
+// Add source partner
+async addSourcePartner(data)
+⋮----
+//roles list
+async rolesList()
+⋮----
+//update roles list
+async updateRolesList(data, role_id)
+//add roles list
+async addRolesList(data)
+⋮----
+// User Permissions List
+async manageUserRoleHavePermissions(role_id)
+⋮----
+async UserHavePermissionsUpdateAPI(role_id, formattedValues)
+//dsa Partners
+⋮----
+//update dsa credntial
+async updateDSACredntial(data)
+⋮----
+// Add  dsa credntial
+async addDSACredntial(data)
+</file>
+
+<file path="src/services/CustomerProfileAPI.js">
+// const { apiData } = require("utils/api");
+⋮----
+class CustomerProfileAPI extends BaseAPI
+⋮----
+getLeadIDFromURL()
+⋮----
+// User Profile API
+async userProfileAPI(leadID)
+⋮----
+// Lead Status Dropdown API
+async leadStatusDropdownAPI()
+⋮----
+// Basic Lead Details API
+async basicLeadDetailsAPI()
+⋮----
+// Change Status API
+async changeStatusAPI(values)
+// change-status-whitelist customer API
+⋮----
+// Razorpay Disbursal Status API
+async razorpayDisbursalStatusAPI(values)
+// Disbursal Update  Status API
+async disbursalUpdateStatusAPI(values)
+// Razorpay Disbursal Status fetch API
+async razorpayDisbursalAPI()
+⋮----
+async changeApprovedProcessStatusAPI(values)
+⋮----
+async emiCalculatorAPI(values)
+⋮----
+// Employment Details API
+async employmentDetailsAPI()
+⋮----
+// Employment Details API
+async loanApplyStatusAPI()
+⋮----
+// Address Details API
+async addressDetailsAPI()
+⋮----
+//Add Address
+async addAddress(data)
+⋮----
+// Change Address Details API
+async changeAddressDetailsAPI(values)
+⋮----
+// Check Pincode API
+async checkPincodeAPI(code)
+⋮----
+// References Details API
+async referencesDetailsAPI()
+⋮----
+// References Details API
+async addReferencesAPI(values)
+⋮----
+// Loan Details API
+async creditDetailsAPI()
+// Loan Details API
+async loanDetailsAPI()
+⋮----
+// Modify EMI Loan API
+async modifyEMILoanAPI(values)
+⋮----
+// Modify Payday Loan API
+async modifyPaydayLoanAPI(values)
+⋮----
+// EMI Schedule API
+async emiScheduleAPI()
+⋮----
+// Panny Drop API
+async pennyDropAPI()
+⋮----
+// ckeck panny drop
+⋮----
+async checkPannyDropAPI(data)
+⋮----
+// Emandate Details API
+async emandateDetailsAPI()
+⋮----
+// Update Employment Details API
+async updateEmploymentDetailsAPI(values)
+⋮----
+// Disable Emandate API
+async disableEmandateAPI()
+⋮----
+// Get Bank Account API
+async getBankAccountAPI()
+⋮----
+// Lead Approved Details API
+async leadApprovedDetailsAPI()
+⋮----
+// Generate Emandate API
+async genrateEmandateAPI(accountID)
+⋮----
+// Charge Emandate API
+async chargeEmandateAPI(values, emandateID)
+⋮----
+// Collection Details API
+async collectionDetailsAPI()
+⋮----
+// Add Payday Collection Details API
+async addCollectionPaydayAPI(values)
+⋮----
+//  Update Payment Mode Collection Details
+async updateCollectionPaymentMode(data)
+⋮----
+//  Add Refund Amount API
+async addCollectionRefundAmountAPI(values, id)
+⋮----
+// Add EMI Collection Details API
+async addEMICollectionDetailsAPI(values)
+⋮----
+// Download Collection CSV API
+async downloadCollectionCSVAPI()
+⋮----
+// Collection FollowUp API
+async collectionFollowUpAPI()
+⋮----
+// E-Mandate Charges API
+async mandateChargeAPI()
+⋮----
+// Virtual Account Details API
+async virtualAccountDetailsAPI()
+⋮----
+// Generate Virtual Account API
+async generateVirtualAccountAPI()
+⋮----
+// Bank Account Details API
+async bankAccountDetailsAPI()
+⋮----
+// Bank Account Details API
+async statementOfAccountAPI()
+⋮----
+// Download SOA EMI API
+async downloadSOAEMIAPI(leadId)
+⋮----
+// Download SOA Payday API
+async downloadSOAPaydayAPI(leadId)
+//Name Match API
+async nameMatchAPI()
+⋮----
+// Documents API
+async documentListAPI()
+⋮----
+// PDF URL API
+async pdfURLAPI(entityID, type)
+⋮----
+// Sanction Follow-up API
+async sanctionFollowUpAPI()
+⋮----
+// Add Sanction Follow-up API
+async addSanctionFollowUpAPI(values, type)
+⋮----
+// E-mail History API
+async emailHistoryAPI()
+⋮----
+// Send Disbursal Letter API
+async sendDisbursalLetterAPI()
+⋮----
+// Send Sanction Letter API
+async sendSanctionLetterAPI()
+⋮----
+// Send NOC API
+async sendNOCAPI()
+⋮----
+// Loan History API
+async loanHistoryAPI()
+⋮----
+// Lead History API
+async leadHistoryAPI()
+⋮----
+// Address History API
+async addressHistoryAPI()
+⋮----
+// Employment History API
+async employmentHistoryAPI()
+⋮----
+// Salary History API
+async salaryHistoryAPI()
+⋮----
+// Location History API
+async locationHistoryAPI()
+⋮----
+// Bank Account Aggregator Links API
+async bankAccountAggregatorLinkAPI()
+⋮----
+// CRM Timeline API
+async crmTimelineAPI()
+⋮----
+// Get API Logs API
+async apiLogsAPI(page)
+⋮----
+// console.log("req-------", req?.url);
+⋮----
+// Get API Response API
+async apiResponseAPI(apiID)
+⋮----
+// Bank Update Check API
+async bankUpdateCheckAPI()
+⋮----
+// Bank Update Check Submit API
+async bankUpdateCheckSubmitAPI(data)
+⋮----
+// Customer API
+async CustomerAPI(qurStr)
+⋮----
+// Customer Update API
+async CustomerUpdateAPI(val)
+⋮----
+// payday To Emi Loan Conversion
+async paydayToEmiConversion(payload)
+⋮----
+// Customer API
+⋮----
+// Customer API
+async EmailphoneVerifyAPI(payload, customerID)
+⋮----
+// verify otp
+async VerifyOTPAPI(payload)
+⋮----
+// Check Fraud API
+⋮----
+// blacklist customer add
+⋮----
+// feedbacks API
+</file>
+
+<file path="src/services/DashboardAPI.js">
+class DashboardAPI extends BaseAPI
+⋮----
+// User Dashboard API
+async UserDashboard(lenderID)
+</file>
+
+<file path="src/services/Disbursal.js">
+class Disbursal extends BaseAPI
+⋮----
+// Disbursal Bank Update
+⋮----
+//Disbursal rejected, disbursed
+⋮----
+// disbursal initiate
+async disbursalInitiate(leadIds)
+⋮----
+url: `disbursal/disbursal_allocated`, //disbursal_initiate`,
+⋮----
+data: { disbursalAllocateArray: leadIds }, //{disbursalInitiateArray:}
+</file>
+
+<file path="src/services/LeadActions.js">
+class LeadActionsAPI extends BaseAPI
+⋮----
+async getRepaymentDateAPI()
+⋮----
+async updateRepaymentDateAPI(date)
+⋮----
+async getNameMismatchDataAPI(type)
+⋮----
+async updateNameMismatchDataAPI(data)
+⋮----
+async getPaymentModeAPI(
+⋮----
+async updatePaymentModeAPI(
+⋮----
+async deletePaymentModeAPI(id)
+</file>
+
+<file path="src/services/LeadsAPI.js">
+class LeadsAPI extends BaseAPI
+⋮----
+// All Leads
+⋮----
+async allocatedToMe(data)
+⋮----
+//lead allocation
+async leadAllocation(data)
+⋮----
+// Hot Leads
+⋮----
+// Hot Leads Add Get API
+async addGetHotLeads(data)
+⋮----
+// Hot(againNoLoan) followUp
+async addHotLeadsFollowUp(data)
+⋮----
+// credit Leads
+⋮----
+// sanction Leads
+</file>
+
+<file path="src/services/LogsAPI.js">
+class LogsAPI extends BaseAPI
+⋮----
+async getLogsAPI(type)
+⋮----
+// Get Single Logs
+async getSingleLogsAPI(id, type)
+</file>
+
+<file path="src/services/QuickReportAPI.js">
+export default class QuickReportAPI extends BaseAPI
+⋮----
+async getMenu()
+⋮----
+async getReports(payload)
+⋮----
+async downloadRequest(
+⋮----
+endpoint+=`&${search.replace(/^\?/, '')}`; // Append search query if exists
+⋮----
+endpoint+=`&downloadColumns=${downloadColumns.join(',')}`; // Append selected columns
+⋮----
+async downloadS3File(id)
+</file>
+
+<file path="src/services/RefundAPI.js">
+class RefundAPI extends BaseAPI
+⋮----
+// Dashboard API refund details
+⋮----
+// Add filter parameters if provided
+⋮----
+//Refund & Payout refund-report API
+⋮----
+// Add query parameters if provided
+⋮----
+//Refund & Payout Search report API - for orderID and paymentID only
+⋮----
+// Build query parameters - only for orderID and paymentID
+⋮----
+// Alternative search method for other fields (mobile, loanNo)
+// This would search in the main refund report with filters
+⋮----
+//Refund & Payout download report API
+⋮----
+//Bulk refund processing API
+⋮----
+//Individual Razorpay refund processing API
+⋮----
+//Bulk Razorpay refund processing API
+⋮----
+//CSV Upload Status get-refund-files
+⋮----
+//CSV Upload file
+⋮----
+// Download failed records for a specific upload
+⋮----
+// Upload CSV file for bulk refund processing
+⋮----
+// Create FormData and append the file
+⋮----
+// Debug: Log FormData contents
+⋮----
+// BaseAPI will automatically handle FormData content type
+</file>
+
+<file path="src/services/ReportAPI.js">
+export default class ReportAPI extends BaseAPI
+</file>
+
+<file path="src/services/upload-api.js">
+export const uploadFileAPI = async (file) =>
+⋮----
+//import manual disbursal
+export const ImportManualDisbursalAPI = async (file) =>
+⋮----
+export const getUploadFileAPI = async (page, limit) =>
+⋮----
+export const getFileDownloadURLAPI = async (key) =>
+⋮----
+export const uploadCOllectionAPI = async (file) =>
+</file>
+
+<file path="src/utils/api.js">
+export async function apiData(req, contentType = "application/json")
+</file>
+
+<file path="src/utils/autoLogout.js">
+import { getToken } from "./storage"; //updateUserLogin
+⋮----
+const setLastTime = (key) =>
+⋮----
+const redirectToLogout = () =>
+⋮----
+export const autoLogout = (e) =>
+</file>
+
+<file path="src/utils/environment.js">
+const getEnvironment = () =>
+</file>
+
+<file path="src/utils/storage.js">
+// Storage.js
+const storeToken = (token) =>
+⋮----
+const getToken = () =>
+</file>
+
+<file path="src/utils/utils.js">
+export const isValidUrl = (url) =>
+</file>
+
+<file path="src/validation/AuthValidation.js">
+
+</file>
+
+<file path="src/validation/CRMManagementValidation.js">
+
+</file>
+
+<file path="src/validation/CustomerProfileValidation.js">
+export const addCollectionEMIValidation = (paymentAction) =>
+⋮----
+is: ()
+then: (schema)
+otherwise: (schema)
+⋮----
+///^[6-9]\d{9}$/,
+⋮----
+// Hold Lead Status
+⋮----
+// Not Required Process, Not Required, Rejected Process, Rejected
+⋮----
+// Not Required Process, Not Required, Rejected Process, Rejected
+⋮----
+// Not Required Process, Not Required, Rejected Process, Rejected
+⋮----
+// Payday Approved Status Validation
+⋮----
+// EMI Loan Status
+⋮----
+m1: Yup.string(), //.required("Salary amount is required.")
+m2: Yup.string(), //.required("Salary amount is required.")
+m3: Yup.string(), //.required("Salary amount is required.")
+m1_date: Yup.string(), //.required("Date is required.")
+m2_date: Yup.string(), //.required("Date is required.")
+m3_date: Yup.string(), //.required("Date is required.")
+p1: Yup.string(), //.required("Particular is required.")
+p2: Yup.string(), //.required("Particular is required.")
+p3: Yup.string(), //.required("Particular is required.")
+⋮----
+// EMI Loan Status
+⋮----
+m1: Yup.string(), //.required("Salary amount is required."),
+m2: Yup.string(), //.required("Salary amount is required."),
+m3: Yup.string(), //.required("Salary amount is required."),
+m1_date: Yup.string(), //.required("Date is required."),
+m2_date: Yup.string(), //.required("Date is required."),
+m3_date: Yup.string(), //.required("Date is required."),
+p1: Yup.string(), //.required("Particular is required."),
+p2: Yup.string(), //.required("Particular is required."),
+p3: Yup.string(), //.required("Particular is required."),
+⋮----
+// add ip-white-listing
+⋮----
+// add ip-white-listing
+⋮----
+// add ip-white-listing
+⋮----
+// update ip-white-listing
+⋮----
+// addHoliday
+</file>
+
+<file path="src/validation/DndAddValidation.js">
+
+</file>
+
+<file path="src/validation/Leads.js">
+
+</file>
+
+<file path="src/App.js">
+export default function App()
+</file>
+
+<file path="src/index.js">
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+</file>
+
+<file path="src/index.scss">
+// General CSS
+:root {
+  --brand-color: #bc0f1d;
+  --brand-color-darker: #67070f;
+  --brand-color-darker-900: #89010c;
+  --brand-color-darker-800: #99020f;
+  
+  --pagination-color: var(--brand-color);
+  --pagination-active-color: #fff;
+  --pagination-active-bg: var(--brand-color-darker-900);
+  --rs-text-link: var(--brand-color);
+  --rs-btn-link-text: var(--brand-color);
+  --rs-btn-link-hover-text: var(--brand-color-darker-800);
+  --rs-state-hover-bg: #fef3f4;
+
+  --rs-input-focus-border: var(--brand-color);
+  --rs-color-focus-ring: rgb(from var(--brand-color) r g b / 25%);
+  
+  --rs-btn-ghost-border: var(--brand-color);
+  --rs-btn-ghost-hover-border: var(--brand-color);
+  --rs-btn-ghost-active-border: var(--brand-color-darker);
+  --rs-btn-ghost-text: var(--brand-color);
+  --rs-btn-ghost-hover-text: var(--brand-color-darker);
+  --rs-btn-ghost-active-text: var(--brand-color-darker);
+
+  --rs-listbox-option-hover-bg: rgb(from var(--brand-color) r g b / 15%);
+  --rs-listbox-option-hover-text: rgb(from var(--brand-color) r g b / 85%);
+
+  --rs-picker-value: #343434;
+}
+
+// .rs-btn-blue:not(.filters-wrapper .rs-btn-blue), .rs-btn-primary:not(.filters-wrapper .rs-btn-blue) {
+//   --rs-btn-primary-bg: var(--brand-color);
+//   --rs-btn-primary-hover-bg: var(--brand-color-darker-900);
+//   --rs-btn-primary-active-bg: var(--brand-color-darker-900);
+// }
+
+.rs-btn-primary{
+  --rs-btn-primary-bg: var(--brand-color);
+  --rs-btn-primary-hover-bg: var(--brand-color-darker-900);
+  --rs-btn-primary-active-bg: var(--brand-color-darker-900);
+}
+
+.rs-btn-primary.rs-btn-red {
+  --rs-btn-primary-bg: #FFC200;
+  --rs-btn-primary-hover-bg: #d5a507;
+  --rs-btn-primary-active-bg: #d5a507;
+}
+
+.rs-picker-default:not(.rs-picker-disabled) .rs-picker-toggle-active, 
+.rs-picker-default:not(.rs-picker-disabled) .rs-picker-toggle:focus, 
+.rs-picker-default:not(.rs-picker-disabled) .rs-picker-toggle:hover {
+  border-color: var(--brand-color);
+  box-shadow: 0 0 0 3px rgb(from var(--brand-color) r g b / 25%);
+}
+
+
+body {
+  background-color: #f6f6f6;
+  font-family: "Poppins", serif;
+  font-weight: normal;
+  font-size: 13px;
+}
+
+a:hover {
+  text-decoration: none !important;
+}
+
+.text-start {
+  text-align: start;
+}
+
+.justify-start {
+  display: flex;
+  justify-content: start;
+}
+.justify-between {
+  display: flex;
+  justify-content: space-between;
+}
+.justify-end {
+  display: flex;
+  justify-content: right;
+}
+.rs-picker-toggle {
+  display: flex !important;
+  justify-content: start !important;
+}
+.flex {
+  display: flex;
+}
+.m-10 {
+  margin: 10px;
+}
+.bg_gray {
+  background: #e5e5e542;
+}
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+.align-center {
+  display: flex;
+  align-items: center;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+  height: auto;
+}
+
+.mr-auto {
+  margin: 0 auto;
+}
+
+// .rs-sidenav-inverse .rs-dropdown-item.rs-dropdown-item-active,
+// .rs-sidenav-inverse .rs-sidenav-item.rs-sidenav-item-active {
+//   background-color: #f6f6f6;
+//   color: #1675e0;
+//   position: static;
+// }
+
+.rs-sidenav-inverse,
+.rs-sidenav-inverse .rs-dropdown .rs-dropdown-toggle,
+.rs-sidenav-inverse .rs-dropdown-item-submenu:hover > .rs-dropdown-item-toggle,
+.rs-sidenav-inverse .rs-sidenav-item,
+.rs-sidenav-inverse .rs-sidenav-toggle-button {
+  background-color: var(--brand-color-darker-900);
+}
+
+.rs-sidenav-nav > .rs-dropdown .rs-dropdown-toggle,
+.rs-sidenav-nav > .rs-sidenav-item {
+  font-size: 14px;
+  // padding-left: 50px;
+}
+
+.rs-sidenav-nav .rs-dropdown-item {
+  font-size: 13px;
+  color: #a3aed1;
+}
+
+.rs-sidenav-inverse .rs-dropdown-item.rs-dropdown-item-active,
+.rs-sidenav-inverse .rs-sidenav-item.rs-sidenav-item-active {
+  color: #ffffff;
+  font-weight: 400;
+}
+
+.rs-sidenav-item:hover,
+.rs-sidenav-item:focus,
+.rs-sidenav-item-active {
+  background-color: var(--brand-color-darker) !important;
+}
+
+.rs-dropdown-item:hover {
+  background-color: transparent !important;
+}
+
+.sidebar__body .rs-dropdown-expand .rs-dropdown-toggle {
+  background-color: var(--brand-color-darker) !important;
+}
+
+.sidebar__body .rs-dropdown-item-active,
+.sidebar__body .rs-dropdown-menu {
+  background-color: var(--brand-color-darker-800) !important;
+}
+
+.rs-dropdown-item {
+  & .rs-icon {
+    width: 7px;
+    margin-right: 4px;
+  }
+}
+
+.vertical-spacing-5 {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.vertical-spacing-10 {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.vertical-spacing-15 {
+  margin-top: 15px;
+  margin-bottom: 15px;
+}
+
+.vertical-spacing-20 {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+// Badge
+.badge {
+  padding: 3px 8px;
+  background-color: #f1f1f1;
+  font-size: 12px;
+  border-radius: 4px;
+
+  &.rounded {
+    border-radius: 12px;
+    padding: 4px 10px;
+  }
+
+  &.purple {
+    background-color: rgba(60, 129, 246, 0.1);
+    color: rgba(60, 129, 246, 1);
+  }
+}
+
+.rs-picker-check .rs-stack{
+  max-width: 100% !important;
+}
+</file>
+
+<file path="src/reportWebVitals.js">
+const reportWebVitals = onPerfEntry => {
+if (onPerfEntry && onPerfEntry instanceof Function)
+</file>
+
+<file path="src/setupTests.js">
+// jest-dom adds custom jest matchers for asserting on DOM nodes.
+// allows you to do things like:
+// expect(element).toHaveTextContent(/react/i)
+// learn more: https://github.com/testing-library/jest-dom
+</file>
+
+<file path=".babelrc">
+{
+    "presets": ["@babel/preset-env", "@babel/preset-react"]
+  }
+</file>
+
+<file path=".cgcignore">
+# Auto-generated by CodeGraphContext
+# Default ignore patterns for binary/media files
+# Add your own patterns below
+
+node_modules/
+venv/
+.venv/
+env/
+.env/
+dist/
+build/
+target/
+out/
+.git/
+__pycache__/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.mp4
+*.mp3
+*.zip
+*.tar
+*.gz
+</file>
+
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+</file>
+
+<file path="jsconfig.json">
+{
+    "compilerOptions": {
+      "experimentalDecorators": true,
+      "baseUrl": "src",
+      "jsx": "react"
+    },
+    "exclude": ["node_modules"]
+  }
+</file>
+
+<file path="package.json">
+{
+  "name": "crm-react",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.5.0",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.7.7",
+    "formik": "^2.4.6",
+    "html2pdf.js": "^0.10.2",
+    "js-cookie": "^3.0.5",
+    "mini-css-extract-plugin": "^2.9.1",
+    "moment": "^2.30.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-icons": "^5.3.0",
+    "react-json-view": "^1.21.3",
+    "react-redux": "^9.2.0",
+    "react-responsive-pagination": "^2.8.0",
+    "react-router-dom": "^6.26.2",
+    "react-scripts": "5.0.1",
+    "react-toastify": "^11.0.0",
+    "redux-persist": "^6.0.0",
+    "rsuite": "^5.71.0",
+    "sass": "^1.83.1",
+    "simplebar-react": "^3.2.6",
+    "sweetalert2": "^11.14.2",
+    "web-vitals": "^2.1.4",
+    "yup": "^1.4.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
+</file>
+
+<file path="README.md">
+# crm-kamakshimoney-frontend
+crm-kamakshimoney-frontend
+</file>
+
+</files>

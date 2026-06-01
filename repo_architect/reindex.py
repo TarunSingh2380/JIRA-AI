@@ -181,7 +181,7 @@ def reindex_repomix(
 
             if progress:
                 progress(f"packing {repo.name}")
-            pack_repo(repo.path, packed_file, use_skeleton=cfg.use_skeleton)
+            pack_repo(repo.path, packed_file, use_skeleton=cfg.use_skeleton, extra_ignores=repo.exclude)
             token_estimate = estimate_tokens(packed_file)
             store.set(RepomixRepoState(
                 name=repo.name,

@@ -9,20 +9,100 @@ repos:
     path: /home/ubuntu/ramfincorp-backend
     description: "Primary backend service for RamfinCorp"
 
-  # - name: node-crm
-  #   path: /home/ubuntu/node_crm
-  #   description: "Node.js CRM application"
+  - name: node_crm
+    path: /home/ubuntu/node_crm
+    description: "Node.js CRM application"
 
-  # - name: onboarding-service
-  #   path: /home/ubuntu/onboarding_service
-  #   description: "Customer onboarding backend service"
+  - name: onboarding_service
+    path: /home/ubuntu/onboarding_service
+    description: "Customer onboarding backend service"
 
-  # - name: onboarding-service-frontend
-  #   path: /home/ubuntu/onboarding_service_frontend
-  #   description: "Frontend application for onboarding service"
+  - name: onboarding_service_frontend
+    path: /home/ubuntu/onboarding_service_frontend
+    description: "Frontend application for onboarding service"
 
-  # - name: aws-configs
-  #   path: /home/ubuntu/AWS
-  #   description: "AWS infrastructure, deployment, and configuration scripts"
-  #   exclude:
-  #     - "scripts"
+  - name: AWS
+    path: /home/ubuntu/AWS
+    description: "AWS infrastructure, deployment, and configuration scripts"
+    exclude:
+      - "scripts/**"
+      - "**/scripts/**"
+      - "cdk.out/**"
+      - "**/cdk.out/**"
+      - ".terraform/**"
+      - "**/.terraform/**"
+      - "*.tfstate"
+      - "**/*.tfstate"
+      - "*.tfstate.backup"
+      - "**/*.tfstate.backup"
+      - "download-app/**"
+      - "loanapply/public/**"
+      - "loanapply/vendor/**"
+      - "loanapply/third_party/**"
+      - "loanapply/resources/views/**"
+      - "loanapply/resources/css/**"
+      - "loanapply/storage/**"
+      - "newcrm/css/**"
+      - "newcrm/js/**"
+      - "newcrm/fonts/**"
+      - "newcrm/images/**"
+      - "newcrm/logres/**"
+      - "newcrm/thirdparty/**"
+      - "newcrm/uploads/**"
+      - "newcrm/*back*"
+      - "newcrm/*backup*"
+      - "newcrm/*maintab*"
+      - "newcrm/*paggination*"
+      - "newcrm/*2022*"
+      - "newcrm/*2023*"
+      - "newcrm/*.php1"
+      - "pay-now/assets/**"
+      - "pay-now/css/**"
+      - "pay-now/fonts/**"
+      - "pay-now/images/**"
+      - "pay-now/js/**"
+      - "pay-now/libs/**"
+      - "pay-now/vendor/**"
+      - "apilive/docreq/**"
+      - "apilive/thirdparty/**"
+      - "apilive/uploads/**"
+
+  - name: crm-react
+    path: /home/ubuntu/crm-react
+    description: "CRM React frontend application"
+
+  - name: devOpsStack
+    path: /home/ubuntu/devOpsStack
+    description: "DevOps stack, deployment, and operations tooling"
+
+  - name: stored-procedure-RamFin
+    path: /home/ubuntu/stored-procedure-RamFin
+    description: "RamFin stored procedures and database routines"
+
+  - name: crm-kamakshimoney-frontend
+    path: /home/ubuntu/crm-kamakshimoney-frontend
+    description: "Kamakshi Money CRM frontend application"
+
+  - name: ramfincorp-notification
+    path: /home/ubuntu/ramfincorp-notification
+    description: "RamfinCorp notification service"
+
+  - name: ramfin_userservice
+    path: /home/ubuntu/ramfin_userservice
+    description: "RamFin user service"
+
+  - name: ramfin-report
+    path: /home/ubuntu/ramfin-report
+    description: "RamFin reporting service"
+
+  - name: Kamakshimoney-onboarding
+    path: /home/ubuntu/Kamakshimoney-onboarding
+    description: "Kamakshi Money onboarding service"
+
+  - name: DSA-Backend
+    path: /home/ubuntu/DSA-Backend
+    description: "DSA backend service"
+
+  - name: kanakloans-webview
+    path: /home/ubuntu/kanakloans-webview
+    description: "Kanak Loans webview application"

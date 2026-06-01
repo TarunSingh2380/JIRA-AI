@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from urllib.parse import quote
 
 import psycopg
 import requests
@@ -48,13 +50,88 @@ def _jira_get(path: str, params: Optional[dict] = None) -> dict[str, Any]:
             log.warning("Jira rate-limited; sleeping %ds", wait)
             time.sleep(wait)
             continue
-            if resp.status_code == 410:
-                raise RuntimeError(
-                    f"Jira API returned 410 Gone for {url}: {resp.text[:500]}"
-                )
+        if resp.status_code == 410:
+            raise ProjectGoneError(
+                f"Jira API returned 410 Gone for {url}: {resp.text[:500]}"
+            )
         resp.raise_for_status()
         return resp.json() if resp.text else {}
     raise RuntimeError(f"Jira GET {path} failed after retries")
+
+
+def _configured_project_keys() -> list[str]:
+    """Return configured Jira project keys, preserving order and removing duplicates."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    excluded = _excluded_project_keys()
+    for raw in re.split(r"[\s,]+", settings.jira_project_keys.strip()):
+        key = raw.strip()
+        if not key:
+            continue
+        dedupe_key = key.upper()
+        if dedupe_key in excluded:
+            log.info("Configured Jira project %s is excluded; skipping", key)
+            continue
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        keys.append(key)
+    return keys
+
+
+def _excluded_project_keys() -> set[str]:
+    return {
+        key.strip().upper()
+        for key in re.split(r"[\s,]+", settings.jira_excluded_project_keys.strip())
+        if key.strip()
+    }
+
+
+def _project_stub(project_key: str) -> dict[str, Any]:
+    return {"key": project_key, "name": project_key, "projectTypeKey": None}
+
+
+def _fetch_project(project_key: str) -> dict[str, Any]:
+    project = _jira_get(f"/rest/api/3/project/{quote(project_key, safe='')}")
+    if not project.get("key"):
+        project["key"] = project_key
+    return project
+
+
+def _fetch_configured_projects(project_keys: list[str]) -> list[dict[str, Any]]:
+    """Return metadata for configured projects, falling back to key-only rows."""
+    projects: list[dict[str, Any]] = []
+    for key in project_keys:
+        try:
+            projects.append(_fetch_project(key))
+        except ProjectGoneError as exc:
+            log.info("Configured Jira project %s is gone/archived; skipping: %s", key, exc)
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "unknown"
+            log.warning(
+                "Configured Jira project %s is not visible via project lookup "
+                "(HTTP %s); attempting JQL fetch anyway",
+                key,
+                status,
+            )
+            projects.append(_project_stub(key))
+    return projects
+
+
+def _jira_credentials_are_valid() -> bool:
+    try:
+        _jira_get("/rest/api/3/myself")
+        return True
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "unknown"
+        if status in {401, 403}:
+            log.warning(
+                "Jira credentials failed authentication (HTTP %s); check JIRA_EMAIL "
+                "and JIRA_API_TOKEN",
+                status,
+            )
+            return False
+        raise
 
 
 def _fetch_all_projects() -> list[dict[str, Any]]:
@@ -75,9 +152,11 @@ def _fetch_all_projects() -> list[dict[str, Any]]:
         batch = data.get("values", [])
 
         # Skip archived projects safely
+        excluded = _excluded_project_keys()
         active_projects = [
             p for p in batch
             if not p.get("archived", False)
+            and str(p.get("key", "")).upper() not in excluded
         ]
 
         projects.extend(active_projects)
@@ -98,6 +177,7 @@ def _fetch_tickets_for_project(project_key: str) -> list[dict[str, Any]]:
     tickets: list[dict[str, Any]] = []
 
     start = 0
+    next_page_token: Optional[str] = None
 
     fields = (
         "summary,description,status,issuetype,priority,"
@@ -106,25 +186,39 @@ def _fetch_tickets_for_project(project_key: str) -> list[dict[str, Any]]:
     )
 
     while True:
+        params: dict[str, Any] = {
+            "jql": f'project="{project_key}" ORDER BY created DESC',
+            "maxResults": 100,
+            "fields": fields,
+        }
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start
+
         data = _jira_get(
             "/rest/api/3/search/jql",
-            {
-                "jql": f'project="{project_key}" ORDER BY created DESC',
-                "startAt": start,
-                "maxResults": 100,
-                "fields": fields,
-            },
+            params,
         )
 
         batch = data.get("issues", [])
 
         tickets.extend(batch)
 
-        total = data.get("total", 0)
-
         start += len(batch)
+        next_page_token = data.get("nextPageToken")
 
-        if start >= total or not batch:
+        if data.get("isLast") is True:
+            break
+
+        if next_page_token:
+            continue
+
+        total = data.get("total")
+        if total is not None and start >= total:
+            break
+
+        if not batch:
             break
 
     return tickets
@@ -293,12 +387,30 @@ def fetch_all_tickets(
         log.warning("Jira credentials not configured; returning empty ticket list")
         return []
 
+    if not _jira_credentials_are_valid():
+        return []
+
     effective_ttl = ttl_hours if ttl_hours is not None else settings.jira_cache_ttl_hours
     all_tickets: list[dict[str, Any]] = []
 
     with psycopg.connect(settings.database_url) as conn:
-        projects = _fetch_all_projects()
-        log.info("Found %d active Jira projects", len(projects))
+        configured_keys = _configured_project_keys()
+        if configured_keys:
+            projects = _fetch_configured_projects(configured_keys)
+            log.info(
+                "Using %d configured Jira project key(s): %s",
+                len(configured_keys),
+                ", ".join(configured_keys),
+            )
+        else:
+            projects = _fetch_all_projects()
+            log.info("Found %d active Jira projects", len(projects))
+            if not projects:
+                log.warning(
+                    "Jira project discovery returned 0 projects. If the Jira user "
+                    "should only ingest selected projects, set JIRA_PROJECT_KEYS. "
+                    "Otherwise verify the API-token user has Browse Projects access."
+                )
 
         for project in projects:
             key = project["key"]

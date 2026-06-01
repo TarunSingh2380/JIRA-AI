@@ -34,6 +34,7 @@ from app.graph_context import GraphContextClient
 from app.graph_job import job_store
 from app.graph_job_runner import run_graph_job
 from app.jira_client import JiraClient
+from app.jira_ticket_insights import scan_jira_ticket_cache
 from app.json_utils import parse_model_json, review_status, review_text
 from app.llm_client import build_llm_client
 from app.prompt_store import PromptStore
@@ -76,6 +77,10 @@ from app.similar_ticket_finder import SimilarTicketFinder
 from app.slack_client import SlackClient
 from app.slack_review_workflow import SlackReviewWorkflow
 from app.testcase_chat_workflow import TestCaseChatWorkflow
+from app.test_case_comparison_report import (
+    build_test_case_comparison_report,
+    build_test_case_comparison_sheet,
+)
 from app.test_case_generator import TestCaseGenerator
 from app.ticket_analyzer import TicketAnalyzer
 from app.workflow1_reviewer import Workflow1Reviewer
@@ -333,21 +338,25 @@ def graph_admin_jira_tickets(
 ) -> dict[str, Any]:
     log.debug("GET /graph-admin/jira-tickets project=%s limit=%d offset=%d", project_key, limit, offset)
     if not settings.database_url:
-        return {"count": 0, "tickets": [], "error": "DATABASE_URL not configured"}
+        return {
+            "count": 0,
+            "tickets": [],
+            "excluded_projects": _excluded_jira_projects(),
+            "error": "DATABASE_URL not configured",
+        }
     try:
         import psycopg
         from psycopg.rows import dict_row
 
-        where = "WHERE project_key = %s" if project_key else ""
+        where, base_params = _jira_project_where_clause(project_key)
         with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
-            count_params = (project_key,) if project_key else ()
             row = conn.execute(
                 f"SELECT COUNT(*) AS n FROM jira_ticket_cache {where}",
-                count_params,
+                base_params,
             ).fetchone()
             count = row["n"] if row else 0
 
-            list_params = (project_key, limit, offset) if project_key else (limit, offset)
+            list_params = (*base_params, limit, offset)
             tickets = conn.execute(
                 f"""
                 SELECT ticket_key, project_key, summary, status, issue_type,
@@ -360,10 +369,19 @@ def graph_admin_jira_tickets(
                 list_params,
             ).fetchall()
             log.info("Returning %d of %d jira tickets (project=%s)", len(tickets), count, project_key)
-            return {"count": count, "tickets": [dict(t) for t in tickets]}
+            return {
+                "count": count,
+                "tickets": [dict(t) for t in tickets],
+                "excluded_projects": _excluded_jira_projects(),
+            }
     except Exception as exc:
         log.error("Failed to query jira_ticket_cache: %s", exc)
-        return {"count": 0, "tickets": [], "error": str(exc)}
+        return {
+            "count": 0,
+            "tickets": [],
+            "excluded_projects": _excluded_jira_projects(),
+            "error": str(exc),
+        }
 
 
 @app.get("/graph-admin/fetch-logs")
@@ -391,6 +409,89 @@ def graph_admin_fetch_logs(limit: int = 100) -> dict[str, Any]:
     except Exception as exc:
         log.error("Failed to query jira_fetch_log: %s", exc)
         return {"logs": [], "error": str(exc)}
+
+
+@app.get("/graph-admin/jira-ticket-insights")
+def graph_admin_jira_ticket_insights(
+    project_key: str | None = None,
+    match_type: str = "all",
+    limit: int = 200,
+) -> dict[str, Any]:
+    log.debug(
+        "GET /graph-admin/jira-ticket-insights project=%s match_type=%s limit=%d",
+        project_key,
+        match_type,
+        limit,
+    )
+    try:
+        clean_project_key = project_key.strip().upper() if project_key else None
+        return scan_jira_ticket_cache(
+            settings,
+            project_key=clean_project_key or None,
+            match_type=match_type,
+            limit=max(1, min(limit, 1000)),
+            excluded_project_keys=_excluded_jira_projects(),
+        )
+    except Exception as exc:
+        log.error("Failed to scan jira_ticket_cache: %s", exc)
+        return {
+            "total_tickets": 0,
+            "matching_tickets": 0,
+            "returned_tickets": 0,
+            "counts": {},
+            "tickets": [],
+            "error": str(exc),
+        }
+
+
+@app.get("/graph-admin/test-case-comparison-report")
+def graph_admin_test_case_comparison_report(
+    project_key: str | None = None,
+    limit: int = 500,
+    pipeline_limit: int | None = None,
+    format: str = "xlsx",
+) -> Response:
+    log.debug(
+        "GET /graph-admin/test-case-comparison-report project=%s limit=%d pipeline_limit=%s format=%s",
+        project_key,
+        limit,
+        pipeline_limit,
+        format,
+    )
+    try:
+        clean_project_key = project_key.strip().upper() if project_key else None
+        safe_limit = max(1, min(limit, 2000))
+        safe_pipeline_limit = max(0, min(pipeline_limit, 50)) if pipeline_limit is not None else None
+        output_format = (format or "xlsx").strip().lower()
+        if output_format in {"md", "markdown"}:
+            filename, markdown = build_test_case_comparison_report(
+                settings,
+                project_key=clean_project_key or None,
+                limit=safe_limit,
+                pipeline_limit=safe_pipeline_limit,
+                excluded_project_keys=_excluded_jira_projects(),
+            )
+            return Response(
+                content=markdown,
+                media_type="text/markdown; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+        filename, workbook = build_test_case_comparison_sheet(
+            settings,
+            project_key=clean_project_key or None,
+            limit=safe_limit,
+            pipeline_limit=safe_pipeline_limit,
+            excluded_project_keys=_excluded_jira_projects(),
+        )
+        return Response(
+            content=workbook,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:
+        log.exception("Failed to build test-case comparison report")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # ─── Ticket analysis ─────────────────────────────────────────────────────────
@@ -712,6 +813,33 @@ def _excluded_repositories() -> list[str]:
         for name in settings.excluded_repository_names.split(",")
         if name.strip()
     ]
+
+
+def _excluded_jira_projects() -> list[str]:
+    return [
+        key.strip().upper()
+        for chunk in settings.jira_excluded_project_keys.split(",")
+        for key in chunk.split()
+        if key.strip()
+    ]
+
+
+def _jira_project_where_clause(project_key: str | None = None) -> tuple[str, tuple[Any, ...]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    clean_project_key = project_key.strip().upper() if project_key else ""
+    if clean_project_key:
+        where_parts.append("UPPER(project_key) = %s")
+        params.append(clean_project_key)
+
+    excluded = _excluded_jira_projects()
+    if excluded:
+        placeholders = ", ".join(["%s"] * len(excluded))
+        where_parts.append(f"UPPER(project_key) NOT IN ({placeholders})")
+        params.extend(excluded)
+
+    where = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    return where, tuple(params)
 
 
 def _selected_repositories(
@@ -1065,6 +1193,83 @@ GRAPH_ADMIN_HTML = """
       color: var(--muted);
       flex-wrap: wrap;
     }
+
+    /* ── Ticket Insights tab ── */
+    .insight-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .insight-input, .insight-select {
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 6px 10px;
+      font: inherit;
+      font-size: 13px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .insight-input { width: 180px; }
+    .insight-select { min-width: 180px; }
+    .insight-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .insight-stat {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+    .insight-stat-value { font-size: 20px; font-weight: 750; color: var(--ink); }
+    .insight-stat-label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 750; margin-top: 3px; }
+    .insight-chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+    .insight-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+    .insight-chip.hit { background: #dcfce7; color: var(--ok); border-color: #a7f3d0; }
+    .insight-chip.doc { background: #dbeafe; color: var(--accent); border-color: #93c5fd; }
+    .insight-snippets summary {
+      color: var(--accent);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .insight-snippet {
+      margin-top: 7px;
+      padding: 8px 10px;
+      border-left: 3px solid var(--line);
+      background: var(--surface);
+      color: #1f2937;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .insight-source {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+    @media (max-width: 900px) {
+      .insight-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .insight-input, .insight-select { width: 100%; }
+    }
   </style>
   <!-- original styles below -->
   <style>
@@ -1300,6 +1505,7 @@ GRAPH_ADMIN_HTML = """
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="repos">Repositories</button>
         <button class="tab-btn" data-tab="jira">Jira Tickets</button>
+        <button class="tab-btn" data-tab="insights">Ticket Insights</button>
         <button class="tab-btn" data-tab="logs">Logs</button>
         <button class="tab-btn" data-tab="testcases">Test Cases</button>
         <button class="tab-btn" data-tab="similar">Similar Tickets</button>
@@ -1349,6 +1555,72 @@ GRAPH_ADMIN_HTML = """
           <tbody id="jiraRows"></tbody>
         </table>
         <div id="jiraError" style="color:var(--danger);font-size:13px;margin-top:8px;"></div>
+      </div>
+
+      <!-- Tab: Ticket Insights -->
+      <div class="tab-panel" id="tab-insights">
+        <div class="insight-controls">
+          <span id="insightTicketCount" style="font-size:13px;color:var(--muted)">Loading…</span>
+          <input id="insightProjectFilter" class="insight-input" type="text" placeholder="Filter by project key…">
+          <select id="insightMatchType" class="insight-select">
+            <option value="all">All matches</option>
+            <option value="test_cases">Test Cases</option>
+            <option value="requirements">PRD / BRD / SRS</option>
+            <option value="prd">PRD</option>
+            <option value="brd">BRD</option>
+            <option value="srs">SRS</option>
+          </select>
+          <button class="secondary" id="insightRefreshBtn"
+            style="width:auto;min-height:unset;padding:6px 14px;font-size:13px;">Refresh</button>
+          <select id="insightPipelineLimit" class="insight-select" style="min-width:150px;">
+            <option value="0">No pipeline run</option>
+            <option value="3">3 pipeline tickets</option>
+            <option value="5" selected>5 pipeline tickets</option>
+            <option value="10">10 pipeline tickets</option>
+            <option value="20">20 pipeline tickets</option>
+          </select>
+          <button class="secondary" id="insightReportBtn"
+            style="width:auto;min-height:unset;padding:6px 14px;font-size:13px;">Download Excel Comparison</button>
+        </div>
+
+        <div class="insight-stat-grid">
+          <div class="insight-stat">
+            <div class="insight-stat-value" id="insightStatBuild">0</div>
+            <div class="insight-stat-label">Test Cases</div>
+          </div>
+          <div class="insight-stat">
+            <div class="insight-stat-value" id="insightStatPRD">0</div>
+            <div class="insight-stat-label">PRD</div>
+          </div>
+          <div class="insight-stat">
+            <div class="insight-stat-value" id="insightStatBRD">0</div>
+            <div class="insight-stat-label">BRD</div>
+          </div>
+          <div class="insight-stat">
+            <div class="insight-stat-value" id="insightStatSRS">0</div>
+            <div class="insight-stat-label">SRS</div>
+          </div>
+          <div class="insight-stat">
+            <div class="insight-stat-value" id="insightStatMatched">0</div>
+            <div class="insight-stat-label">Matching Tickets</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:10%">Key</th>
+              <th style="width:8%">Project</th>
+              <th>Summary</th>
+              <th style="width:12%">Test Cases</th>
+              <th style="width:14%">Docs</th>
+              <th style="width:24%">Evidence</th>
+              <th style="width:12%">Updated</th>
+            </tr>
+          </thead>
+          <tbody id="insightRows"></tbody>
+        </table>
+        <div id="insightError" style="color:var(--danger);font-size:13px;margin-top:8px;"></div>
       </div>
 
       <!-- Tab: Logs -->
@@ -1869,8 +2141,9 @@ GRAPH_ADMIN_HTML = """
     function switchTab(name) {
       tabBtns.forEach(b => b.classList.toggle("active", b.dataset.tab === name));
       tabPanels.forEach(p => p.classList.toggle("active", p.id === `tab-${name}`));
-      if (name === "jira")  loadJiraTickets();
-      if (name === "logs")  loadLogs();
+      if (name === "jira")     loadJiraTickets();
+      if (name === "insights") loadTicketInsights();
+      if (name === "logs")     loadLogs();
     }
 
     tabBtns.forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
@@ -2294,7 +2567,8 @@ GRAPH_ADMIN_HTML = """
           rowsEl.innerHTML = "";
           return;
         }
-        countEl.textContent = `${data.count} ticket${data.count !== 1 ? "s" : ""} in cache`;
+        const excluded = (data.excluded_projects || []).join(", ");
+        countEl.textContent = `${data.count} ticket${data.count !== 1 ? "s" : ""} in cache${excluded ? ` · excluded ${excluded}` : ""}`;
         rowsEl.innerHTML = (data.tickets || []).map(t => `
           <tr>
             <td><b>${esc(t.ticket_key)}</b></td>
@@ -2314,6 +2588,149 @@ GRAPH_ADMIN_HTML = """
     document.querySelector("#jiraRefreshBtn").addEventListener("click", loadJiraTickets);
     document.querySelector("#jiraProjectFilter").addEventListener("keydown", e => {
       if (e.key === "Enter") loadJiraTickets();
+    });
+
+    // ── Ticket insights tab ──────────────────────────────────────────────
+    async function loadTicketInsights() {
+      const countEl = document.querySelector("#insightTicketCount");
+      const rowsEl  = document.querySelector("#insightRows");
+      const errEl   = document.querySelector("#insightError");
+      countEl.textContent = "Loading…";
+      errEl.textContent = "";
+      errEl.style.color = "var(--danger)";
+
+      const params = new URLSearchParams({
+        limit: "500",
+        match_type: document.querySelector("#insightMatchType").value,
+      });
+      const project = document.querySelector("#insightProjectFilter").value.trim().toUpperCase();
+      if (project) params.set("project_key", project);
+
+      try {
+        const res = await fetch(`/graph-admin/jira-ticket-insights?${params.toString()}`);
+        const data = await res.json();
+        if (data.error) {
+          errEl.textContent = data.error;
+          countEl.textContent = "—";
+          rowsEl.innerHTML = "";
+          updateInsightStats({});
+          return;
+        }
+
+        const total = data.total_tickets || 0;
+        const matching = data.matching_tickets || 0;
+        const returned = data.returned_tickets || 0;
+        const excluded = (data.excluded_projects || []).join(", ");
+        countEl.textContent = `${matching} matching ticket${matching !== 1 ? "s" : ""} from ${total} scanned${excluded ? ` · excluded ${excluded}` : ""}`;
+        updateInsightStats(data.counts || {});
+
+        rowsEl.innerHTML = (data.tickets || []).map(renderInsightRow).join("")
+          || '<tr><td colspan="7" style="color:var(--muted)">No matching tickets found</td></tr>';
+        if (returned < matching) {
+          errEl.style.color = "var(--muted)";
+          errEl.textContent = `Showing latest ${returned} of ${matching} matching tickets`;
+        }
+      } catch (err) {
+        errEl.textContent = err.message;
+        countEl.textContent = "—";
+        updateInsightStats({});
+      }
+    }
+
+    function updateInsightStats(counts) {
+      document.querySelector("#insightStatBuild").textContent = counts.test_cases || 0;
+      document.querySelector("#insightStatPRD").textContent = counts.prd || 0;
+      document.querySelector("#insightStatBRD").textContent = counts.brd || 0;
+      document.querySelector("#insightStatSRS").textContent = counts.srs || 0;
+      document.querySelector("#insightStatMatched").textContent = counts.matching_tickets || 0;
+    }
+
+    function renderInsightRow(t) {
+      const key = t.url
+        ? `<a href="${escAttr(t.url)}" target="_blank" rel="noopener"><b>${esc(t.ticket_key)}</b></a>`
+        : `<b>${esc(t.ticket_key)}</b>`;
+      const testCases = t.has_test_cases
+        ? '<span class="insight-chip hit">Found</span>'
+        : '<span class="insight-chip">—</span>';
+      const docs = (t.requirement_docs || []).length
+        ? `<div class="insight-chip-row">${t.requirement_docs.map(d => `<span class="insight-chip doc">${esc(d)}</span>`).join("")}</div>`
+        : '<span class="insight-chip">—</span>';
+
+      return `
+        <tr>
+          <td>${key}</td>
+          <td>${esc(t.project_key || "")}</td>
+          <td>
+            <div><b>${esc(t.summary || "")}</b></div>
+            <div style="margin-top:4px;color:var(--muted);font-size:12px;">${esc(t.status || "—")} · ${esc(t.issue_type || "—")}</div>
+          </td>
+          <td>${testCases}</td>
+          <td>${docs}</td>
+          <td>${renderInsightMatches(t.matches || [])}</td>
+          <td>${esc(fmtDate(t.updated_at))}</td>
+        </tr>
+      `;
+    }
+
+    function renderInsightMatches(matches) {
+      if (!matches.length) return '<span style="color:var(--muted)">—</span>';
+      return `
+        <details class="insight-snippets">
+          <summary>${matches.length} hit${matches.length !== 1 ? "s" : ""}</summary>
+          ${matches.map(m => `
+            <div class="insight-snippet">
+              <span class="insight-source">${esc(m.label || "")} · ${esc(m.source || "")}</span>
+              ${esc(m.snippet || "")}
+            </div>
+          `).join("")}
+        </details>
+      `;
+    }
+
+    async function downloadTestCaseComparisonReport() {
+      const btn = document.querySelector("#insightReportBtn");
+      const errEl = document.querySelector("#insightError");
+      btn.disabled = true;
+      errEl.style.color = "var(--muted)";
+      errEl.textContent = "Generating pipeline comparison...";
+
+      const params = new URLSearchParams({limit: "500", format: "xlsx"});
+      const project = document.querySelector("#insightProjectFilter").value.trim().toUpperCase();
+      if (project) params.set("project_key", project);
+      params.set("pipeline_limit", document.querySelector("#insightPipelineLimit").value || "5");
+
+      try {
+        const res = await fetch(`/graph-admin/test-case-comparison-report?${params.toString()}`);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || "Report generation failed");
+        }
+        const blob = await res.blob();
+        const disposition = res.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="([^"]+)"/);
+        const filename = match ? match[1] : "jira-test-case-comparison.xlsx";
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        errEl.textContent = "Pipeline comparison downloaded";
+      } catch (err) {
+        errEl.style.color = "var(--danger)";
+        errEl.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.querySelector("#insightRefreshBtn").addEventListener("click", loadTicketInsights);
+    document.querySelector("#insightReportBtn").addEventListener("click", downloadTestCaseComparisonReport);
+    document.querySelector("#insightMatchType").addEventListener("change", loadTicketInsights);
+    document.querySelector("#insightProjectFilter").addEventListener("keydown", e => {
+      if (e.key === "Enter") loadTicketInsights();
     });
 
     // ── Logs tab ─────────────────────────────────────────────────────────

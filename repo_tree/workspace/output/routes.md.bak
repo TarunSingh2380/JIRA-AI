@@ -980,6 +980,7 @@ GET /health   → (inline)   (app.ts) — Health check endpoint
 `POST /common/customer-details`  →  CommonController (src/routes/common.route.ts)  — Get customer details
 `GET /common/bank-details`  →  CommonController (src/routes/common.route.ts)  — Get bank details by IFSC
 `GET /common/aadhar-down`  →  CommonController (src/routes/common.route.ts)  — Check Aadhaar service status
+`POST /common/adhar-push-script`  →  CommonController.runAdharPushScript  (src/routes/common.route.ts)  — Run Aadhaar backfill script (sister service auth)
 
 ### CRM (`/crm`)
 `PUT /crm/lead-update`  →  CRMController (src/routes/crm.route.ts)  — Update lead
@@ -1012,7 +1013,7 @@ GET /health   → (inline)   (app.ts) — Health check endpoint
 `GET /customers/one-page-view`  →  CustomersController (src/routes/customer.route.ts)  — One-page loan view
 `GET /customers/repayment-page`  →  CustomersController (src/routes/customer.route.ts)  — Repayment page data
 `POST /customers/check-pdf`  →  CustomersController (src/routes/customer.route.ts)  — Check/generate PDF
-`GET /customers/loans`  →  CustomersController (src/routes/customer.route.ts)  — Customer loan list
+`GET /customers/loans`  →  CustomersController (src/routes/customer.route.ts)  — Customer loan list (JOINs lentra_customer_mapping to coalesce Lentra loan_no)
 `POST /customers/dsa-lead-creation`  →  CustomersController (src/routes/customer.route.ts)  — DSA lead creation (API key auth)
 `POST /customers/create-otp`  →  CustomersController (src/routes/customer.route.ts)  — New OTP creation
 `POST /customers/verify-otp-service`  →  CustomersController (src/routes/customer.route.ts)  — New OTP verification
@@ -1049,9 +1050,12 @@ GET /health   → (inline)   (app.ts) — Health check endpoint
 `GET /lender/credentials`  →  LenderController (src/routes/lender.route.ts)  — Get lender credentials
 
 ### Lentra (`/lentra`)
-`POST /lentra/stp`  →  LentraController (src/routes/lentra.route.ts)  — Lentra STP (straight-through processing)
-`GET /lentra/repayment-page`  →  LentraController (src/routes/lentra.route.ts)  — Lentra repayment page data
-`GET /lentra/repayment-data`  →  LentraController (src/routes/lentra.route.ts)  — Lentra repayment data
+`POST /lentra/stp`  →  LentraController.stp  (src/routes/lentra.route.ts)  — Lentra STP (straight-through processing); on success, triggers disbursal document send via CRM API
+`GET /lentra/repayment-page`  →  LentraController.getRepaymentPageData  (src/routes/lentra.route.ts)  — Lentra repayment page data
+`GET /lentra/repayment-data`  →  LentraController.getRepaymentData  (src/routes/lentra.route.ts)  — Lentra repayment data
+`GET /lentra/retry-stp-cron`  →  LentraController.retryStpCron  (src/routes/lentra.route.ts)  — Manually trigger STP retry cron (sister service auth)
+`POST /lentra/fund-in`  →  LentraController.paymentFundIn  (src/routes/lentra.route.ts)  — Initiate Lentra fund-in payment (JWT auth)
+`GET /lentra/repayment-fallback`  →  LentraController.lentraRepaymentFallback  (src/routes/lentra.route.ts)  — Lentra repayment fallback check (JWT auth)
 
 ### Loan Restructure (`/loan-restructure`)
 `GET /loan-restructure/charges/:leadID`  →  LoanRestructureController (src/routes/loanRestructure.route.ts)  — Get restructure charges
@@ -1073,7 +1077,7 @@ GET /health   → (inline)   (app.ts) — Health check endpoint
 `POST /customer_onboarding/email`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Update email
 `POST /customer_onboarding/selfie-verification`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Selfie liveness verification
 `POST /customer_onboarding/hyperverge-onboard`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge onboarding start
-`POST /customer_onboarding/hyperverge-result`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge result fetch
+`POST /customer_onboarding/hyperverge-result`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — HyperVerge result fetch (accepts accountID in body)
 `POST /customer_onboarding/finbox-create-url`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Create Finbox bank connect URL
 `POST /customer_onboarding/finbox-bank-connect`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Finbox bank connect callback
 `POST /customer_onboarding/penny-drop-initiate`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Initiate penny drop
@@ -1083,8 +1087,8 @@ GET /health   → (inline)   (app.ts) — Health check endpoint
 `PUT /customer_onboarding/reference-details`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Update reference details
 `GET /customer_onboarding/states`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Get state suggestions
 `GET /customer_onboarding/approval-view`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view data
-`GET /customer_onboarding/approval-view-v2`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view v2
-`POST /customer_onboarding/key-fact`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Generate KFS document
+`GET /customer_onboarding/approval-view-v2`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Approval view v2 (routes to v3 for Lentra leads)
+`POST /customer_onboarding/key-fact`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Generate KFS document (uses Lentra KFS for Lentra leads)
 `POST /customer_onboarding/key-fact-acceptance`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Accept KFS
 `POST /customer_onboarding/send-kfs`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Send KFS document
 `GET /customer_onboarding/fetch-credit-score`  →  CustomerOnboardingController (src/routes/onboarding.routes.ts)  — Fetch credit score
@@ -1127,6 +1131,7 @@ GET /health   → (inline)   (app.ts) — Health check endpoint
 `POST /webhooks/razorpay`  →  WebhookController (src/routes/webhooks.routes.ts)  — Razorpay payment webhook
 `POST /webhooks/emandate`  →  WebhookController (src/routes/webhooks.routes.ts)  — Razorpay emandate webhook
 `POST /webhooks/decentro`  →  WebhookController (src/routes/webhooks.routes.ts)  — Decentro reverse penny webhook
+`POST /webhook/lentra/lentra-repayment-webhook`  →  WebhookController.lentraRepaymentWebhook  (src/routes/webhooks.routes.ts)  — Lentra repayment webhook (Basic auth with lentraWebhookKey/Secret)
 
 ### WhatsApp (`/whatsapp`)
 `POST /whatsapp/identify`  →  WhatsAppController (src/routes/whatsApp.route.ts)  — Identify customer via WhatsApp
@@ -1152,6 +1157,8 @@ GET /health   → (inline)   (app.ts) — Health check endpoint
 `SQS queue: emandateMissingPaymentSettleQueueUrl`  →  consumerLoop  (src/consumers/emandate.missing.payment.consumer.ts)  — Settle missing emandate payments
 
 ### Cron Jobs (scheduled)
+`CronJob`  →  CronJobService.retryLentraStp  (src/services/cronJobs/cronJobs.service.ts)  — Retry failed Lentra STP records every 30 minutes (Redis distributed lock, batch size/concurrency from config)
+`CronJob`  →  CronJobService.pushLentraToSQS  (src/services/cronJobs/cronJobs.service.ts)  — Push Lentra STP to SQS queue
 `CronJob`  →  CronJobService.autoDisbursalCoverage  (src/services/cronJobs/cronJobs.service.ts)  — Auto-approve repeat customers
 `CronJob`  →  CronJobService.fetchEMIPayments  (src/services/cronJobs/cronJobs.service.ts)  — Auto-pay EMIs via emandate
 `CronJob`  →  CronJobService.managePaymentCron  (src/services/cronJobs/cronJobs.service.ts)  — Settle pending Razorpay payments

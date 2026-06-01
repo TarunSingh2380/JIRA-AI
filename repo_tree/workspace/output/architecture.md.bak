@@ -254,7 +254,7 @@ src/
 **Entry Point:** `src/server.ts` → instantiates `App` class (`src/app.ts`) with all route modules → Express HTTP server on configurable port (default 8080).
 
 **Top-Level Modules:**
-- `src/app.ts` — Express app bootstrap: middleware, routes, Swagger, cron jobs, MongoDB/MySQL connections
+- `src/app.ts` — Express app bootstrap: middleware, routes, Swagger, cron jobs, MongoDB/MySQL connections; graceful shutdown on SIGINT/SIGTERM/uncaughtException (destroys Knex pool, force-exits after 5s timeout)
 - `src/config.server.ts` — Config loading from env vars + defaults
 - `src/routes/index.ts` — Aggregates all route classes
 - `src/controllers/` — Request handlers (30+ controllers)
@@ -265,11 +265,12 @@ src/
 - `src/producers/` — SQS message producers
 - `src/workers/` — Worker thread wrappers
 - `src/services/cronJobs/` — Scheduled cron jobs
+- `src/utils/pushAdhar.ts` — Utility to backfill Aadhaar numbers into user_metadata from leads_api_log in batches
 
 **External Services:**
-- **MySQL** (via Knex) — primary relational store (customers, loans, EMIs, leads, approvals, etc.)
+- **MySQL** (via Knex) — primary relational store (customers, loans, EMIs, leads, approvals, etc.); connection pool with auto-reconnect (max 4 attempts, pool listeners for createFail/acquireFail)
 - **MongoDB** (via Mongoose) — logs, event logs, webhook logs, Kaleyra logs, Lentra logs
-- **Redis** (via ioredis) — caching, OTP storage, LMS flow decisions, queues (Bull)
+- **Redis** (via ioredis) — caching, OTP storage, LMS flow decisions, queues (Bull), distributed lock for retryStpCron
 - **AWS S3** — document/file storage
 - **AWS SQS** — async job queues (Razorpay webhook settlement, missing payment, disbursal documents, Lentra STP)
 - **Kafka** (KafkaJS) — Razorpay payment event consumption
@@ -278,16 +279,19 @@ src/
 - **Firebase** — push notifications
 - **Decentro** — bank account validation, Aadhaar/DigiLocker KYC
 - **SurePass** — PAN/Aadhaar OTP verification
-- **Digitap** — face liveness, PAN verification
+- **Digitap** — face liveness, PAN verification, consent image email
 - **Finbox** — bank statement analysis
-- **HyperVerge** — onboarding/KYC
-- **Lentra LMS** — external loan management system integration
+- **HyperVerge** — onboarding/KYC; on auto_approved selfie result, uploads selfie image to S3, sends consent image email via Digitap, and updates `isSelfieVerified` on customerAccount (when `SELFIE_FOR_ALL_BANK=1`)
+- **Lentra LMS** — external loan management system integration (STP, NACH, repayment webhook, fund-in, statement of accounts, due transaction details)
 - **CIBIL/Experian/Bureau** — credit bureau APIs
 - **Kaleyra/MSG91/TextNation/Acquirit** — SMS/OTP providers
 - **AWS SES / Brevo (SendinBlue)** — email delivery
 - **WebEngage** — marketing analytics
 
 **Core Request Lifecycle:** Client → Express middleware (auth, validation, step-check) → Controller → Service → DB model → Response
+
+**Feature Flags:**
+- `SELFIE_FOR_ALL_BANK` — when set to `"1"`, enables selfie verification requirement for all bank accounts (not just product 1); selfie status tracked via `isSelfieVerified` on `customerAccount`; step checker no longer restricts selfie step to `productID === 1` (RFT-802)
 
 ---
 

@@ -38,7 +38,7 @@ def scan_repo(
 
     sha = current_head_sha(repo.repo_root)
     packed_file = cfg.packed_dir / f"{repo.name}.xml"
-    pack_repo(repo.path, packed_file, use_skeleton=cfg.use_skeleton)
+    pack_repo(repo.path, packed_file, use_skeleton=cfg.use_skeleton, extra_ignores=repo.exclude)
 
     est_tokens = estimate_tokens(packed_file)
     log.info("  packed %s: ~%d tokens", repo.name, est_tokens)

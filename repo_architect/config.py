@@ -22,12 +22,15 @@ class RepoConfig:
     name: str
     path: Path                           # what we pack and scan
     description: str = ""
+    # Extra Repomix ignore patterns for this repo.
+    exclude: List[str] = field(default_factory=list)
     # For fan-out subdirs: the parent's git root. When unset, defaults to `path`.
     # The differ uses repo_root for `git diff` and scopes the diff to `path`.
     repo_root: Path | None = None
 
     def __post_init__(self) -> None:
         self.path = Path(self.path).expanduser().resolve()
+        self.exclude = [str(pattern) for pattern in (self.exclude or [])]
         if self.repo_root is not None:
             self.repo_root = Path(self.repo_root).expanduser().resolve()
         else:
@@ -169,6 +172,7 @@ def _expand_repo_group(group: dict) -> List[RepoConfig]:
             name=f"{group_name}__{sub.name}",
             path=sub,
             description=description,
+            exclude=exclude,
             repo_root=repo_root,
         ))
 

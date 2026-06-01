@@ -1,0 +1,6805 @@
+<directory_structure>
+.github/
+  workflows/
+    build-image.yaml
+    cleanup-pr-namespaces.yaml
+    deploy-prod.yaml
+    kamakshi-build-image.yaml
+    kamakshi-deploy-prod.yaml
+    vault-secret-manager.yaml
+  CODEOWNERS
+eks-cdk-infra/
+  config/
+    pre-prod.yaml
+    rf-dev.yaml
+  ramfincorp/
+    aws-proxy.yaml
+    gateway-class.yaml
+    gateway.yaml
+    sample-route.yaml
+    test-app.yaml
+  deploy_eks.py
+  destroy_eks.py
+  README.md
+  requirements.txt
+  transform.py
+k8s/
+  common-resources/
+    loki/
+      .htpasswd
+      loki-s3-policy.json
+      loki-values.yaml
+      trust-policy.json
+      values.yaml
+    externalServices.yaml
+    grafana-ingress.yaml
+    ingress-controller.yaml
+    namespace.yaml
+  crm-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    preprod-values.yaml
+    values.yaml
+  crm-report/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  dedup/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  dsa-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  loan-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  loans-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  notification/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  razorpay-consumer/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  razorpay-producer/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  rf-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  rf-backend-hyperverge/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  userservice-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  deploy.sh
+kamakshimoney-k8s/
+  common-resources/
+    loki/
+      .htpasswd
+      loki-s3-policy.json
+      loki-values.yaml
+      trust-policy.json
+      values.yaml
+    externalServices.yaml
+    grafana-ingress.yaml
+    ingress-controller.yaml
+    namespace.yaml
+  crm-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  crm-report/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  km-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  loan-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  loans-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  userservice-backend/
+    templates/
+      configmap.yaml
+      deployment.yaml
+      horizontalPodAutoscaler.yaml
+      ingress.yaml
+      secret.yaml
+      service.yaml
+    Chart.yaml
+    values.yaml
+  deploy.sh
+python-runner/
+  Dockerfile
+.cgcignore
+.gitignore
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".github/workflows/build-image.yaml">
+name: Build and Push Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Name of the service to build"
+        required: true
+        type: choice
+        options:
+          - rf-backend
+          - crm-backend
+          - dedup
+          - razorpay-consumer
+          - razorpay-producer
+          - dsa-backend
+          - loan-backend
+          - loans-backend
+          - rf-backend-hyperverge
+          - crm-report
+          - notification
+          - userservice-backend
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  build:
+    name: Build Image
+    runs-on: [self-hosted, jenkins-server]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set service environment variables
+        run: |
+          if [ "${{ github.event.inputs.service_name }}" = "rf-backend" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/ramfincorp-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/ramfincorp-backend" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "razorpay-producer" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/razorpay-producer" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/function-hub" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "crm-backend" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/crm-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/node_crm" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "dedup" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/dedup" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/dedup/ramfincorp-backend" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "dsa-backend" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/dsa-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/DSA-Backend" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "loan-backend" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/loan-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/onboarding_service" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "loans-backend" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/loans-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/onboarding_service_hyperverge" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "rf-backend-hyperverge" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/rf-backend-hyperverge" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/ramfincorp-backend-hyperverge" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "crm-report" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/crm-report" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/ramfin-report" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "notification" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/notification" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/ramfincorp-notification" >> $GITHUB_ENV
+          
+          elif [ "${{ github.event.inputs.service_name }}" = "userservice-backend" ]; then
+            echo "ECR_REPOSITORY=ramfincorp/userservice-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/ramfin_userservice" >> $GITHUB_ENV
+          fi
+
+      - name: Set image tag
+        id: set_tag
+        run: echo "image_tag=1.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Login to Amazon ECR
+        shell: bash
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+          | docker login --username AWS --password-stdin 361795871686.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+      - name: Pull latest code from backend repos
+        shell: bash
+        run: |
+
+          if [ "${{ github.event.inputs.service_name }}" = "rf-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master
+            git pull origin master
+  
+            cd ${{ env.BASE_PATH }}/src/common/common-module
+            git checkout master
+            git pull origin master
+          elif [ "${{ github.event.inputs.service_name }}" = "crm-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master
+            git pull origin master
+
+            cd ${{ env.BASE_PATH }}/src/commonModules/common-module
+            git checkout master
+            git pull origin master
+          elif [ "${{ github.event.inputs.service_name }}" = "dedup" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout dedup
+            git pull origin dedup
+
+            cd ${{ env.BASE_PATH }}/src/common/common-module
+            git checkout master
+            git pull origin master
+          elif [ "${{ github.event.inputs.service_name }}" = "dsa-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout main-ramfin
+            git pull origin main-ramfin
+          elif [ "${{ github.event.inputs.service_name }}" = "loan-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master
+            git pull origin master
+          elif [ "${{ github.event.inputs.service_name }}" = "loans-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master2
+            git pull origin master2
+          elif [ "${{ github.event.inputs.service_name }}" = "razorpay-producer" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master
+            git pull origin master
+          elif [ "${{ github.event.inputs.service_name }}" = "ramfincorp-backend-hyperverge" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master2
+            git pull origin master2
+            cd ${{ env.BASE_PATH }}/src/commonModules/common-module
+            git checkout master
+            git pull origin master
+          elif [ "${{ github.event.inputs.service_name }}" = "crm-report" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master
+            git pull origin master
+          elif [ "${{ github.event.inputs.service_name }}" = "notification" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master
+            git pull origin master
+          elif [ "${{ github.event.inputs.service_name }}" = "userservice-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout master
+            git pull origin master
+          fi
+
+      - name: Build and Push Docker image
+        shell: bash
+        run: |
+          cd ${{ env.BASE_PATH }}
+          if [ "${{ github.event.inputs.service_name }}" = "rf-backend" ] \
+            || [ "${{ github.event.inputs.service_name }}" = "crm-backend" ] \
+            || [ "${{ github.event.inputs.service_name }}" = "dedup" ]; then
+            dockerfile="Dockerfile"
+          elif [ "${{ github.event.inputs.service_name }}" = "razorpay-consumer" ]; then
+            dockerfile="Dockerfile.consumer"
+          elif [ "${{ github.event.inputs.service_name }}" = "razorpay-producer" ]; then
+            dockerfile="Dockerfile.producer"          
+          fi
+          docker build -t 361795871686.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ steps.set_tag.outputs.image_tag }} --platform linux/amd64 -f "${dockerfile}" .
+          docker push 361795871686.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ steps.set_tag.outputs.image_tag }}
+    
+    outputs:
+      image_tag: ${{ steps.set_tag.outputs.image_tag }}
+
+  deploy:
+    needs: build
+    name: Deploy
+    runs-on: [self-hosted, jenkins-server]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Deploy using deploy.sh
+        run: |
+          cd k8s
+          chmod +x ./deploy.sh
+          ./deploy.sh ${{ github.event.inputs.service_name }} ${{ needs.build.outputs.image_tag }}
+</file>
+
+<file path=".github/workflows/cleanup-pr-namespaces.yaml">
+name: Cleanup PR Namespaces
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  cleanup:
+    name: Delete old PR namespaces
+    runs-on: [self-hosted, ramfin]
+    
+    steps:
+      - name: Clean up namespaces older than 4 hours
+        shell: bash
+        run: |
+          echo "Setting kubectl context..."
+          kubectl config use-context arn:aws:eks:ap-south-1:361795871686:cluster/rf-dev-eks-cluster
+          
+          echo "Fetching namespaces containing '-pr-'..."
+          namespaces=$(kubectl get ns -o name | awk -F'/' '/-pr-/{print $2}')
+          
+          if [[ -z "${namespaces}" ]]; then
+            echo "No PR namespaces found."
+            exit 0
+          fi
+          
+          CURRENT_TIME=$(date +%s)
+          
+          for ns in ${namespaces}; do
+            echo "----------------------------------------"
+            echo "Checking namespace: $ns"
+            
+            # Extract creationTimestamp
+            creation_time_str=$(kubectl get ns "${ns}" -o jsonpath='{.metadata.creationTimestamp}')
+            
+            if [[ -z "${creation_time_str}" ]]; then
+              echo "Warning: Could not get creationTimestamp for $ns"
+              continue
+            fi
+            
+            echo "Creation time: ${creation_time_str}"
+            
+            # Try Linux GNU date
+            creation_time=$(date -d "${creation_time_str}" +%s 2>/dev/null || echo "")
+            
+            # Try macOS BSD date fallback
+            if [[ -z "${creation_time}" ]]; then
+              creation_time=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "${creation_time_str}" +%s 2>/dev/null || echo "")
+            fi
+            
+            if [[ -z "${creation_time}" ]]; then
+              echo "Error: Could not parse time."
+              continue
+            fi
+            
+            # Calculate age in seconds
+            age_seconds=$(( CURRENT_TIME - creation_time ))
+            
+            # 4 hours = 4 * 60 * 60 = 14400 seconds
+            if (( age_seconds > 14400 )); then
+              echo "Result: Namespace ${ns} is older than 4 hours (${age_seconds} seconds)."
+              echo "Action: Deleting namespace ${ns}..."
+              kubectl delete namespace "${ns}"
+            else
+              echo "Result: Namespace ${ns} is less than 4 hours old (${age_seconds} seconds)."
+              echo "Action: Skipping."
+            fi
+          done
+</file>
+
+<file path=".github/workflows/deploy-prod.yaml">
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Name of the service to deploy"
+        required: true
+        type: choice
+        options:
+          - rf-backend
+          - crm-backend
+          - dedup
+          - razorpay-consumer
+          - razorpay-producer
+          - dsa-backend
+          - loan-backend
+
+      service_tag:
+        description: "Tag of the service to deploy"
+        required: true
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  build-and-deploy:
+    name: Deploy
+    runs-on: [self-hosted, jenkins-server]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Verify Kubernetes Context
+        run: |
+          kubectl config use-context arn:aws:eks:ap-south-1:361795871686:cluster/ramfincorp
+          if ! kubectl cluster-info > /dev/null 2>&1; then
+            echo "Error: Could not connect to the Kubernetes cluster context."
+            exit 1
+          fi
+
+      - name: Deploy using deploy.sh
+        run: |
+          cd k8s
+          chmod +x ./deploy.sh
+          ./deploy.sh ${{ github.event.inputs.service_name }} ${{ github.event.inputs.service_tag }}
+</file>
+
+<file path=".github/workflows/kamakshi-build-image.yaml">
+name: KM - Build and Push Docker Image 
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Name of the service to build"
+        required: true
+        type: choice
+        options:
+          - km-backend
+          - crm-backend
+          - loan-backend
+          - loans-backend
+          - crm-report
+          - userservice-backend
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  build:
+    name: Build Image
+    runs-on: [self-hosted, self-hosted-kamakshimoney]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set service environment variables
+        run: |
+          if [ "${{ github.event.inputs.service_name }}" = "km-backend" ]; then
+            echo "ECR_REPOSITORY=kamakshimoney/km-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/ramfincorp-backend" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "crm-backend" ]; then
+            echo "ECR_REPOSITORY=kamakshimoney/crm-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/node_crm" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "loan-backend" ]; then
+            echo "ECR_REPOSITORY=kamakshimoney/loan-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/onboarding_service" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "loans-backend" ]; then
+            echo "ECR_REPOSITORY=kamakshimoney/loans-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/onboarding_service_KMhyperverge" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "crm-report" ]; then
+            echo "ECR_REPOSITORY=kamakshimoney/crm-report" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/ramfin-report" >> $GITHUB_ENV
+          elif [ "${{ github.event.inputs.service_name }}" = "userservice-backend" ]; then
+            echo "ECR_REPOSITORY=kamakshimoney/userservice-backend" >> $GITHUB_ENV
+            echo "BASE_PATH=/home/ubuntu/api_code/ramfin_userservice" >> $GITHUB_ENV
+
+          fi
+      - name: Set image tag
+        id: set_tag
+        run: echo "image_tag=1.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Login to Amazon ECR
+        shell: bash
+        run: |
+
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+          | docker login --username AWS --password-stdin 084828595551.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+      - name: Pull latest code from backend repos
+        shell: bash
+        run: |
+
+          if [ "${{ github.event.inputs.service_name }}" = "km-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout kamakshimoney-master
+            git pull origin kamakshimoney-master
+  
+            cd ${{ env.BASE_PATH }}/src/common/common-module
+            git checkout kamakshimoney_master
+            git pull origin kamakshimoney_master
+          elif [ "${{ github.event.inputs.service_name }}" = "crm-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout kamakshimoney_master
+            git pull origin kamakshimoney_master
+
+            cd ${{ env.BASE_PATH }}/src/commonModules/common-module
+            git checkout kamakshimoney_master
+            git pull origin kamakshimoney_master
+          elif [ "${{ github.event.inputs.service_name }}" = "loan-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout kamakshimoney_master
+            git pull origin kamakshimoney_master
+          elif [ "${{ github.event.inputs.service_name }}" = "loans-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout kamakshimoney_master2
+            git pull origin kamakshimoney_master2
+        
+          elif [ "${{ github.event.inputs.service_name }}" = "crm-report" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout kamakshimoney-master
+            git pull origin kamakshimoney-master
+    
+          elif [ "${{ github.event.inputs.service_name }}" = "userservice-backend" ]; then
+            cd ${{ env.BASE_PATH }}
+            git checkout kamakshi-master
+            git pull origin kamakshi-master
+          fi
+
+      - name: Build and Push Docker image
+        shell: bash
+        run: |
+          cd ${{ env.BASE_PATH }}
+
+
+          if [ "${{ github.event.inputs.service_name }}" = "km-backend" ] ||  \
+             [ "${{ github.event.inputs.service_name }}" = "crm-backend" ];  then
+
+             dockerfile="Dockerfile"
+          fi
+          docker build -t 084828595551.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ steps.set_tag.outputs.image_tag }} --platform linux/amd64 -f "${dockerfile}" .
+          docker push 084828595551.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ steps.set_tag.outputs.image_tag }} 
+    
+    outputs:
+      image_tag: ${{ steps.set_tag.outputs.image_tag }}
+
+  deploy:
+    needs: build
+    name: Deploy
+    runs-on: [self-hosted, self-hosted-kamakshimoney]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Deploy using deploy.sh
+        run: |
+          cd kamakshimoney-k8s
+          chmod +x ./deploy.sh
+          ./deploy.sh ${{ github.event.inputs.service_name }} ${{ needs.build.outputs.image_tag }}
+</file>
+
+<file path=".github/workflows/kamakshi-deploy-prod.yaml">
+name: Deploy to KM Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Name of the service to deploy"
+        required: true
+        type: choice
+        options:
+          - rf-backend
+          - crm-backend
+          - dedup
+          - razorpay-consumer
+          - razorpay-producer
+          - dsa-backend
+          - loan-backend
+
+      service_tag:
+        description: "Tag of the service to deploy"
+        required: true
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  build-and-deploy:
+    name: Deploy
+    runs-on: [self-hosted, self-hosted-kamakshimoney]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Deploy using deploy.sh
+        run: |
+          cd k8s
+          chmod +x ./deploy.sh
+          ./deploy.sh ${{ github.event.inputs.service_name }} ${{ github.event.inputs.service_tag }}
+</file>
+
+<file path=".github/workflows/vault-secret-manager.yaml">
+name: "Vault Secret Manager"
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Select the Service'
+        required: true
+        type: choice
+        options:
+          - rf-backend
+          - crm-backend
+          - dedup
+          - razorpay-consumer
+          - razorpay-producer
+          - dsa-backend
+          - loan-backend
+          - loans-backend
+          - rf-backend-hyperverge
+          - crm-report
+          - notification
+          - userservice-backend
+      secret_key:
+        description: 'Key Name (e.g. DB_PASSWORD)'
+        required: true
+        type: string
+      secret_value:
+        description: 'Key Value'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  update-vault:
+    runs-on: ubuntu-latest
+    # Fix 1: Set the Vault Address globally for all steps in this job
+    env:
+      VAULT_ADDR: "https://vault.ramfincorp.com"
+      
+    steps:
+      - name: Setup Vault CLI
+        uses: eLco/setup-vault@v1
+        with:
+          vault_version: 1.15.0
+
+      - name: Authenticate with Vault
+        uses: hashicorp/vault-action@v2
+        with:
+          url: ${{ env.VAULT_ADDR }}
+          role: github-pipeline
+          method: jwt
+          exportToken: true # Mandatory to provide $VAULT_TOKEN to the CLI
+
+      - name: Upsert Secret to Vault
+        run: |
+          # Use the logical path (no /data/ prefix)
+          LOGICAL_PATH="secret/myapp/${{ github.event.inputs.service }}"
+          METADATA_PATH="secret/metadata/myapp/${{ github.event.inputs.service }}"
+          
+          # Fix 2: Check for existence via metadata (cleaner for KV-v2)
+          if vault kv metadata get "$LOGICAL_PATH" > /dev/null 2>&1; then
+            echo "Secret exists at $LOGICAL_PATH. Patching key: ${{ github.event.inputs.secret_key }}"
+            vault kv patch "$LOGICAL_PATH" \
+              "${{ github.event.inputs.secret_key }}=${{ github.event.inputs.secret_value }}"
+          else
+            echo "Secret does not exist. Creating new path: $LOGICAL_PATH"
+            vault kv put "$LOGICAL_PATH" \
+              "${{ github.event.inputs.secret_key }}=${{ github.event.inputs.secret_value }}"
+          fi
+</file>
+
+<file path=".github/CODEOWNERS">
+# Codeowners for this repo
+
+* @mayank-ramfincorp @arvind-ramfincorp @sandeepsinghram999
+</file>
+
+<file path="eks-cdk-infra/config/pre-prod.yaml">
+# Pre-prod Environment Configuration
+
+# AWS Account setup
+account: "361795871686"
+region: "ap-south-1"
+
+# EKS Compute Configuration
+node_size: "t3.medium"
+capacity_type: "SPOT" # or "ON_DEMAND"
+</file>
+
+<file path="eks-cdk-infra/config/rf-dev.yaml">
+# Staging Environment Configuration
+
+# AWS Account setup
+account: "361795871686"
+region: "ap-south-1"
+
+# EKS Compute Configuration
+node_size: "t3.medium"
+capacity_type: "SPOT" # or "ON_DEMAND"
+</file>
+
+<file path="eks-cdk-infra/ramfincorp/aws-proxy.yaml">
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: aws-nlb-proxy-config
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: LoadBalancer
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: "external"
+          service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+          service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+          # ACM Certificate configuration for TLS termination
+          service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:ap-south-1:361795871686:certificate/99aa5845-e186-42c2-adad-1be6ee84be50"
+          service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+</file>
+
+<file path="eks-cdk-infra/ramfincorp/gateway-class.yaml">
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy-aws-gateway-class
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: aws-nlb-proxy-config
+    namespace: envoy-gateway-system
+</file>
+
+<file path="eks-cdk-infra/ramfincorp/gateway.yaml">
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: main-gateway
+  namespace: envoy-gateway-system
+spec:
+  gatewayClassName: envoy-aws-gateway-class
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      # Even though you access your services via HTTPS (443), the AWS NLB terminates 
+      # the SSL. Envoy proxies generally just receive the decrypted HTTP traffic, 
+      # thus this listener is HTTP on port 80.
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https-terminated
+      protocol: HTTP
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: All
+</file>
+
+<file path="eks-cdk-infra/ramfincorp/sample-route.yaml">
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: abc-route
+  namespace: your-app-namespace # Replace with the namespace where the 'abc' service resides
+spec:
+  parentRefs:
+    - name: main-gateway
+      namespace: envoy-gateway-system
+  hostnames:
+    - "abc.preprod.ramfincorp.com"
+  rules:
+    - backendRefs:
+        - name: your-abc-kubernetes-service-name
+          port: 8080 # The port your kubernetes service is listening on
+</file>
+
+<file path="eks-cdk-infra/ramfincorp/test-app.yaml">
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-nginx
+  namespace: test-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-nginx
+  template:
+    metadata:
+      labels:
+        app: test-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-nginx-svc
+  namespace: test-app
+spec:
+  selector:
+    app: test-nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: test-nginx-route
+  namespace: test-app
+spec:
+  parentRefs:
+    - name: main-gateway
+      namespace: envoy-gateway-system
+  hostnames:
+    - "nginx-test.ramfincorp.com" # Matches your wildcard certificate *.ramfincorp.com
+  rules:
+    - backendRefs:
+        - name: test-nginx-svc
+          port: 80
+</file>
+
+<file path="eks-cdk-infra/deploy_eks.py">
+class LogColors
+⋮----
+INFO = '\033[94m'
+SUCCESS = '\033[92m'
+WARNING = '\033[93m'
+ERROR = '\033[91m'
+RESET = '\033[0m'
+⋮----
+_original_print = print
+⋮----
+def custom_print(*args, **kwargs)
+⋮----
+msg = " ".join(str(a) for a in args)
+lower_msg = msg.lower()
+⋮----
+color = LogColors.ERROR
+⋮----
+color = LogColors.WARNING
+⋮----
+color = LogColors.SUCCESS
+⋮----
+color = LogColors.INFO
+⋮----
+print = custom_print
+⋮----
+def load_config(env_name)
+⋮----
+path = os.path.join(os.path.dirname(__file__), "config", f"{env_name}.yaml")
+⋮----
+def get_clients(region)
+⋮----
+def create_vpc(args, config)
+⋮----
+ec2 = get_clients(config['region'])['ec2']
+cluster_name = f"{args.env}-eks-cluster"
+⋮----
+# Check if VPC already exists by tag
+vpc_desc = ec2.describe_vpcs(Filters=[{'Name': 'tag:Name', 'Values': [f"{args.env}-eks-vpc"]}])
+⋮----
+vpc = ec2.create_vpc(CidrBlock='10.0.0.0/16')
+vpc_id = vpc['Vpc']['VpcId']
+⋮----
+# Wait for VPC
+waiter = ec2.get_waiter('vpc_available')
+⋮----
+igw = ec2.create_internet_gateway()
+igw_id = igw['InternetGateway']['InternetGatewayId']
+⋮----
+# Dynamic subnets
+azs = ec2.describe_availability_zones()['AvailabilityZones']
+az1 = azs[0]['ZoneName']
+az2 = azs[1]['ZoneName']
+⋮----
+pub_sub_1 = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.0.1.0/24', AvailabilityZone=az1)
+pub_sub_2 = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.0.2.0/24', AvailabilityZone=az2)
+priv_sub_1 = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.0.3.0/24', AvailabilityZone=az1)
+priv_sub_2 = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.0.4.0/24', AvailabilityZone=az2)
+⋮----
+pub_ids = [pub_sub_1['Subnet']['SubnetId'], pub_sub_2['Subnet']['SubnetId']]
+priv_ids = [priv_sub_1['Subnet']['SubnetId'], priv_sub_2['Subnet']['SubnetId']]
+⋮----
+# Add require tags for kubernetes discovery
+⋮----
+# Public Route Table
+pub_rt = ec2.create_route_table(VpcId=vpc_id)
+pub_rt_id = pub_rt['RouteTable']['RouteTableId']
+⋮----
+# NAT Gateway
+eip = ec2.allocate_address(Domain='vpc')
+eip_id = eip['AllocationId']
+⋮----
+nat = ec2.create_nat_gateway(SubnetId=pub_ids[0], AllocationId=eip_id)
+nat_id = nat['NatGateway']['NatGatewayId']
+waiter = ec2.get_waiter('nat_gateway_available')
+⋮----
+# Private Route Table
+priv_rt = ec2.create_route_table(VpcId=vpc_id)
+priv_rt_id = priv_rt['RouteTable']['RouteTableId']
+⋮----
+def get_subnets(ec2_client, env_name)
+⋮----
+# Retrieve public subnets by tag
+pub_filters = [{'Name': 'tag:Name', 'Values': [f"{env_name}-eks-public"]}]
+pub_subnets = [s['SubnetId'] for s in ec2_client.describe_subnets(Filters=pub_filters)['Subnets']]
+# Retrieve private subnets by tag
+priv_filters = [{'Name': 'tag:Name', 'Values': [f"{env_name}-eks-private"]}]
+priv_subnets = [s['SubnetId'] for s in ec2_client.describe_subnets(Filters=priv_filters)['Subnets']]
+⋮----
+def create_lbc_policy(iam, env)
+⋮----
+policy_name = f"{env}-AWSLoadBalancerControllerIAMPolicy"
+⋮----
+policy_url = "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json"
+⋮----
+req = urllib.request.Request(policy_url, headers={'User-Agent': 'Mozilla/5.0'})
+⋮----
+policy_document = response.read().decode('utf-8')
+⋮----
+policy = iam.create_policy(
+⋮----
+sts = boto3.client('sts')
+account_id = sts.get_caller_identity()['Account']
+arn = f"arn:aws:iam::{account_id}:policy/{policy_name}"
+⋮----
+def create_oidc_role(args, config, lbc_policy_arn)
+⋮----
+eks = get_clients(config['region'])['eks']
+iam = get_clients(config['region'])['iam']
+⋮----
+cluster_info = eks.describe_cluster(name=cluster_name)
+⋮----
+oidc_url = cluster_info['cluster']['identity']['oidc']['issuer']
+⋮----
+# 1. Register OIDC provider in IAM if not present
+oidc_provider_arn = f"arn:aws:iam::{account_id}:oidc-provider/{oidc_url.replace('https://', '')}"
+⋮----
+# 2. Create the Trust Policy for IRSA
+oidc_url_no_https = oidc_url.replace('https://', '')
+trust_policy = {
+⋮----
+role_name = f"{args.env}-AmazonEKSLoadBalancerControllerRole"
+⋮----
+role = iam.create_role(
+⋮----
+role = iam.get_role(RoleName=role_name)
+⋮----
+def create_roles(args, config)
+⋮----
+cluster_role_name = f"{args.env}-EksClusterRole"
+node_role_name = f"{args.env}-EksNodeRole"
+⋮----
+# 1. Cluster Role
+cluster_trust_policy = {
+⋮----
+cluster_role = iam.create_role(
+⋮----
+cluster_role = iam.get_role(RoleName=cluster_role_name)
+⋮----
+# 2. Node Group Role
+node_trust_policy = {
+⋮----
+node_role = iam.create_role(
+⋮----
+# Add AWS Load Balancer Controller policy
+lbc_policy_arn = create_lbc_policy(iam, args.env)
+⋮----
+node_role = iam.get_role(RoleName=node_role_name)
+⋮----
+# Ensure LBC policy is attached even if role existed
+⋮----
+def create_cluster(args, config)
+⋮----
+cluster_role_arn = iam.get_role(RoleName=f"{args.env}-EksClusterRole")['Role']['Arn']
+⋮----
+all_subnets = pub_subs + priv_subs
+⋮----
+response = eks.create_cluster(
+⋮----
+version='1.35', # Use a valid stable version
+⋮----
+'subnetIds': all_subnets, # Pass all to control plane
+⋮----
+def wait_cluster(args, config)
+⋮----
+waiter = eks.get_waiter('cluster_active')
+⋮----
+def create_nodegroup(args, config)
+⋮----
+nodegroup_name = f"{args.env}-nodegroup"
+node_role_arn = iam.get_role(RoleName=f"{args.env}-EksNodeRole")['Role']['Arn']
+⋮----
+response = eks.create_nodegroup(
+⋮----
+subnets=priv_subs, # ONLY provision instances in private subnets!
+⋮----
+def wait_nodegroup(args, config)
+⋮----
+waiter = eks.get_waiter('nodegroup_active')
+⋮----
+def deploy_metrics_server(args, config)
+⋮----
+def deploy_aws_lbc(args, config)
+⋮----
+# Retrieve VPC ID to bypass EC2 metadata timeouts on the pods
+⋮----
+vpc_id = vpc_desc['Vpcs'][0]['VpcId'] if vpc_desc['Vpcs'] else ""
+⋮----
+irsa_role_arn = create_oidc_role(args, config, lbc_policy_arn)
+⋮----
+helm_cmd = [
+⋮----
+def create_schedule(args, config)
+⋮----
+autoscaling = get_clients(config['region'])['autoscaling']
+⋮----
+response = eks.describe_nodegroup(clusterName=cluster_name, nodegroupName=nodegroup_name)
+asgs = response['nodegroup']['resources']['autoScalingGroups']
+⋮----
+asg_name = asg['name']
+⋮----
+# Scale down to 0 nodes at 10 PM
+⋮----
+# Scale up to 4 nodes at least at 9 AM
+⋮----
+def create_eks_admin_user(args, config)
+⋮----
+username = f"{args.env}-eks-admin"
+⋮----
+# 1. Create IAM User
+⋮----
+response = iam.create_user(UserName=username)
+user_arn = response['User']['Arn']
+⋮----
+user_arn = iam.get_user(UserName=username)['User']['Arn']
+⋮----
+# 2. Attach inline policy for eks:DescribeCluster and eks:ListClusters
+policy_doc = {
+⋮----
+# 3. Generate Access Keys
+⋮----
+keys = iam.list_access_keys(UserName=username)['AccessKeyMetadata']
+# Delete old keys if we only want 1 fresh key, to prevent hitting quota of 2
+⋮----
+key_response = iam.create_access_key(UserName=username)
+access_key_id = key_response['AccessKey']['AccessKeyId']
+secret_access_key = key_response['AccessKey']['SecretAccessKey']
+⋮----
+# 4. Map user to EKS
+⋮----
+pass # already exists
+⋮----
+def deploy_all(args, config)
+⋮----
+parser = argparse.ArgumentParser(description="EKS Boto3 Deployer")
+⋮----
+args = parser.parse_args()
+config = load_config(args.env)
+</file>
+
+<file path="eks-cdk-infra/destroy_eks.py">
+class LogColors
+⋮----
+INFO = '\033[94m'
+SUCCESS = '\033[92m'
+WARNING = '\033[93m'
+ERROR = '\033[91m'
+RESET = '\033[0m'
+⋮----
+_original_print = print
+⋮----
+def custom_print(*args, **kwargs)
+⋮----
+msg = " ".join(str(a) for a in args)
+lower_msg = msg.lower()
+⋮----
+color = LogColors.ERROR
+⋮----
+color = LogColors.WARNING
+⋮----
+color = LogColors.SUCCESS
+⋮----
+color = LogColors.INFO
+⋮----
+print = custom_print
+⋮----
+def confirm_action(message)
+⋮----
+response = input(f"{LogColors.WARNING}WARNING: You are about to delete {message}.\nAre you sure you want to proceed? (yes/no): {LogColors.RESET}")
+⋮----
+def load_config(env_name)
+⋮----
+path = os.path.join(os.path.dirname(__file__), "config", f"{env_name}.yaml")
+⋮----
+def get_clients(region)
+⋮----
+def delete_nodegroup(args, config)
+⋮----
+eks = get_clients(config['region'])['eks']
+cluster_name = f"{args.env}-eks-cluster"
+nodegroup_name = f"{args.env}-nodegroup"
+⋮----
+waiter = eks.get_waiter('nodegroup_deleted')
+⋮----
+def delete_cluster(args, config)
+⋮----
+waiter = eks.get_waiter('cluster_deleted')
+⋮----
+def delete_roles(args, config)
+⋮----
+iam = get_clients(config['region'])['iam']
+⋮----
+cluster_role_name = f"{args.env}-EksClusterRole"
+node_role_name = f"{args.env}-EksNodeRole"
+⋮----
+def purge_role(role_name, policies)
+⋮----
+def delete_vpc(args, config)
+⋮----
+ec2 = get_clients(config['region'])['ec2']
+⋮----
+vpc_desc = ec2.describe_vpcs(Filters=[{'Name': 'tag:Name', 'Values': [f"{args.env}-eks-vpc"]}])
+⋮----
+vpc_id = vpc_desc['Vpcs'][0]['VpcId']
+⋮----
+# Delete NAT Gateways
+nats = ec2.describe_nat_gateways(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['NatGateways']
+eip_allocation_ids = []
+⋮----
+# Release EIPs
+⋮----
+# IGW
+igws = ec2.describe_internet_gateways(Filters=[{'Name': 'attachment.vpc-id', 'Values': [vpc_id]}])['InternetGateways']
+⋮----
+igw_id = igw['InternetGatewayId']
+⋮----
+# Subnets
+subnets = ec2.describe_subnets(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['Subnets']
+⋮----
+# Route Tables
+rts = ec2.describe_route_tables(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])['RouteTables']
+⋮----
+def delete_admin_user(args, config)
+⋮----
+username = f"{args.env}-eks-admin"
+⋮----
+# Delete access keys
+⋮----
+keys = iam.list_access_keys(UserName=username)['AccessKeyMetadata']
+⋮----
+# Delete inline policies
+⋮----
+policies = iam.list_user_policies(UserName=username)['PolicyNames']
+⋮----
+# Delete user
+⋮----
+def destroy_all(args, config)
+⋮----
+parser = argparse.ArgumentParser(description="EKS Boto3 Destroyer")
+⋮----
+args = parser.parse_args()
+config = load_config(args.env)
+</file>
+
+<file path="eks-cdk-infra/README.md">
+# AWS EKS Automation Scripts
+
+This directory contains pure Python scripts (powered by `boto3`) to reliably deploy and safely destroy Amazon EKS clusters and their associated dependencies (IAM Roles, Managed Node Groups) across different environments.
+
+## Pre-requisites
+1. **Python >= 3.9**
+2. Install the necessary Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Establish your **AWS Credentials**. You can do this securely by running `aws configure` in your terminal or setting environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
+
+## Configuration
+Before running any script, you must populate the target environment's YAML config:
+- `config/pre-prod.yaml`
+- `config/staging.yaml`
+
+---
+
+## 1. Deploying EKS (`deploy_eks.py`)
+
+This script provisions the IAM policies/roles, EKS Cluster control plane, and the Managed Node Group. It automatically tracks progress and blocks until resources are fully `ACTIVE`.
+
+### Usage
+```bash
+python deploy_eks.py <environment> <command>
+```
+
+### Arguments
+* `<environment>` (Required): The target configuration environment. Options: `pre-prod` or `staging`.
+* `<command>` (Required): The specific step to execute.
+  * `create-vpc` : Generates a brand new VPC specifically for this environment, configured with public/private subnets, an IGW, and a NAT Gateway. Validates by resource tags.
+  * `create-roles` : Creates the `EksClusterRole` and `EksNodeRole` IAM roles and attaches the correct AWS managed policies.
+  * `create-cluster` : Initiates the creation of the EKS Cluster using the target config.
+  * `wait-cluster` : Blocks and waits until the EKS Cluster status changes to `ACTIVE`.
+  * `deploy-metrics` : Deploys the Kubernetes Metrics Server into the newly created cluster.
+  * `deploy-aws-lbc` : Installs the AWS Load Balancer Controller via Helm into the cluster.
+  * `create-nodegroup` : Initiates the creation of the EC2 Managed Node Group.
+  * `wait-nodegroup` : Blocks and waits until the Node Group status changes to `ACTIVE`.
+  * `create-schedule` : Creates auto-scaling schedules to automatically scale down the Node Group at night and scale up in the morning.
+  * `create-admin-user` : Provisions an IAM user (`<env>-eks-admin`), maps it to the EKS cluster with admin privileges, and securely returns the AWS credentials.
+  * **`deploy-all`** : Runs all of the above deploy commands sequentially in the correct order.
+
+**Example deploy:**
+```bash
+python deploy_eks.py pre-prod deploy-all
+```
+
+---
+
+## 2. Destroying EKS (`destroy_eks.py`)
+
+This script safely tears down the EKS ecosystem in the required reverse order. **You will be securely prompted to confirm (`yes`/`no`) before any actual deletion occurs.**
+
+### Usage
+```bash
+python destroy_eks.py <environment> <command>
+```
+
+### Arguments
+* `<environment>` (Required): The target configuration environment. Options: `pre-prod` or `staging`.
+* `<command>` (Required): The specific step to execute.
+  * `delete-nodegroup` : Deletes the Managed Node Group and waits until it is fully terminated from AWS.
+  * `delete-cluster` : Deletes the core EKS Cluster and waits until it is fully terminated.
+  * `delete-roles` : Detaches all AWS managed policies and completely deletes the associated IAM roles.
+  * `delete-vpc` : Destroys the created VPC, cleans up its NAT gateways, EIPs, Internet Gateways, Subnets, and Route Tables.
+  * `delete-admin-user` : Deletes the created EKS admin IAM user, dropping all associated inline policies and access keys.
+  * **`destroy-all`** : Runs all of the above deletion commands sequentially in the correct teardown order.
+
+**Example destroy:**
+```bash
+python destroy_eks.py staging destroy-all
+```
+
+---
+
+## 3. Infrastructure
+
+### Installing Envoy Gateway
+
+To install the Gateway API CRDs and Envoy Gateway into the `envoy-gateway-system` namespace, run the following official Helm command:
+
+```bash
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.7.1 -n envoy-gateway-system --create-namespace
+```
+
+Wait until the Envoy Gateway deployment is available:
+
+```bash
+kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
+```
+
+### Configuring Envoy
+To ensure Envoy loads the load balancer properly and can route traffic correctly, you must apply the following core configurations to the cluster after installation:
+1. `aws-proxy`
+2. `gateway-class`
+3. `gateway`
+
+Make sure these base configuration files are correctly applied using `kubectl apply -f` in your infrastructure environment before attempting to deploy your applications.
+
+### 4. Updating Route 53 (DNS Mapping)
+When you successfully apply the `gateway` configuration in the previous step, Envoy Gateway provisions an AWS Load Balancer (typically an NLB) and AWS assigns it a dynamic DNS address automatically. 
+
+In order for your domain traffic to route to the cluster correctly, you must:
+1. **Retrieve the Load Balancer URL:**
+   Run `kubectl get gateway -n <namespace>` and extract the load balancer hostname listed under `ADDRESS`.
+2. **Update Route 53:**
+   Log into your AWS Route 53 Console and create or update an **Alias** record (e.g., `*.preprod.ramfincorp.com`) mapping directly to the new Load Balancer DNS name retrieved above. Ensure your Alias targets an *Application and Classic Load Balancer* or *Network Load Balancer*.
+</file>
+
+<file path="eks-cdk-infra/requirements.txt">
+boto3>=1.34.0
+pyyaml>=6.0.0
+</file>
+
+<file path="eks-cdk-infra/transform.py">
+def transform(filename)
+⋮----
+content = f.read()
+⋮----
+logger_code = """
+lines = content.split('\\n')
+last_import_idx = 0
+⋮----
+last_import_idx = i
+⋮----
+# Inject logger_code after the last import
+⋮----
+# Process lines
+# We join them back together then re-split to handle the inserted code uniformly,
+# though it's easier to just do it while writing.
+new_content = "\\n".join(lines)
+⋮----
+out_lines = []
+⋮----
+# For simple matching, just check if the line has 'print(' but is not def print(...) and not a definition of log func
+⋮----
+lower_line = line.lower()
+⋮----
+line = line.replace('print(', 'log_error(')
+⋮----
+line = line.replace('print(', 'log_warning(')
+⋮----
+line = line.replace('print(', 'log_success(')
+⋮----
+line = line.replace('print(', 'log_info(')
+⋮----
+# for destroy script input
+⋮----
+line = line.replace('input(f"WARNING:', 'input(f"{Colors.WARNING}WARNING:')
+line = line.replace('(yes/no): ")', '(yes/no): {Colors.RESET}")')
+</file>
+
+<file path="k8s/common-resources/loki/.htpasswd">
+loki:$apr1$PgQHQnBZ$v3emtbjPD5AbbCNiy6lTb.
+</file>
+
+<file path="k8s/common-resources/loki/loki-s3-policy.json">
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "LokiStorage",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::prod-k8s-loki-chunks",
+                "arn:aws:s3:::prod-k8s-loki-chunks/*",
+                "arn:aws:s3:::prod-k8s-loki-ruler",
+                "arn:aws:s3:::prod-k8s-loki-ruler/*"
+            ]
+        }
+    ]
+}
+</file>
+
+<file path="k8s/common-resources/loki/loki-values.yaml">
+loki:
+   auth_enabled: false
+   schemaConfig:
+     configs:
+       - from: "2024-04-01"
+         store: tsdb
+         object_store: s3
+         schema: v13
+         index:
+           prefix: loki_index_
+           period: 24h
+   storage_config:
+     aws:
+       region: ap-south-1 # for example, eu-west-2  
+       bucketnames: prod-k8s-loki-chunks # Your actual S3 bucket name, for example, loki-aws-dev-chunks
+       s3forcepathstyle: false
+   ingester:
+       chunk_encoding: snappy
+   pattern_ingester:
+       enabled: true
+   limits_config:
+     allow_structured_metadata: true
+     volume_enabled: true
+     retention_period: 672h # 28 days retention
+   compactor:
+     retention_enabled: true 
+     delete_request_store: s3
+   ruler:
+    enable_api: true
+    storage:
+      type: s3
+      s3:
+        region: ap-south-1 # for example, eu-west-2
+        bucketnames: prod-k8s-loki-ruler # Your actual S3 bucket name, for example, loki-aws-dev-ruler
+        s3forcepathstyle: false
+      alertmanager_url: http://prom:9093 # The URL of the Alertmanager to send alerts (Prometheus, Mimir, etc.)
+
+   querier:
+      max_concurrent: 4
+
+   storage:
+      type: s3
+      bucketNames:
+        chunks: "prod-k8s-loki-chunks" # Your actual S3 bucket name (loki-aws-dev-chunks)
+        ruler: "prod-k8s-loki-ruler" # Your actual S3 bucket name (loki-aws-dev-ruler)
+        # admin: "<Insert s3 bucket name>" # Your actual S3 bucket name (loki-aws-dev-admin) - GEL customers only
+      s3:
+        region: ap-south-1 # eu-west-2
+        #insecure: false
+      # s3forcepathstyle: false
+
+serviceAccount:
+ create: true
+ annotations:
+   "eks.amazonaws.com/role-arn": "arn:aws:iam::361795871686:role/LokiServiceAccountRole" # The service role you created
+
+deploymentMode: Distributed
+
+ingester:
+ replicas: 2
+ zoneAwareReplication:
+  enabled: false
+
+querier:
+ replicas: 1
+ maxUnavailable: 2
+
+queryFrontend:
+ replicas: 1
+ maxUnavailable: 1
+
+queryScheduler:
+ replicas: 1
+
+distributor:
+ replicas: 1
+ maxUnavailable: 2
+compactor:
+ replicas: 1
+
+indexGateway:
+ replicas: 1
+ maxUnavailable: 1
+
+ruler:
+ replicas: 1
+ maxUnavailable: 1
+
+
+# This exposes the Loki gateway so it can be written to and queried externaly
+gateway:
+ service:
+   type: LoadBalancer
+ basicAuth: 
+     enabled: false
+
+# Since we are using basic auth, we need to pass the username and password to the canary
+lokiCanary:
+  extraArgs:
+    - -pass=$(LOKI_PASS)
+    - -user=$(LOKI_USER)
+  extraEnv:
+    - name: LOKI_PASS
+      valueFrom:
+        secretKeyRef:
+          name: canary-basic-auth
+          key: password
+    - name: LOKI_USER
+      valueFrom:
+        secretKeyRef:
+          name: canary-basic-auth
+          key: username
+
+# Enable minio for storage
+minio:
+ enabled: false
+
+backend:
+ replicas: 0
+read:
+ replicas: 0
+write:
+ replicas: 0
+
+singleBinary:
+ replicas: 0
+</file>
+
+<file path="k8s/common-resources/loki/trust-policy.json">
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::361795871686:oidc-provider/oidc.eks.ap-south-1.amazonaws.com/id/B372E93D0E4FB9478ED4B754D3DFE94F"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "oidc.eks.ap-south-1.amazonaws.com/id/B372E93D0E4FB9478ED4B754D3DFE94F:sub": "system:serviceaccount:loki:loki",
+                    "oidc.eks.ap-south-1.amazonaws.com/id/B372E93D0E4FB9478ED4B754D3DFE94F:aud": "sts.amazonaws.com"
+                }
+            }
+        }
+    ]
+}
+</file>
+
+<file path="k8s/common-resources/loki/values.yaml">
+loki:
+  auth_enabled: false  # Enable for production with RBAC
+  commonConfig:
+    replication_factor: 1  # Increase to 2+ for high availability
+  storage:
+    type: s3
+    bucketNames: 
+      chunks: prod-k8s-loki-data
+      ruler: prod-k8s-loki-data
+      admin: prod-k8s-loki-data
+    s3:
+      bucketNames: prod-k8s-loki-data  # Your S3 bucket name
+      region: ap-south-1  # Your AWS region
+      insecure: false  # Use HTTPS for S3
+      secretName: loki-s3-creds
+  schemaConfig:
+    configs:
+      - from: 2025-09-14
+        store: boltdb-shipper  # Required for scalable mode with S3
+        object_store: s3
+        schema: v12
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 30d  # Adjust retention as needed (e.g., 7 days)
+deploymentMode: distributed  # Explicitly set for scalable mode
+</file>
+
+<file path="k8s/common-resources/externalServices.yaml">
+# Add all the external service proxy here
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rf-backend-svc-proxy
+  namespace: common-resources
+spec:
+  type: ExternalName
+  externalName: rf-backend-svc.rf-backend.svc.cluster.local
+---
+</file>
+
+<file path="k8s/common-resources/grafana-ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  ingressClassName: nginx   
+  rules:
+    - host: grafana.ramfincorp.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: loki-grafana
+                port:
+                  number: 80
+</file>
+
+<file path="k8s/common-resources/ingress-controller.yaml">
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  name: ingress-nginx
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+  namespace: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - secrets
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resourceNames:
+  - ingress-nginx-leader
+  resources:
+  - leases
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - endpoints
+  - nodes
+  - pods
+  - secrets
+  - namespaces
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+rules:
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+  namespace: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx-admission
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-nginx
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-nginx-admission
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: v1
+data:
+  http-snippet: |
+    server {
+      listen 2443;
+      return 308 https://$host$request_uri;
+    }
+  proxy-real-ip-cidr: 172.20.0.0/16
+  use-forwarded-headers: "true"
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "60"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: arn:aws:acm:ap-south-1:361795871686:certificate/99aa5845-e186-42c2-adad-1be6ee84be50
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: https
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  externalTrafficPolicy: Local
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - appProtocol: http
+    name: http
+    port: 80
+    protocol: TCP
+    targetPort: tohttps
+  - appProtocol: https
+    name: https
+    port: 443
+    protocol: TCP
+    targetPort: http
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-controller-admission
+  namespace: ingress-nginx
+spec:
+  ports:
+  - appProtocol: https
+    name: https-webhook
+    port: 443
+    targetPort: webhook
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  minReadySeconds: 0
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/instance: ingress-nginx
+      app.kubernetes.io/name: ingress-nginx
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.2
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - /nginx-ingress-controller
+        - --publish-service=$(POD_NAMESPACE)/ingress-nginx-controller
+        - --election-id=ingress-nginx-leader
+        - --controller-class=k8s.io/ingress-nginx
+        - --ingress-class=nginx
+        - --configmap=$(POD_NAMESPACE)/ingress-nginx-controller
+        - --validating-webhook=:8443
+        - --validating-webhook-certificate=/usr/local/certificates/cert
+        - --validating-webhook-key=/usr/local/certificates/key
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LD_PRELOAD
+          value: /usr/local/lib/libmimalloc.so
+        image: registry.k8s.io/ingress-nginx/controller:v1.13.2@sha256:1f7eaeb01933e719c8a9f4acd8181e555e582330c7d50f24484fb64d2ba9b2ef
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /wait-shutdown
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: controller
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        - containerPort: 80
+          name: https
+          protocol: TCP
+        - containerPort: 2443
+          name: tohttps
+          protocol: TCP
+        - containerPort: 8443
+          name: webhook
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 90Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+          runAsGroup: 82
+          runAsNonRoot: true
+          runAsUser: 101
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /usr/local/certificates/
+          name: webhook-cert
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: ingress-nginx
+      terminationGracePeriodSeconds: 300
+      volumes:
+      - name: webhook-cert
+        secret:
+          secretName: ingress-nginx-admission
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission-create
+  namespace: ingress-nginx
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.2
+      name: ingress-nginx-admission-create
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - create
+        - --host=ingress-nginx-controller-admission,ingress-nginx-controller-admission.$(POD_NAMESPACE).svc
+        - --namespace=$(POD_NAMESPACE)
+        - --secret-name=ingress-nginx-admission
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.2@sha256:050a34002d5bb4966849c880c56c91f5320372564245733b33d4b3461b4dbd24
+        imagePullPolicy: IfNotPresent
+        name: create
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: ingress-nginx-admission
+  ttlSecondsAfterFinished: 0
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission-patch
+  namespace: ingress-nginx
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.2
+      name: ingress-nginx-admission-patch
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - patch
+        - --webhook-name=ingress-nginx-admission
+        - --namespace=$(POD_NAMESPACE)
+        - --patch-mutating=false
+        - --secret-name=ingress-nginx-admission
+        - --patch-failure-policy=Fail
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.2@sha256:050a34002d5bb4966849c880c56c91f5320372564245733b33d4b3461b4dbd24
+        imagePullPolicy: IfNotPresent
+        name: patch
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: ingress-nginx-admission
+  ttlSecondsAfterFinished: 0
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: nginx
+spec:
+  controller: k8s.io/ingress-nginx
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: ingress-nginx-controller-admission
+      namespace: ingress-nginx
+      path: /networking/v1/ingresses
+      port: 443
+  failurePolicy: Fail
+  matchPolicy: Equivalent
+  name: validate.nginx.ingress.kubernetes.io
+  rules:
+  - apiGroups:
+    - networking.k8s.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - ingresses
+  sideEffects: None
+</file>
+
+<file path="k8s/common-resources/namespace.yaml">
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: common-resources
+</file>
+
+<file path="k8s/crm-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/crm-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          volumeMounts:
+            - name: env-secret
+              mountPath: /app/.env
+              subPath: .env
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+       
+      volumes:
+        - name: env-secret
+          secret:
+            secretName: {{ .Values.envSecretName | default (printf "%s-env" .Values.name) }}
+</file>
+
+<file path="k8s/crm-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="k8s/crm-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: crm-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    
+spec:
+  ingressClassName: alb
+  rules:
+      - http:
+          paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: {{ .Values.service.name }}
+                  port:
+                    number: 80
+</file>
+
+<file path="k8s/crm-backend/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/crm-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/crm-backend/Chart.yaml">
+apiVersion: v2
+name: crm-backend
+version: 0.1.0
+description: A Helm chart for deploying the crm-backend service
+appVersion: "1.0"
+keywords:
+  - backend
+  - rf
+  - kubernetes
+maintainers:
+  - name: Mayank Soni
+    email: dev16@ramfincorp.com
+</file>
+
+<file path="k8s/crm-backend/preprod-values.yaml">
+nodeSelector: {}
+replicaCount: 2
+
+resources:
+  requests:
+    memory: "2Gi"
+    cpu: "1500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1500m"
+</file>
+
+<file path="k8s/crm-backend/values.yaml">
+replicaCount: 2
+name: crm-backend
+namespace: crm-backend
+envSecretName: "crm-backend-env"
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/crm-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+service:
+  name: crm-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "3Gi"
+    cpu: "2000m"
+  limits:
+    memory: "4Gi"
+    cpu: "2000m"
+
+
+ingress:
+  certificateArn: arn:aws:acm:ap-south-1:361795871686:certificate/7068b741-dcf4-4348-9dbf-f0dbda6492a3
+</file>
+
+<file path="k8s/crm-report/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/crm-report/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+</file>
+
+<file path="k8s/crm-report/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+</file>
+
+<file path="k8s/crm-report/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: crm-report.ramfincorp.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="k8s/crm-report/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/crm-report/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/crm-report/Chart.yaml">
+apiVersion: v2
+name: loan-backend
+version: 0.1.0
+description: A Helm chart for deploying the loan-backend service
+appVersion: "1.0"
+keywords:
+  - crm
+  - report
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="k8s/crm-report/values.yaml">
+replicaCount: 1
+
+name: crm-report
+namespace: crm-report
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/crm-report
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: crm-report-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "2500Mi"
+    cpu: "500m"
+  limits:
+    memory: "2500Mi"
+    cpu: "500m"
+
+redis:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+</file>
+
+<file path="k8s/dedup/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/dedup/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount}}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: redis
+          image: redis:7-alpine
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+</file>
+
+<file path="k8s/dedup/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="k8s/dedup/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: dedup-ingress
+
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: dedup.ramfincorp.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="k8s/dedup/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/dedup/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/dedup/Chart.yaml">
+apiVersion: v2
+name: dedup
+version: 0.1.0
+description: A Helm chart for deploying the dedup service
+appVersion: "1.0"
+keywords:
+  - backend
+  - dedup
+  - kubernetes
+maintainers:
+  - name: Mayank Soni
+    email: dev16@ramfincorp.com
+</file>
+
+<file path="k8s/dedup/values.yaml">
+replicaCount: 1
+
+name: dedup
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/dedup
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+namespace: dedup
+service:
+  name: dedup-svc
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "1000m"
+  limits:
+    memory: "1.5Gi"
+    cpu: "1500m"
+
+redis:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+</file>
+
+<file path="k8s/dsa-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/dsa-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          volumeMounts:
+            - name: env-secret
+              mountPath: /app/.env
+              subPath: .env
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: env-secret
+          secret:
+            secretName: {{ .Values.envSecretName | default (printf "%s-env" .Values.name) }}
+</file>
+
+<file path="k8s/dsa-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="k8s/dsa-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: dsa-backend.ramfincorp.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="k8s/dsa-backend/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/dsa-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/dsa-backend/Chart.yaml">
+apiVersion: v2
+name: crm-backend
+version: 0.1.0
+description: A Helm chart for deploying the crm-backend service
+appVersion: "1.0"
+keywords:
+  - backend
+  - dsa
+  - kubernetes
+maintainers:
+  - name: Mayank Soni
+    email: dev16@ramfincorp.com
+</file>
+
+<file path="k8s/dsa-backend/values.yaml">
+replicaCount: 1
+
+name: dsa-backend
+namespace: dsa-backend
+envSecretName: dsa-backend-env
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/dsa-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: dsa-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "6Gi"
+    cpu: "2000m"
+  limits:
+    memory: "6Gi"
+    cpu: "2000m"
+</file>
+
+<file path="k8s/loan-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/loan-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          volumeMounts:
+            - name: env-secret
+              mountPath: /app/.env
+              subPath: .env
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: env-secret
+          secret:
+            secretName: {{ .Values.envSecretName | default (printf "%s-env" .Values.name) }}
+</file>
+
+<file path="k8s/loan-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+</file>
+
+<file path="k8s/loan-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    
+spec:
+  ingressClassName: alb
+  rules:
+      - http:
+          paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: {{ .Values.service.name }}
+                  port:
+                    number: 80
+</file>
+
+<file path="k8s/loan-backend/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/loan-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/loan-backend/Chart.yaml">
+apiVersion: v2
+name: loan-backend
+version: 0.1.0
+description: A Helm chart for deploying the loan-backend service
+appVersion: "1.0"
+keywords:
+  - backend
+  - loan
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="k8s/loan-backend/values.yaml">
+replicaCount: 1
+
+name: loan-backend
+namespace: loan-backend
+envSecretName: "loan-backend-env"
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/loan-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: loan-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "2500Mi"
+    cpu: "2000m"
+  limits:
+    memory: "2500Mi"
+    cpu: "2000m"
+
+ingress:
+  certificateArn: arn:aws:acm:ap-south-1:361795871686:certificate/99aa5845-e186-42c2-adad-1be6ee84be50
+</file>
+
+<file path="k8s/loans-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/loans-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+</file>
+
+<file path="k8s/loans-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+</file>
+
+<file path="k8s/loans-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    
+spec:
+  ingressClassName: alb
+  rules:
+      - http:
+          paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: {{ .Values.service.name }}
+                  port:
+                    number: 80
+</file>
+
+<file path="k8s/loans-backend/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/loans-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/loans-backend/Chart.yaml">
+apiVersion: v2
+name: loans-backend
+version: 0.1.0
+description: A Helm chart for deploying the loan-backend service
+appVersion: "1.0"
+keywords:
+  - backend
+  - loans
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="k8s/loans-backend/values.yaml">
+replicaCount: 1
+
+name: loans-backend
+namespace: loans-backend
+envSecretName: "loans-backend-env"
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/loans-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: loans-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "2500Mi"
+    cpu: "2000m"
+  limits:
+    memory: "2500Mi"
+    cpu: "2000m"
+
+ingress:
+  certificateArn: arn:aws:acm:ap-south-1:361795871686:certificate/99aa5845-e186-42c2-adad-1be6ee84be50
+</file>
+
+<file path="k8s/notification/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/notification/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+</file>
+
+<file path="k8s/notification/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+</file>
+
+<file path="k8s/notification/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: notification.ramfincorp.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="k8s/notification/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/notification/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/notification/Chart.yaml">
+apiVersion: v2
+name: loan-backend
+version: 0.1.0
+description: A Helm chart for deploying the loan-backend service
+appVersion: "1.0"
+keywords:
+  - crm
+  - report
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="k8s/notification/values.yaml">
+replicaCount: 1
+
+name: notification
+namespace: notification
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/notification
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: notification-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "2500Mi"
+    cpu: "500m"
+  limits:
+    memory: "2500Mi"
+    cpu: "500m"
+
+redis:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+</file>
+
+<file path="k8s/razorpay-consumer/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/razorpay-consumer/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          command: ["tail", "-f", "/dev/null"]
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: redis
+          image: redis:7-alpine
+</file>
+
+<file path="k8s/razorpay-consumer/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: razorpay-consumer-hpa
+  namespace: {{ .Values.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="k8s/razorpay-consumer/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/razorpay-consumer/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/razorpay-consumer/Chart.yaml">
+apiVersion: v2
+name: razorpay-consumer
+version: 0.1.0
+description: A Helm chart for deploying the razorpay-consumer service
+appVersion: "1.0"
+keywords:
+  - backend
+  - razorpay-consumer
+  - kubernetes
+maintainers:
+  - name: Mayank Soni
+    email: dev16@ramfincorp.com
+</file>
+
+<file path="k8s/razorpay-consumer/values.yaml">
+replicaCount: 2
+
+name: razorpay-consumer
+namespace: rf-backend
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/razorpay-consumer
+  tag: "1.0"
+  pullPolicy: Always
+
+service:
+  name: razorpay-consumer-svc
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    memory: "1.5Gi"
+    cpu: "1500m"
+  limits:
+    memory: "1.5Gi"
+    cpu: "1500m"
+</file>
+
+<file path="k8s/razorpay-producer/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/razorpay-producer/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: redis
+          image: redis:7-alpine
+</file>
+
+<file path="k8s/razorpay-producer/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: razorpay-producer-hpa
+  namespace: {{ .Values.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="k8s/razorpay-producer/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/razorpay-producer/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/razorpay-producer/Chart.yaml">
+apiVersion: v2
+name: razorpay-producer
+version: 0.1.0
+description: A Helm chart for deploying the razorpay-producer service
+appVersion: "1.0"
+keywords:
+  - backend
+  - razorpay-producer
+  - kubernetes
+maintainers:
+  - name: Mayank Soni
+    email: dev16@ramfincorp.com
+</file>
+
+<file path="k8s/razorpay-producer/values.yaml">
+replicaCount: 3
+
+name: razorpay-producer
+namespace: rf-backend
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/razorpay-producer
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: razorpay-producer-svc
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "1000m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+</file>
+
+<file path="k8s/rf-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/rf-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          volumeMounts:
+            - name: env-secret
+              mountPath: /app/.env
+              subPath: .env
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probe.liveness.endpoint }}
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: {{ .Values.probe.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probe.liveness.periodSeconds }}
+        - name: redis
+          image: redis:7-alpine
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+      volumes:
+        - name: env-secret
+          secret:
+            secretName: {{ .Values.envSecretName | default (printf "%s-env" .Values.name) }}
+</file>
+
+<file path="k8s/rf-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rf-backend-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="k8s/rf-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.name }}
+  name: rf-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    
+spec:
+  ingressClassName: alb
+  rules:
+      - http:
+          paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: {{ .Values.service.name }}
+                  port:
+                    number: 80
+</file>
+
+<file path="k8s/rf-backend/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/rf-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/rf-backend/Chart.yaml">
+apiVersion: v2
+name: rf-backend
+version: 0.1.0
+description: A Helm chart for deploying the rf-backend service
+appVersion: "1.0"
+keywords:
+  - backend
+  - rf
+  - kubernetes
+maintainers:
+  - name: Mayank Soni
+    email: dev16@ramfincorp.com
+</file>
+
+<file path="k8s/rf-backend/values.yaml">
+replicaCount: 2
+
+name: rf-backend
+envSecretName: rf-backend-env
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/ramfincorp-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+service:
+  name: rf-backend-svc
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    memory: "2Gi"
+    cpu: "2000m"
+  limits:
+    memory: "2Gi"
+    cpu: "2000m"
+
+redis:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+ingress:
+  certificateArn: arn:aws:acm:ap-south-1:361795871686:certificate/fadec136-827f-4438-a12d-3aaf1e18ede9
+</file>
+
+<file path="k8s/rf-backend-hyperverge/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/rf-backend-hyperverge/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: redis
+          image: redis:7-alpine
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+</file>
+
+<file path="k8s/rf-backend-hyperverge/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+</file>
+
+<file path="k8s/rf-backend-hyperverge/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api-ramfinbackend.ramfincorp.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="k8s/rf-backend-hyperverge/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/rf-backend-hyperverge/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/rf-backend-hyperverge/Chart.yaml">
+apiVersion: v2
+name: rf-backend-hyperverge
+version: 0.1.0
+description: A Helm chart for deploying the loan-backend service
+appVersion: "1.0"
+keywords:
+  - rf-backend
+  - hyperverge
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="k8s/rf-backend-hyperverge/values.yaml">
+replicaCount: 1
+
+name: rf-backend-hyperverge
+namespace: rf-backend-hyperverge
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/rf-backend-hyperverge
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: rf-backend-hyperverge
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "2500Mi"
+    cpu: "500m"
+  limits:
+    memory: "2500Mi"
+    cpu: "500m"
+
+redis:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+</file>
+
+<file path="k8s/userservice-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="k8s/userservice-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+</file>
+
+<file path="k8s/userservice-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="k8s/userservice-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: userservice.ramfincorp.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="k8s/userservice-backend/templates/secret.yaml">
+
+</file>
+
+<file path="k8s/userservice-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="k8s/userservice-backend/Chart.yaml">
+apiVersion: v2
+name: userservice-backend
+version: 0.1.0
+description: A Helm chart for deploying the crm-backend service
+appVersion: "1.0"
+keywords:
+  - userservice
+  - backend
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="k8s/userservice-backend/values.yaml">
+replicaCount: 1
+
+name: userservice-backend
+namespace: userservice-backend
+image:
+  repository: 361795871686.dkr.ecr.ap-south-1.amazonaws.com/ramfincorp/userservice-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: userservice-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "1024Mi"
+    cpu: "1000m"
+  limits:
+    memory: "1500Mi"
+    cpu: "1000m"
+</file>
+
+<file path="k8s/deploy.sh">
+#!/usr/bin/env bash
+
+serviceName="${1}"
+imageTag="${2}"
+if [ -z "${serviceName}" ] || [ -z "${imageTag}" ]; then
+  echo "Usage: $0 <service-name> <image-tag>"
+  exit 1
+fi
+namespace="${serviceName}"
+
+if [ "${serviceName}" == "razorpay-producer" ]; then
+  namespace="rf-backend"
+fi
+echo "Deploying ${serviceName} with image tag ${imageTag} in namespace: ${namespace}"
+
+kubectl create namespace "${namespace}" --dry-run=client -o yaml | kubectl apply -f -
+case "${serviceName}" in
+  "loan-backend"|"crm-backend"|"rf-backend"|"dsa-backend")
+    echo "Creating/Updating secret ${serviceName}-env in namespace: ${namespace}"
+    kubectl create secret generic "${serviceName}-env" \
+      --from-file=.env=/home/ubuntu/api_code/env/"${serviceName}"-prod-env \
+      --namespace "${namespace}" \
+      --dry-run=client -o yaml | kubectl apply -f -
+    ;;
+esac
+helm upgrade --install \
+  "${serviceName}" "./${serviceName}" \
+  --set image.tag="${imageTag}" \
+  --namespace "${namespace}" \
+  --create-namespace \
+  -f ./"${serviceName}"/values.yaml
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/loki/.htpasswd">
+loki:$apr1$PgQHQnBZ$v3emtbjPD5AbbCNiy6lTb.
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/loki/loki-s3-policy.json">
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "LokiStorage",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::prod-k8s-loki-chunks",
+                "arn:aws:s3:::prod-k8s-loki-chunks/*",
+                "arn:aws:s3:::prod-k8s-loki-ruler",
+                "arn:aws:s3:::prod-k8s-loki-ruler/*"
+            ]
+        }
+    ]
+}
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/loki/loki-values.yaml">
+loki:
+   auth_enabled: false
+   schemaConfig:
+     configs:
+       - from: "2024-04-01"
+         store: tsdb
+         object_store: s3
+         schema: v13
+         index:
+           prefix: loki_index_
+           period: 24h
+   storage_config:
+     aws:
+       region: ap-south-1 # for example, eu-west-2  
+       bucketnames: prod-k8s-loki-chunks # Your actual S3 bucket name, for example, loki-aws-dev-chunks
+       s3forcepathstyle: false
+   ingester:
+       chunk_encoding: snappy
+   pattern_ingester:
+       enabled: true
+   limits_config:
+     allow_structured_metadata: true
+     volume_enabled: true
+     retention_period: 672h # 28 days retention
+   compactor:
+     retention_enabled: true 
+     delete_request_store: s3
+   ruler:
+    enable_api: true
+    storage:
+      type: s3
+      s3:
+        region: ap-south-1 # for example, eu-west-2
+        bucketnames: prod-k8s-loki-ruler # Your actual S3 bucket name, for example, loki-aws-dev-ruler
+        s3forcepathstyle: false
+      alertmanager_url: http://prom:9093 # The URL of the Alertmanager to send alerts (Prometheus, Mimir, etc.)
+
+   querier:
+      max_concurrent: 4
+
+   storage:
+      type: s3
+      bucketNames:
+        chunks: "prod-k8s-loki-chunks" # Your actual S3 bucket name (loki-aws-dev-chunks)
+        ruler: "prod-k8s-loki-ruler" # Your actual S3 bucket name (loki-aws-dev-ruler)
+        # admin: "<Insert s3 bucket name>" # Your actual S3 bucket name (loki-aws-dev-admin) - GEL customers only
+      s3:
+        region: ap-south-1 # eu-west-2
+        #insecure: false
+      # s3forcepathstyle: false
+
+serviceAccount:
+ create: true
+ annotations:
+   "eks.amazonaws.com/role-arn": "arn:aws:iam::361795871686:role/LokiServiceAccountRole" # The service role you created
+
+deploymentMode: Distributed
+
+ingester:
+ replicas: 2
+ zoneAwareReplication:
+  enabled: false
+
+querier:
+ replicas: 1
+ maxUnavailable: 2
+
+queryFrontend:
+ replicas: 1
+ maxUnavailable: 1
+
+queryScheduler:
+ replicas: 1
+
+distributor:
+ replicas: 1
+ maxUnavailable: 2
+compactor:
+ replicas: 1
+
+indexGateway:
+ replicas: 1
+ maxUnavailable: 1
+
+ruler:
+ replicas: 1
+ maxUnavailable: 1
+
+
+# This exposes the Loki gateway so it can be written to and queried externaly
+gateway:
+ service:
+   type: LoadBalancer
+ basicAuth: 
+     enabled: false
+
+# Since we are using basic auth, we need to pass the username and password to the canary
+lokiCanary:
+  extraArgs:
+    - -pass=$(LOKI_PASS)
+    - -user=$(LOKI_USER)
+  extraEnv:
+    - name: LOKI_PASS
+      valueFrom:
+        secretKeyRef:
+          name: canary-basic-auth
+          key: password
+    - name: LOKI_USER
+      valueFrom:
+        secretKeyRef:
+          name: canary-basic-auth
+          key: username
+
+# Enable minio for storage
+minio:
+ enabled: false
+
+backend:
+ replicas: 0
+read:
+ replicas: 0
+write:
+ replicas: 0
+
+singleBinary:
+ replicas: 0
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/loki/trust-policy.json">
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::361795871686:oidc-provider/oidc.eks.ap-south-1.amazonaws.com/id/B372E93D0E4FB9478ED4B754D3DFE94F"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "oidc.eks.ap-south-1.amazonaws.com/id/B372E93D0E4FB9478ED4B754D3DFE94F:sub": "system:serviceaccount:loki:loki",
+                    "oidc.eks.ap-south-1.amazonaws.com/id/B372E93D0E4FB9478ED4B754D3DFE94F:aud": "sts.amazonaws.com"
+                }
+            }
+        }
+    ]
+}
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/loki/values.yaml">
+loki:
+  auth_enabled: false  # Enable for production with RBAC
+  commonConfig:
+    replication_factor: 1  # Increase to 2+ for high availability
+  storage:
+    type: s3
+    bucketNames: 
+      chunks: prod-k8s-loki-data
+      ruler: prod-k8s-loki-data
+      admin: prod-k8s-loki-data
+    s3:
+      bucketNames: prod-k8s-loki-data  # Your S3 bucket name
+      region: ap-south-1  # Your AWS region
+      insecure: false  # Use HTTPS for S3
+      secretName: loki-s3-creds
+  schemaConfig:
+    configs:
+      - from: 2025-09-14
+        store: boltdb-shipper  # Required for scalable mode with S3
+        object_store: s3
+        schema: v12
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 30d  # Adjust retention as needed (e.g., 7 days)
+deploymentMode: distributed  # Explicitly set for scalable mode
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/externalServices.yaml">
+# Add all the external service proxy here
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rf-backend-svc-proxy
+  namespace: common-resources
+spec:
+  type: ExternalName
+  externalName: rf-backend-svc.rf-backend.svc.cluster.local
+---
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/grafana-ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  ingressClassName: nginx   
+  rules:
+    - host: grafana.ramfincorp.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: loki-grafana
+                port:
+                  number: 80
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/ingress-controller.yaml">
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  name: ingress-nginx
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+  namespace: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - secrets
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resourceNames:
+  - ingress-nginx-leader
+  resources:
+  - leases
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - endpoints
+  - nodes
+  - pods
+  - secrets
+  - namespaces
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+rules:
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+  namespace: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx-admission
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-nginx
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx
+  namespace: ingress-nginx
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-nginx-admission
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx-admission
+  namespace: ingress-nginx
+---
+apiVersion: v1
+data:
+  http-snippet: |
+    server {
+      listen 2443;
+      return 308 https://$host$request_uri;
+    }
+  proxy-real-ip-cidr: 172.20.0.0/16
+  use-forwarded-headers: "true"
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "60"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: arn:aws:acm:ap-south-1:084828595551:certificate/eb7b1f32-c127-4faf-bd97-59ddb084e440
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: https
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  externalTrafficPolicy: Local
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - appProtocol: http
+    name: http
+    port: 80
+    protocol: TCP
+    targetPort: tohttps
+  - appProtocol: https
+    name: https
+    port: 443
+    protocol: TCP
+    targetPort: http
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-controller-admission
+  namespace: ingress-nginx
+spec:
+  ports:
+  - appProtocol: https
+    name: https-webhook
+    port: 443
+    targetPort: webhook
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  minReadySeconds: 0
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/instance: ingress-nginx
+      app.kubernetes.io/name: ingress-nginx
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.2
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - /nginx-ingress-controller
+        - --publish-service=$(POD_NAMESPACE)/ingress-nginx-controller
+        - --election-id=ingress-nginx-leader
+        - --controller-class=k8s.io/ingress-nginx
+        - --ingress-class=nginx
+        - --configmap=$(POD_NAMESPACE)/ingress-nginx-controller
+        - --validating-webhook=:8443
+        - --validating-webhook-certificate=/usr/local/certificates/cert
+        - --validating-webhook-key=/usr/local/certificates/key
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: LD_PRELOAD
+          value: /usr/local/lib/libmimalloc.so
+        image: registry.k8s.io/ingress-nginx/controller:v1.13.2@sha256:1f7eaeb01933e719c8a9f4acd8181e555e582330c7d50f24484fb64d2ba9b2ef
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /wait-shutdown
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: controller
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        - containerPort: 80
+          name: https
+          protocol: TCP
+        - containerPort: 2443
+          name: tohttps
+          protocol: TCP
+        - containerPort: 8443
+          name: webhook
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          requests:
+            cpu: 100m
+            memory: 90Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+          runAsGroup: 82
+          runAsNonRoot: true
+          runAsUser: 101
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /usr/local/certificates/
+          name: webhook-cert
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: ingress-nginx
+      terminationGracePeriodSeconds: 300
+      volumes:
+      - name: webhook-cert
+        secret:
+          secretName: ingress-nginx-admission
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission-create
+  namespace: ingress-nginx
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.2
+      name: ingress-nginx-admission-create
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - create
+        - --host=ingress-nginx-controller-admission,ingress-nginx-controller-admission.$(POD_NAMESPACE).svc
+        - --namespace=$(POD_NAMESPACE)
+        - --secret-name=ingress-nginx-admission
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.2@sha256:050a34002d5bb4966849c880c56c91f5320372564245733b33d4b3461b4dbd24
+        imagePullPolicy: IfNotPresent
+        name: create
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: ingress-nginx-admission
+  ttlSecondsAfterFinished: 0
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission-patch
+  namespace: ingress-nginx
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: admission-webhook
+        app.kubernetes.io/instance: ingress-nginx
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+        app.kubernetes.io/version: 1.13.2
+      name: ingress-nginx-admission-patch
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - patch
+        - --webhook-name=ingress-nginx-admission
+        - --namespace=$(POD_NAMESPACE)
+        - --patch-mutating=false
+        - --secret-name=ingress-nginx-admission
+        - --patch-failure-policy=Fail
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.2@sha256:050a34002d5bb4966849c880c56c91f5320372564245733b33d4b3461b4dbd24
+        imagePullPolicy: IfNotPresent
+        name: patch
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/os: linux
+      restartPolicy: OnFailure
+      serviceAccountName: ingress-nginx-admission
+  ttlSecondsAfterFinished: 0
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: nginx
+spec:
+  controller: k8s.io/ingress-nginx
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.13.2
+  name: ingress-nginx-admission
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: ingress-nginx-controller-admission
+      namespace: ingress-nginx
+      path: /networking/v1/ingresses
+      port: 443
+  failurePolicy: Fail
+  matchPolicy: Equivalent
+  name: validate.nginx.ingress.kubernetes.io
+  rules:
+  - apiGroups:
+    - networking.k8s.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - ingresses
+  sideEffects: None
+</file>
+
+<file path="kamakshimoney-k8s/common-resources/namespace.yaml">
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: common-resources
+</file>
+
+<file path="kamakshimoney-k8s/crm-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/crm-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+</file>
+
+<file path="kamakshimoney-k8s/crm-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="kamakshimoney-k8s/crm-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: crm-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/subnets: {{ .Values.ingress.subnets }}
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    
+spec:
+  ingressClassName: alb
+  rules:
+      - http:
+          paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: {{ .Values.service.name }}
+                  port:
+                    number: 80
+</file>
+
+<file path="kamakshimoney-k8s/crm-backend/templates/secret.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/crm-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="kamakshimoney-k8s/crm-backend/Chart.yaml">
+apiVersion: v2
+name: crm-backend
+version: 0.1.0
+description: A Helm chart for deploying the crm-backend service
+appVersion: "1.0"
+keywords:
+  - crm-backend
+  - kubernetes
+maintainers:
+  - name: Mayank Soni
+    email: dev16@ramfincorp.com
+</file>
+
+<file path="kamakshimoney-k8s/crm-backend/values.yaml">
+replicaCount: 2
+name: crm-backend
+namespace: crm-backend
+image:
+  repository: 084828595551.dkr.ecr.ap-south-1.amazonaws.com/kamakshimoney/crm-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+service:
+  name: crm-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "1000m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+ingress:
+  certificateArn: arn:aws:acm:ap-south-1:084828595551:certificate/eb7b1f32-c127-4faf-bd97-59ddb084e440
+  subnets: "subnet-03f56057e0d253216, subnet-04407e78b8d50c9a9, subnet-024fd225be0d051dc"
+</file>
+
+<file path="kamakshimoney-k8s/crm-report/templates/configmap.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/crm-report/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+</file>
+
+<file path="kamakshimoney-k8s/crm-report/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+</file>
+
+<file path="kamakshimoney-k8s/crm-report/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: crm-report.kamakshimoney.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="kamakshimoney-k8s/crm-report/templates/secret.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/crm-report/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="kamakshimoney-k8s/crm-report/Chart.yaml">
+apiVersion: v2
+name: crm-report
+version: 0.1.0
+description: A Helm chart for deploying the loan-backend service
+appVersion: "1.0"
+keywords:
+  - crm
+  - report
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="kamakshimoney-k8s/crm-report/values.yaml">
+replicaCount: 1
+
+name: crm-report
+namespace: crm-report
+image:
+  repository: 084828595551.dkr.ecr.ap-south-1.amazonaws.com/kamakshimoney/crm-report
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: crm-report-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "1500Mi"
+    cpu: "500m"
+  limits:
+    memory: "1500Mi"
+    cpu: "500m"
+</file>
+
+<file path="kamakshimoney-k8s/km-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/km-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probe.liveness.endpoint }}
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: {{ .Values.probe.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probe.liveness.periodSeconds }}
+</file>
+
+<file path="kamakshimoney-k8s/km-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: km-backend-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="kamakshimoney-k8s/km-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api-node.kamakshimoney.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="kamakshimoney-k8s/km-backend/templates/secret.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/km-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="kamakshimoney-k8s/km-backend/Chart.yaml">
+apiVersion: v2
+name: KM-backend
+version: 0.1.0
+description: A Helm chart for deploying the rf-backend service
+appVersion: "1.0"
+keywords:
+  - backend
+  - rf
+  - kubernetes
+maintainers:
+  - name: sandeep.singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="kamakshimoney-k8s/km-backend/values.yaml">
+replicaCount: 2
+
+name: km-backend
+image:
+  repository: 084828595551.dkr.ecr.ap-south-1.amazonaws.com/kamakshimoney/km-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+service:
+  name: km-backend-svc
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    memory: "1500Mi"
+    cpu: "1000m"
+  limits:
+    memory: "1500Mi"
+    cpu: "1000m"
+
+
+ingress:
+  certificateArn: arn:aws:acm:ap-south-1:084828595551:certificate/eb7b1f32-c127-4faf-bd97-59ddb084e440
+</file>
+
+<file path="kamakshimoney-k8s/loan-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/loan-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+</file>
+
+<file path="kamakshimoney-k8s/loan-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+</file>
+
+<file path="kamakshimoney-k8s/loan-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: loan-api.kamakshimoney.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="kamakshimoney-k8s/loan-backend/templates/secret.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/loan-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="kamakshimoney-k8s/loan-backend/Chart.yaml">
+apiVersion: v2
+name: loan-backend
+version: 0.1.0
+description: A Helm chart for deploying the loan-backend service
+appVersion: "1.0"
+keywords:
+  - backend
+  - loan
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="kamakshimoney-k8s/loan-backend/values.yaml">
+replicaCount: 1
+
+name: loan-backend
+namespace: loan-backend
+image:
+  repository: 084828595551.dkr.ecr.ap-south-1.amazonaws.com/kamakshimoney/loan-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: loan-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "2000Mi"
+    cpu: "2000m"
+  limits:
+    memory: "2500Mi"
+    cpu: "2000m"
+</file>
+
+<file path="kamakshimoney-k8s/loans-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/loans-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+</file>
+
+<file path="kamakshimoney-k8s/loans-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+</file>
+
+<file path="kamakshimoney-k8s/loans-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: loans-api.kamakshimoney.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="kamakshimoney-k8s/loans-backend/templates/secret.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/loans-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="kamakshimoney-k8s/loans-backend/Chart.yaml">
+apiVersion: v2
+name: loans-backend
+version: 0.1.0
+description: A Helm chart for deploying the loan-backend service
+appVersion: "1.0"
+keywords:
+  - backend
+  - loans
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="kamakshimoney-k8s/loans-backend/values.yaml">
+replicaCount: 1
+
+name: loans-backend
+namespace: loans-backend
+image:
+  repository: 084828595551.dkr.ecr.ap-south-1.amazonaws.com/kamakshimoney/loans-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: loans-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "2500Mi"
+    cpu: "2000m"
+  limits:
+    memory: "2000Mi"
+    cpu: "2000m"
+</file>
+
+<file path="kamakshimoney-k8s/userservice-backend/templates/configmap.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/userservice-backend/templates/deployment.yaml">
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      nodeSelector:
+        node: self-managed
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+</file>
+
+<file path="kamakshimoney-k8s/userservice-backend/templates/horizontalPodAutoscaler.yaml">
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.name }}-hpa
+  namespace: {{ .Values.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.name }}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+</file>
+
+<file path="kamakshimoney-k8s/userservice-backend/templates/ingress.yaml">
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: {{ .Values.namespace }}
+  name: {{ .Values.name }}-ingress
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "16"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "256k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"      
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"        
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: userservice.kamakshimoney.com
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Values.service.name }}
+            port:
+              number: 80
+</file>
+
+<file path="kamakshimoney-k8s/userservice-backend/templates/secret.yaml">
+
+</file>
+
+<file path="kamakshimoney-k8s/userservice-backend/templates/service.yaml">
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  namespace: {{ .Values.name }}
+  labels:
+    app: {{ .Values.name }}
+    app.kubernetes.io/managed-by: "Helm"
+  annotations:
+    meta.helm.sh/release-name: {{ .Values.name }}
+    meta.helm.sh/release-namespace: {{ .Values.name }}
+spec:
+  selector:
+    app: {{ .Values.name }}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.service.port }}
+  type: {{ .Values.service.type }}
+</file>
+
+<file path="kamakshimoney-k8s/userservice-backend/Chart.yaml">
+apiVersion: v2
+name: userservice-backend
+version: 0.1.0
+description: A Helm chart for deploying the crm-backend service
+appVersion: "1.0"
+keywords:
+  - userservice
+  - backend
+  - kubernetes
+maintainers:
+  - name: Sandeep Singh
+    email: sandeep.singh@ramfincorp.com
+</file>
+
+<file path="kamakshimoney-k8s/userservice-backend/values.yaml">
+replicaCount: 1
+
+name: userservice-backend
+namespace: userservice-backend
+image:
+  repository: 084828595551.dkr.ecr.ap-south-1.amazonaws.com/kamakshimoney/userservice-backend
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  name: userservice-backend-svc
+  type: ClusterIP
+  port: 8080
+
+probe:
+  liveness:
+    endpoint: "/health"
+    initialDelaySeconds: 120
+    periodSeconds: 30
+
+resources:
+  requests:
+    memory: "1024Mi"
+    cpu: "500m"
+  limits:
+    memory: "1500Mi"
+    cpu: "500m"
+</file>
+
+<file path="kamakshimoney-k8s/deploy.sh">
+#!/usr/bin/env bash
+
+serviceName="${1}"
+imageTag="${2}"
+if [ -z "${serviceName}" ] || [ -z "${imageTag}" ]; then
+  echo "Usage: $0 <service-name> <image-tag>"
+  exit 1
+fi
+namespace="${serviceName}"
+
+if [ "${serviceName}" == "razorpay-producer" ]; then
+  namespace="rf-backend"
+fi
+echo "Deploying ${serviceName} with image tag ${imageTag} in namespace: ${namespace}"
+helm upgrade --install \
+  "${serviceName}" "./${serviceName}" \
+  --set image.tag="${imageTag}" \
+  --namespace "${namespace}" \
+  --create-namespace \
+  -f ./"${serviceName}"/values.yaml
+</file>
+
+<file path="python-runner/Dockerfile">
+FROM python:3.14.3-trixie
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    nodejs \
+    npm \
+    git \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install \
+    && rm -rf aws awscliv2.zip
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/
+
+# Install Helm
+RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
+    && chmod 700 get_helm.sh \
+    && ./get_helm.sh \
+    && rm get_helm.sh
+
+# Install AWS CDK CLI
+RUN npm install -g aws-cdk
+
+# Set working directory (usually mapped to the repository root in GitHub Actions or Local mounts)
+WORKDIR /workspace
+
+# Default command
+CMD ["/bin/bash"]
+</file>
+
+<file path=".cgcignore">
+# Auto-generated by CodeGraphContext
+# Default ignore patterns for binary/media files
+# Add your own patterns below
+
+node_modules/
+venv/
+.venv/
+env/
+.env/
+dist/
+build/
+target/
+out/
+.git/
+__pycache__/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.mp4
+*.mp3
+*.zip
+*.tar
+*.gz
+</file>
+
+<file path=".gitignore">
+**/.env
+</file>
+
+<file path="README.md">
+#Install Grafan using S3 storage 
+
+  kubectl create ns monitoring  
+
+  kubectl create secret generic loki-s3-secret -n monitoring   --from-literal=AWS_ACCESS_KEY_ID=<access-key>  --from-literal=AWS_SECRET_ACCESS_KEY=<secret-key>
+
+mkdir monitoring
+
+vim monitoring/values.yaml
+
+#add this on yaml_file
+loki:
+  enabled: true
+
+  # Mount AWS creds from secret
+  extraEnvFrom:
+    - secretRef:
+        name: loki-s3-secret
+
+  config:
+    schema_config:
+      configs:
+        - from: 2020-10-24
+          store: boltdb-shipper
+          object_store: s3
+          schema: v12
+          index:
+            prefix: index_
+            period: 24h
+
+    storage_config:
+      aws:
+        s3: prod-k8s-loki-chunks   # S3 bucket for chunks
+        region: ap-south-1
+      boltdb_shipper:
+        shared_store: s3
+        active_index_directory: /tmp/loki/index
+        cache_location: /tmp/loki/cache
+
+    ruler:
+      storage:
+        type: s3
+        s3:
+          bucketnames: prod-k8s-loki-ruler
+          region: ap-south-1
+
+grafana:
+  enabled: true
+  adminPassword: "Admin@1231233455"
+  
+#create using helm
+
+helm repo update
+
+helm upgrade --install loki grafana/loki-stack   --namespace monitoring --create-namespace   -f monitoring/values.yaml
+
+kubectl logs loki-0 -n monitoring --previous
+ 
+#to check storage location
+kubectl exec -n monitoring -it loki-0 -- ls -l /tmp/loki/index
+
+kubectl exec -n monitoring -it loki-0 -- ls -l /tmp/loki/cache
+
+aws s3 ls s3://prod-k8s-loki-chunks/ --region ap-south-1
+
+# using nodePort access with Local IP
+kubectl patch svc loki-grafana -n monitoring   -p '{"spec": {"type": "NodePort"}}'
+
+ kubectl get svc -n monitoring loki-grafana
+
+kubectl get pods -n monitoring -o wide
+curl http://10.1.21.0:30849/
+<img width="451" height="708" alt="image" src="https://github.com/user-attachments/assets/d0c9a02a-5538-4503-9257-ae68152fdc77" />
+
+
+
+# devOpsStack
+DevOps tools and pipelines for ramfincorp
+## DevOpsStack Helm Charts
+
+This repository organizes Kubernetes Helm charts for deploying various services. Each service has its own folder under `k8s/`, containing its Helm chart and related resources.
+
+## Structure
+
+```
+k8s/
+	deploy.sh                # Script to deploy any Helm chart in this repo
+	<service-folder>/        # Each service has its own folder
+		Chart.yaml             # Helm chart definition
+		values.yaml            # Default values for the chart
+		templates/             # Kubernetes manifests (deployment, service, etc.)
+	common-resources/        # Shared resources (namespace, ingress class, etc.)
+		externalServices.yaml
+		ingressClass.yaml
+		namespace.yaml
+.github/
+	workflows/               # GitHub Actions workflows for CI/CD
+```
+
+## Adding a New Helm Chart
+1. Create a new folder under `k8s/` for your service (e.g., `my-service/`).
+2. Add your Helm chart files (`Chart.yaml`, `values.yaml`, `templates/`).
+3. Update `deploy.sh` to support deploying your new chart.
+4. (Optional) Add or update workflows in `.github/workflows` for automated deployment.
+
+## Deployment
+- Use `k8s/deploy.sh` to deploy any chart. The script will prompt for the chart/service name and handle deployment using Helm.
+- Common resources are managed in `k8s/common-resources/` and should be applied before deploying individual charts if needed.
+
+```
+cd k8s
+./deploy.sh rf-backend <tag-value>
+
+# or for crm
+./deploy.sh crm-backend <tag-value>
+
+```
+
+## CI/CD
+- Workflows in `.github/workflows` automate deployment and other tasks. Update or add workflows as needed for new charts.
+
+---
+For more details, see individual chart folders and scripts.
+
+## Infra Setup
+
+### EKS
+Set the EKS Auto Mode for easier setup from UI
+
+### Monitoring
+
+- Commands to execute to setup prometheus and grafana
+
+```
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+```
+
+- To access the grafana dashboard:
+
+```
+k port-forward svc/prometheus-grafana 9091:80
+```
+Log into grafana dashboard with these credentials: admin/prom-operator
+</file>
+
+</files>

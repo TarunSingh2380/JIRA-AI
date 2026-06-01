@@ -251,7 +251,7 @@ async def run_graph_job(
         action = job.action
         jira_only = action == "jira_tickets_only"
         clear_jira = action == "create_new"
-        force_jira_refresh = action in ("create_new", "regenerate")
+        force_jira_refresh = action in ("create_new", "regenerate", "jira_tickets_only")
 
         # ── Step 1: GitHub repos ──────────────────────────────────────────
         if not jira_only:
