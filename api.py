@@ -39,6 +39,11 @@ from app.json_utils import parse_model_json, review_status, review_text
 from app.llm_client import build_llm_client
 from app.prompt_store import PromptStore
 from app.repository_discovery import discover_graph_repositories
+from app.repo_doc_generator import (
+    generate_repo_document,
+    list_doc_repositories,
+    list_document_types,
+)
 from app.repo_tree_integration import (
     initialize_repo_tree,
     register_repo_tree_routes,
@@ -49,6 +54,7 @@ from app.schemas import (
     AnalyzeTicketRequest,
     AnalyzeTicketResponse,
     CodeAnalysisReportRequest,
+    RepoDocRequest,
     GraphAdminTriggerRequest,
     GraphAdminTriggerResponse,
     GraphJobResponse,
@@ -321,6 +327,44 @@ async def download_code_analysis_report(request: CodeAnalysisReportRequest) -> R
         include_graph_context=request.include_graph_context,
         embedding_model=request.embedding_model,
     )
+    return Response(
+        content=markdown,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ─── Repository documentation ────────────────────────────────────────────────
+
+@app.get("/graph-admin/repo-docs/repositories")
+def graph_admin_repo_doc_repositories() -> dict[str, Any]:
+    log.info("GET /graph-admin/repo-docs/repositories")
+    try:
+        repositories = list_doc_repositories()
+    except Exception as exc:
+        log.exception("Failed to list documentation repositories")
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "repository_count": len(repositories),
+        "repositories": repositories,
+        "doc_types": list_document_types(),
+    }
+
+
+@app.post("/graph-admin/repo-docs/generate")
+def graph_admin_generate_repo_doc(request: RepoDocRequest) -> Response:
+    log.info(
+        "POST /graph-admin/repo-docs/generate repo=%s doc_type=%s",
+        request.repo,
+        request.doc_type,
+    )
+    try:
+        filename, markdown = generate_repo_document(request.repo, request.doc_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("Failed to generate repository document")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return Response(
         content=markdown,
         media_type="text/markdown; charset=utf-8",
@@ -1508,6 +1552,7 @@ GRAPH_ADMIN_HTML = """
         <button class="tab-btn" data-tab="insights">Ticket Insights</button>
         <button class="tab-btn" data-tab="logs">Logs</button>
         <button class="tab-btn" data-tab="testcases">Test Cases</button>
+        <button class="tab-btn" data-tab="docs">Documentation</button>
         <button class="tab-btn" data-tab="similar">Similar Tickets</button>
       </nav>
 
@@ -1752,6 +1797,48 @@ GRAPH_ADMIN_HTML = """
                 onclick="copyTestCases()">Copy Markdown</button>
             </div>
             <div id="tc-output" class="tc-output" hidden></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Documentation -->
+      <div class="tab-panel" id="tab-docs">
+        <div class="tc-layout">
+          <!-- ── Form ── -->
+          <div class="tc-form-col">
+            <p class="tc-section-label">Generate repository document</p>
+            <div class="tc-field">
+              <label class="tc-label">Repository <span class="tc-required">*</span></label>
+              <select id="doc-repo" class="tc-select">
+                <option value="">Loading repositories…</option>
+              </select>
+            </div>
+            <div class="tc-field">
+              <label class="tc-label">Document type</label>
+              <select id="doc-type" class="tc-select"></select>
+            </div>
+            <button id="doc-generateBtn" style="margin-top:18px;" onclick="generateRepoDoc()">Generate Document</button>
+            <button class="secondary" id="doc-downloadBtn" hidden
+              style="margin-top:10px;" onclick="downloadRepoDoc()">Download .md</button>
+            <div id="doc-status" class="status-bar" style="margin-top:10px;"></div>
+            <p class="tc-optional" style="margin-top:14px;line-height:1.5;">
+              Documents are grounded in the repository's RepoTree architecture map and
+              Repomix packed source. Generation can take 30–90 seconds for large repos.
+            </p>
+          </div>
+
+          <!-- ── Results ── -->
+          <div class="tc-result-col" id="doc-result-col">
+            <div id="doc-placeholder" class="tc-placeholder">
+              Pick a repository and click <strong>Generate Document</strong>.
+            </div>
+            <div id="doc-stats" class="tc-stats" hidden>
+              <span class="tc-stat" id="doc-stat-name"></span>
+              <button class="secondary" id="doc-copyBtn"
+                style="width:auto;min-height:32px;padding:5px 14px;font-size:13px;margin-left:auto;"
+                onclick="copyRepoDoc()">Copy Markdown</button>
+            </div>
+            <div id="doc-output" class="tc-output" hidden></div>
           </div>
         </div>
       </div>
@@ -2144,6 +2231,7 @@ GRAPH_ADMIN_HTML = """
       if (name === "jira")     loadJiraTickets();
       if (name === "insights") loadTicketInsights();
       if (name === "logs")     loadLogs();
+      if (name === "docs" && !docReposLoaded) loadDocRepos();
     }
 
     tabBtns.forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
@@ -2226,6 +2314,107 @@ GRAPH_ADMIN_HTML = """
       const el = document.querySelector("#tc-status");
       el.textContent = msg;
       el.className = `status-bar ${cls}`;
+    }
+
+    // ── Repository documentation ─────────────────────────────────────────
+    let lastRepoDocBlob = null;
+    let lastRepoDocMarkdown = "";
+    let lastRepoDocFilename = "document.md";
+    let docReposLoaded = false;
+
+    function docSetStatus(msg, cls = "") {
+      const el = document.querySelector("#doc-status");
+      el.textContent = msg;
+      el.className = `status-bar ${cls}`;
+    }
+
+    async function loadDocRepos() {
+      const repoSel = document.querySelector("#doc-repo");
+      const typeSel = document.querySelector("#doc-type");
+      try {
+        const res = await fetch("/graph-admin/repo-docs/repositories");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to load repositories");
+        const repos = data.repositories || [];
+        repoSel.innerHTML = repos.map(r => {
+          const label = r.ready ? esc(r.name) : `${esc(r.name)} (no artifacts — run a scan)`;
+          return `<option value="${escAttr(r.name)}" ${r.ready ? "" : "disabled"}>${label}</option>`;
+        }).join("") || `<option value="">No repositories configured</option>`;
+        typeSel.innerHTML = (data.doc_types || []).map(t =>
+          `<option value="${escAttr(t.id)}">${esc(t.label)}</option>`
+        ).join("");
+        docReposLoaded = true;
+      } catch (err) {
+        repoSel.innerHTML = `<option value="">Load failed</option>`;
+        docSetStatus(err.message, "error");
+      }
+    }
+
+    async function generateRepoDoc() {
+      const repo = document.querySelector("#doc-repo").value;
+      const docType = document.querySelector("#doc-type").value;
+      if (!repo) { docSetStatus("Pick a repository first", "error"); return; }
+
+      const btn = document.querySelector("#doc-generateBtn");
+      btn.disabled = true;
+      document.querySelector("#doc-downloadBtn").hidden = true;
+      document.querySelector("#doc-stats").hidden = true;
+      document.querySelector("#doc-output").hidden = true;
+      document.querySelector("#doc-placeholder").hidden = false;
+      docSetStatus("Generating document with RepoTree… this can take 30–90 seconds", "running");
+
+      try {
+        const res = await fetch("/graph-admin/repo-docs/generate", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({repo: repo, doc_type: docType}),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || "Document generation failed");
+        }
+        const disposition = res.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="([^"]+)"/);
+        lastRepoDocFilename = match ? match[1] : `${repo}.md`;
+        lastRepoDocBlob = await res.blob();
+        lastRepoDocMarkdown = await lastRepoDocBlob.text();
+
+        document.querySelector("#doc-stat-name").textContent = lastRepoDocFilename;
+        document.querySelector("#doc-stats").hidden = false;
+        document.querySelector("#doc-placeholder").hidden = true;
+        const outputEl = document.querySelector("#doc-output");
+        outputEl.innerHTML = renderMarkdown(lastRepoDocMarkdown);
+        outputEl.hidden = false;
+        document.querySelector("#doc-downloadBtn").hidden = false;
+        docSetStatus("Document ready", "ok");
+      } catch (err) {
+        docSetStatus(err.message, "error");
+        document.querySelector("#doc-placeholder").hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function downloadRepoDoc() {
+      if (!lastRepoDocBlob) return;
+      const url = URL.createObjectURL(lastRepoDocBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = lastRepoDocFilename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function copyRepoDoc() {
+      if (!lastRepoDocMarkdown) return;
+      navigator.clipboard.writeText(lastRepoDocMarkdown).then(() => {
+        const btn = document.querySelector("#doc-copyBtn");
+        const orig = btn.textContent;
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = orig; }, 1800);
+      });
     }
 
     function renderMarkdown(md) {

@@ -189,6 +189,14 @@ class CodeAnalysisReportRequest(BaseModel):
     embedding_model: Literal["codebase_bge_m3", "codebase_qwen3_0_6b", "codebase_mxbai_large"] = "codebase_bge_m3"
 
 
+class RepoDocRequest(BaseModel):
+    repo: str = Field(..., description="Configured RepoTree repository name.")
+    doc_type: str = Field(
+        default="onboarding_guide",
+        description="Document type id, e.g. 'onboarding_guide' or 'architecture_overview'.",
+    )
+
+
 class TestCaseRequest(BaseModel):
     ticket_data: Dict[str, Any] = Field(..., description="JIRA ticket metadata JSON.")
     repo: str | None = Field(

@@ -299,6 +299,16 @@ def repo_tree_health() -> dict[str, Any]:
     }
 
 
+def repo_tree_runtime() -> Any:
+    """Return the initialized in-process RepoTree state (exposes `.config` and `.llm`).
+
+    Raises RuntimeError if RepoTree could not be initialized.
+    """
+    if not initialize_repo_tree():
+        raise RuntimeError(f"RepoTree is not initialized: {repo_tree_status()}")
+    return _repo_tree_state
+
+
 def generate_testcases_in_process(payload: dict[str, Any]) -> dict[str, Any]:
     """Call RepoTree's testcase endpoint function without an HTTP hop."""
     if not initialize_repo_tree():
