@@ -97,42 +97,146 @@ _ONBOARDING_SYSTEM = dedent("""
 """).strip()
 
 
-_ARCHITECTURE_SYSTEM = dedent("""
-    You are a principal engineer writing an architecture overview of a repository for
-    engineers who need to reason about how it is built. Work ONLY from the provided
-    repository context (architecture map and packed source). Ground every statement
-    in real files, modules, routes, tables, or dependencies. Do not invent anything;
-    flag gaps explicitly.
+_METRIC_RULE = dedent("""
+    Metrics rule: derive every metric only from the provided context. File counts,
+    dominant file types, approximate line counts, and largest/most-central files can be
+    computed from the packed source. Git-only signals (commit count, last commit date,
+    branch, churn history) are usually NOT in static context — when a value is unknown,
+    write "not available from static context" instead of inventing a number.
+""").strip()
+
+
+_ARCHITECTURE_SYSTEM = dedent(f"""
+    You are a principal engineer writing the ARCHITECTURE document for a repository.
+    Work ONLY from the provided repository context (architecture map and packed
+    source). Ground every statement in real files, modules, routes, tables, or
+    dependencies. Do not invent anything; flag gaps explicitly. Read this as runtime
+    boundaries and ownership maps, not as a quality score.
+
+    {_METRIC_RULE}
 
     OUTPUT: Markdown only. Start with:
 
-        # Architecture Overview - <repo name>
+        # Architecture - <repo name>
+
+        **Repository:** `<repo name>`
+        **Updated:** <today's date YYYY-MM-DD>
+        **System type:** <one line, e.g. Node.js onboarding API service>
+
+    Then produce these sections IN THIS ORDER. Prefer tables; keep wording terse.
+
+    1. ## Architecture Summary Dashboard — table | Attribute | Value | (primary stack,
+       runtime boundary, repository size in files/lines, dominant file types,
+       deployment path, git branch if known).
+    2. ## System Overview — what it does; then **Entry points** and **Data and state**
+       bullet lists citing real files/datastores.
+    3. ## Architecture Diagrams — a ```mermaid``` flowchart of the high-level components.
+    4. ## Module Dependency Map — table | Module | Files | Responsibility |.
+    5. ## Runtime Boundaries — table | Boundary | Inside | Outside |.
+    6. ## Request Lifecycle — numbered end-to-end flow (entry → validation → domain →
+       data/providers → response; async/deploy side effects isolated).
+    7. ## Deployment Architecture — build/deploy path and key release checks.
+    8. ## Component Catalog — table | Component | Location | Notes |.
+    9. ## Configuration Architecture — how config/secrets are owned (env, config files,
+       secret stores); list the real datastores/integrations configured.
+    10. ## Routing Architecture — the real route/controller/service entry files.
+    11. ## Data Flow — a ```mermaid``` sequence diagram of a representative request.
+    12. ## Blast-Radius Summary — table | Area | Blast radius | Review rule | for the
+        highest-impact files/modules.
+    13. ## Cross-Layer Dependency Violations — table | Pattern to avoid | Why |.
+    14. ## Data Ownership Boundaries — per datastore, the ownership/parity rule.
+    15. ## Module Centrality Summary — table | File | Lines | Why it matters | for the
+        largest/most-imported files (use line counts derived from the packed source).
+    16. ## Architectural Drift Summary — bullet list of structural risks.
+    17. ## Constraints & Trade-offs — bullet list of guardrails.
+
+    Reference env KEY NAMES only, never values. Be concrete and grounded.
+""").strip()
+
+
+_SCORECARD_SYSTEM = dedent(f"""
+    You are a principal engineer producing an executive-readable ENGINEERING SCORECARD
+    for a repository. Work ONLY from the provided repository context (architecture map
+    and packed source). Be candid but calibrated, and keep it high-level: this is a
+    readiness signal, not an implementation walkthrough. Do not invent facts.
+
+    {_METRIC_RULE}
+
+    Scoring: score each parameter out of 10 from the evidence visible in the context,
+    then compute the weighted Overall score out of 100 using the exact weights below.
+    Calibrate honestly — absent tests, secrets in source, or god-object files should pull
+    scores down; clear boundaries and observability should pull them up.
+
+    OUTPUT: Markdown only. Start with:
+
+        # Engineering Scorecard - <repo name>
 
         **Repository:** `<repo name>`
         **Updated:** <today's date YYYY-MM-DD>
 
-    Then produce these sections IN THIS ORDER, table-driven where possible and terse:
+    Then produce these sections IN THIS ORDER:
 
-    1. ## System Summary — what the service does and its role in the wider system.
-    2. ## Tech Stack — table | Layer | Technology | Where used | (language, framework,
-       datastores, queues, key libraries) citing real packages/files.
-    3. ## High-Level Architecture — the main components/layers and how a request or
-       job flows through them end to end (entry point → middleware → controller →
-       service → data/integrations). Reference real file paths.
-    4. ## Module Map — table | Module / directory | Responsibility | Key files |.
-    5. ## Data Stores And Models — datastores used and the main tables/collections
-       grouped by purpose, with real names.
-    6. ## External Integrations And Sister Services — table | Integration | Module /
-       config | Purpose |.
-    7. ## Async Processing — schedulers, queues, workers, and background jobs;
-       distinguish active vs installed-but-unused.
-    8. ## Cross-Cutting Concerns — auth, validation, logging/observability, error
-       handling, configuration — naming the real modules that implement each.
-    9. ## Architectural Risks And Inconsistencies — table | Risk / inconsistency |
-       Evidence | Impact | Suggested action |.
-    10. ## Extension Points — where and how to safely add new functionality.
+    1. ## Parameter-Wise Summary — table | Parameter | Weight | Score | Short
+       observation | with EXACTLY these parameters and weights: Architecture 15%,
+       Code quality 15%, Testing 15%, Security 20%, DevOps / CI-CD 10%,
+       Performance 10%, Documentation 5%, Developer experience 5%,
+       Engineering practices 5%.
+    2. ## Overall Engineering Score — **N / 100** (the weighted total), then one line
+       stating it is an executive readiness signal.
+    3. ## Repo Quality Signals — table | Signal | Value | (primary stack, files/lines,
+       branch if known, last commit if known, build/deploy path).
+    4. ## Risk Heatmap — table | Risk area | Likelihood | Impact | Priority |.
+    5. ## Top 5 Strengths — numbered list.
+    6. ## Top 5 Weaknesses — numbered list.
+    7. ## Production Readiness Summary — short paragraph.
+    8. ## Scale Readiness Summary — short paragraph.
+    9. ## Prioritized Findings — table | Priority | Finding | Impact | (P0..P3).
+    10. ## Recommended Priority Fixes — numbered list of concrete fixes.
 
-    Reference env KEY NAMES only, never values. Be concrete and grounded.
+    Reference env KEY NAMES only, never values.
+""").strip()
+
+
+_AUDIT_SYSTEM = dedent(f"""
+    You are a principal engineer producing a TECHNICAL AUDIT of a repository for
+    engineering leadership. Work ONLY from the provided repository context
+    (architecture map and packed source). Be specific and grounded; cite real files.
+    Do not invent facts or metrics.
+
+    {_METRIC_RULE}
+
+    OUTPUT: Markdown only. Start with:
+
+        # Technical Audit - <repo name>
+
+        **Repository:** `<repo name>`
+        **Updated:** <today's date YYYY-MM-DD>
+
+    Then produce these sections IN THIS ORDER. Prefer tables; keep wording terse.
+
+    1. ## Repo Snapshot Dashboard — table | Signal | Observed state | (stack,
+       files/lines, branch & commit info if known, largest risk surface files).
+    2. ## Executive Summary — 2-4 sentences on overall state and the safest next step.
+    3. ## Repository Quality Assessment — table | Area | Assessment |.
+    4. ## Folder Analysis — table | Folder/module | Purpose | Audit note |.
+    5. ## Dependency Analysis — table | Group | Observed packages | (Runtime vs
+       Development, from the real manifest in context) + a one-line hygiene focus.
+    6. ## Codebase Metrics — table | Metric | Value | (scanned lines, files, dominant
+       file types — derived from packed source).
+    7. ## Complexity Analysis — `###` subsection: table | File | Lines | Why it matters |
+       for the largest files (line counts from packed source).
+    8. ## Coupling & Blast-Radius — `###` subsections covering coupling risk, blast
+       radius, high-risk module inventory, and change-risk mapping (tables where useful).
+    9. ## CI/CD Review — build/deploy path and recommended CI gates.
+    10. ## Testing Review — current state and the highest-value tests to add first.
+    11. ## Security Review — secrets, PII/financial data in logs, auth/webhook/provider
+        boundaries (name the real modules).
+    12. ## Performance Review — largest files, expensive provider calls, worker/bundle risk.
+    13. ## DX Review — what would most improve developer experience.
+    14. ## Technical Debt Assessment — table | Priority | Debt item | Action | (P0..P3).
+    15. ## Recommendations — numbered list of concrete next steps.
+
+    Reference env KEY NAMES only, never values.
 """).strip()
 
 
@@ -142,10 +246,20 @@ _DOC_TYPES: dict[str, dict[str, Any]] = {
         "system": _ONBOARDING_SYSTEM,
         "filename": "ONBOARDING_GUIDE",
     },
-    "architecture_overview": {
-        "label": "Architecture Overview",
+    "architecture": {
+        "label": "Architecture",
         "system": _ARCHITECTURE_SYSTEM,
-        "filename": "ARCHITECTURE_OVERVIEW",
+        "filename": "ARCHITECTURE",
+    },
+    "engineering_scorecard": {
+        "label": "Engineering Scorecard",
+        "system": _SCORECARD_SYSTEM,
+        "filename": "ENGINEERING_SCORECARD",
+    },
+    "technical_audit": {
+        "label": "Technical Audit",
+        "system": _AUDIT_SYSTEM,
+        "filename": "TECHNICAL_AUDIT",
     },
 }
 

@@ -55,6 +55,7 @@ from app.schemas import (
     AnalyzeTicketResponse,
     CodeAnalysisReportRequest,
     RepoDocRequest,
+    RepoDocExportRequest,
     GraphAdminTriggerRequest,
     GraphAdminTriggerResponse,
     GraphJobResponse,
@@ -368,6 +369,35 @@ def graph_admin_generate_repo_doc(request: RepoDocRequest) -> Response:
     return Response(
         content=markdown,
         media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/graph-admin/repo-docs/export")
+def graph_admin_export_repo_doc(request: RepoDocExportRequest) -> Response:
+    log.info("POST /graph-admin/repo-docs/export filename=%s", request.filename)
+    if not request.markdown.strip():
+        raise HTTPException(status_code=400, detail="No markdown content to export")
+    try:
+        from app.markdown_docx import markdown_to_docx_bytes
+
+        data = markdown_to_docx_bytes(request.markdown, title=request.filename)
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="The 'python-docx' package is required for DOCX export",
+        ) from exc
+    except Exception as exc:
+        log.exception("DOCX export failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    base = request.filename or "document"
+    if base.lower().endswith(".md"):
+        base = base[:-3]
+    filename = f"{base}.docx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -1817,9 +1847,16 @@ GRAPH_ADMIN_HTML = """
               <label class="tc-label">Document type</label>
               <select id="doc-type" class="tc-select"></select>
             </div>
+            <div class="tc-field">
+              <label class="tc-label">Download format</label>
+              <select id="doc-format" class="tc-select">
+                <option value="docx" selected>Word document (.docx)</option>
+                <option value="md">Markdown (.md)</option>
+              </select>
+            </div>
             <button id="doc-generateBtn" style="margin-top:18px;" onclick="generateRepoDoc()">Generate Document</button>
             <button class="secondary" id="doc-downloadBtn" hidden
-              style="margin-top:10px;" onclick="downloadRepoDoc()">Download .md</button>
+              style="margin-top:10px;" onclick="downloadRepoDoc()">Download</button>
             <div id="doc-status" class="status-bar" style="margin-top:10px;"></div>
             <p class="tc-optional" style="margin-top:14px;line-height:1.5;">
               Documents are grounded in the repository's RepoTree architecture map and
@@ -2395,16 +2432,52 @@ GRAPH_ADMIN_HTML = """
       }
     }
 
-    function downloadRepoDoc() {
-      if (!lastRepoDocBlob) return;
-      const url = URL.createObjectURL(lastRepoDocBlob);
+    function triggerBlobDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = lastRepoDocFilename;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+    }
+
+    async function downloadRepoDoc() {
+      if (!lastRepoDocMarkdown) return;
+      const format = document.querySelector("#doc-format").value;
+      const baseName = lastRepoDocFilename.replace(/\.md$/i, "");
+
+      if (format === "md") {
+        triggerBlobDownload(
+          new Blob([lastRepoDocMarkdown], {type: "text/markdown"}),
+          `${baseName}.md`
+        );
+        return;
+      }
+
+      const btn = document.querySelector("#doc-downloadBtn");
+      btn.disabled = true;
+      docSetStatus("Building Word document…", "running");
+      try {
+        const res = await fetch("/graph-admin/repo-docs/export", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({markdown: lastRepoDocMarkdown, filename: baseName}),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || "DOCX export failed");
+        }
+        const disposition = res.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="([^"]+)"/);
+        triggerBlobDownload(await res.blob(), match ? match[1] : `${baseName}.docx`);
+        docSetStatus("Document ready", "ok");
+      } catch (err) {
+        docSetStatus(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     function copyRepoDoc() {

@@ -193,7 +193,16 @@ class RepoDocRequest(BaseModel):
     repo: str = Field(..., description="Configured RepoTree repository name.")
     doc_type: str = Field(
         default="onboarding_guide",
-        description="Document type id, e.g. 'onboarding_guide' or 'architecture_overview'.",
+        description="Document type id, e.g. 'onboarding_guide', 'architecture', "
+                    "'engineering_scorecard', or 'technical_audit'.",
+    )
+
+
+class RepoDocExportRequest(BaseModel):
+    markdown: str = Field(..., description="Markdown document body to convert.")
+    filename: str = Field(
+        default="document",
+        description="Base filename (without extension) for the exported file.",
     )
 
 
