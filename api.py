@@ -40,7 +40,6 @@ from app.llm_client import build_llm_client
 from app.prompt_store import PromptStore
 from app.repository_discovery import discover_graph_repositories
 from app.repo_doc_generator import (
-    generate_repo_document,
     list_doc_repositories,
     list_document_types,
 )
@@ -353,24 +352,32 @@ def graph_admin_repo_doc_repositories() -> dict[str, Any]:
 
 
 @app.post("/graph-admin/repo-docs/generate")
-def graph_admin_generate_repo_doc(request: RepoDocRequest) -> Response:
+def graph_admin_generate_repo_doc(request: RepoDocRequest) -> dict[str, Any]:
+    """Start async document generation and return a job id to poll.
+
+    Generation runs 30s-4min, so it is done on a background thread to avoid
+    reverse-proxy read timeouts (e.g. nginx 504). Poll
+    /graph-admin/repo-docs/jobs/{job_id} for the result.
+    """
     log.info(
         "POST /graph-admin/repo-docs/generate repo=%s doc_type=%s",
         request.repo,
         request.doc_type,
     )
-    try:
-        filename, markdown = generate_repo_document(request.repo, request.doc_type)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        log.exception("Failed to generate repository document")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return Response(
-        content=markdown,
-        media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    from app.repo_doc_jobs import start_doc_job
+
+    job_id = start_doc_job(request.repo, request.doc_type)
+    return {"job_id": job_id, "status": "pending"}
+
+
+@app.get("/graph-admin/repo-docs/jobs/{job_id}")
+def graph_admin_repo_doc_job(job_id: str) -> dict[str, Any]:
+    from app.repo_doc_jobs import get_doc_job
+
+    job = get_doc_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown document job id")
+    return job
 
 
 @app.post("/graph-admin/repo-docs/export")
@@ -2354,7 +2361,6 @@ GRAPH_ADMIN_HTML = """
     }
 
     // ── Repository documentation ─────────────────────────────────────────
-    let lastRepoDocBlob = null;
     let lastRepoDocMarkdown = "";
     let lastRepoDocFilename = "document.md";
     let docReposLoaded = false;
@@ -2387,6 +2393,27 @@ GRAPH_ADMIN_HTML = """
       }
     }
 
+    function pollDocJob(jobId, startedAt) {
+      const MAX_MS = 600000; // 10 minutes
+      return new Promise((resolve, reject) => {
+        const tick = async () => {
+          try {
+            const res = await fetch(`/graph-admin/repo-docs/jobs/${jobId}`);
+            const job = await res.json();
+            if (!res.ok) { reject(new Error(job.detail || "Job status check failed")); return; }
+            if (job.status === "done" || job.status === "error") { resolve(job); return; }
+            if (Date.now() - startedAt > MAX_MS) { reject(new Error("Generation timed out")); return; }
+            const secs = Math.round((Date.now() - startedAt) / 1000);
+            docSetStatus(`Generating document with RepoTree… ${secs}s elapsed`, "running");
+            setTimeout(tick, 3000);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        tick();
+      });
+    }
+
     async function generateRepoDoc() {
       const repo = document.querySelector("#doc-repo").value;
       const docType = document.querySelector("#doc-type").value;
@@ -2398,23 +2425,23 @@ GRAPH_ADMIN_HTML = """
       document.querySelector("#doc-stats").hidden = true;
       document.querySelector("#doc-output").hidden = true;
       document.querySelector("#doc-placeholder").hidden = false;
-      docSetStatus("Generating document with RepoTree… this can take 30–90 seconds", "running");
+      docSetStatus("Generating document with RepoTree… this can take 30–240 seconds", "running");
 
+      const startedAt = Date.now();
       try {
         const res = await fetch("/graph-admin/repo-docs/generate", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({repo: repo, doc_type: docType}),
         });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.detail || "Document generation failed");
-        }
-        const disposition = res.headers.get("Content-Disposition") || "";
-        const match = disposition.match(/filename="([^"]+)"/);
-        lastRepoDocFilename = match ? match[1] : `${repo}.md`;
-        lastRepoDocBlob = await res.blob();
-        lastRepoDocMarkdown = await lastRepoDocBlob.text();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || "Failed to start generation");
+
+        const job = await pollDocJob(data.job_id, startedAt);
+        if (job.status === "error") throw new Error(job.error || "Document generation failed");
+
+        lastRepoDocMarkdown = job.markdown || "";
+        lastRepoDocFilename = job.filename || `${repo}.md`;
 
         document.querySelector("#doc-stat-name").textContent = lastRepoDocFilename;
         document.querySelector("#doc-stats").hidden = false;
