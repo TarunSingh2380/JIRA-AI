@@ -30,7 +30,42 @@ _DOC_MAX_OUTPUT_TOKENS = 16_000
 # Document type registry
 # ============================================================
 
-_ONBOARDING_SYSTEM = dedent("""
+# This repo emits FOUR documents. To keep a single source of truth and avoid
+# cross-document duplication, every concern is owned by exactly ONE document; the
+# other documents reference it instead of reproducing its tables.
+_DOC_FAMILY_MAP = dedent("""
+    This repository has FOUR separate generated documents, each with a single,
+    non-overlapping responsibility. Include ONLY what THIS document owns. For anything
+    owned by another document, point the reader to it in one short line — never
+    reproduce another document's tables or lists.
+
+    Ownership map (single source of truth per concern):
+    - Onboarding Guide — purpose, local setup, migrations, modules/packages inventory,
+      route/endpoint catalog, schedulers & queues, database tables, major features,
+      external integrations, setup inconsistencies & resolutions, feature entry
+      points, troubleshooting.
+    - Architecture — runtime/structural design only: summary dashboard, system
+      overview, mermaid diagrams, module dependency map & runtime boundaries, request
+      lifecycle, deployment architecture, configuration architecture, data flow,
+      cross-layer dependency violations, data ownership, constraints & trade-offs.
+    - Engineering Scorecard — executive scoring only: weighted parameter scores,
+      overall score, repo quality signals, risk heatmap, top strengths/weaknesses,
+      readiness summaries, prioritized findings.
+    - Technical Audit — deep code-health & remediation: complexity, coupling,
+      blast-radius, high-risk module inventory, dependency hygiene, dead code,
+      CI/testing/security/performance/DX reviews, technical debt, recommendations.
+""").strip()
+
+
+_ONBOARDING_SYSTEM = dedent(f"""
+    {_DOC_FAMILY_MAP}
+
+    YOUR DOCUMENT: Onboarding Guide. Stay strictly in scope. Do NOT include
+    architecture diagrams or runtime-boundary maps (Architecture owns those),
+    code-health metrics such as complexity/coupling/blast-radius/centrality (Technical
+    Audit owns those), or quality scores/heatmaps (Engineering Scorecard owns those) —
+    reference those documents in one line instead.
+
     You are a senior staff engineer writing an authoritative onboarding guide for a
     repository that a brand-new developer has never seen. You work ONLY from the
     repository context provided (its architecture map and packed source). Every fact
@@ -107,6 +142,15 @@ _METRIC_RULE = dedent("""
 
 
 _ARCHITECTURE_SYSTEM = dedent(f"""
+    {_DOC_FAMILY_MAP}
+
+    YOUR DOCUMENT: Architecture. Cover runtime/structural design ONLY. Do NOT include
+    setup/run instructions, the full endpoint catalog, the full package or database-
+    table inventory (the Onboarding Guide owns those), code-health metrics such as
+    complexity/coupling/blast-radius/centrality (Technical Audit owns those), or
+    quality scores (Engineering Scorecard owns those). Where structure references those
+    things, point to the owning document in one line instead of reproducing it.
+
     You are a principal engineer writing the ARCHITECTURE document for a repository.
     Work ONLY from the provided repository context (architecture map and packed
     source). Ground every statement in real files, modules, routes, tables, or
@@ -127,34 +171,42 @@ _ARCHITECTURE_SYSTEM = dedent(f"""
 
     1. ## Architecture Summary Dashboard — table | Attribute | Value | (primary stack,
        runtime boundary, repository size in files/lines, dominant file types,
-       deployment path, git branch if known).
+       deployment path, git branch if known). One-line stack/size only — not an inventory.
     2. ## System Overview — what it does; then **Entry points** and **Data and state**
        bullet lists citing real files/datastores.
     3. ## Architecture Diagrams — a ```mermaid``` flowchart of the high-level components.
-    4. ## Module Dependency Map — table | Module | Files | Responsibility |.
+    4. ## Module Dependency Map — table | Module | Files | Responsibility | focused on
+       how modules depend on / relate to each other (not a package inventory).
     5. ## Runtime Boundaries — table | Boundary | Inside | Outside |.
     6. ## Request Lifecycle — numbered end-to-end flow (entry → validation → domain →
        data/providers → response; async/deploy side effects isolated).
     7. ## Deployment Architecture — build/deploy path and key release checks.
-    8. ## Component Catalog — table | Component | Location | Notes |.
-    9. ## Configuration Architecture — how config/secrets are owned (env, config files,
-       secret stores); list the real datastores/integrations configured.
-    10. ## Routing Architecture — the real route/controller/service entry files.
-    11. ## Data Flow — a ```mermaid``` sequence diagram of a representative request.
-    12. ## Blast-Radius Summary — table | Area | Blast radius | Review rule | for the
-        highest-impact files/modules.
-    13. ## Cross-Layer Dependency Violations — table | Pattern to avoid | Why |.
-    14. ## Data Ownership Boundaries — per datastore, the ownership/parity rule.
-    15. ## Module Centrality Summary — table | File | Lines | Why it matters | for the
-        largest/most-imported files (use line counts derived from the packed source).
-    16. ## Architectural Drift Summary — bullet list of structural risks.
-    17. ## Constraints & Trade-offs — bullet list of guardrails.
+    8. ## Configuration Architecture — how config/secrets are owned (env, config files,
+       secret stores); name the real config sources (env KEY names only).
+    9. ## Data Flow — a ```mermaid``` sequence diagram of a representative request.
+    10. ## Cross-Layer Dependency Violations — table | Pattern to avoid | Why |.
+    11. ## Data Ownership Boundaries — per datastore, which layer/module owns it and the
+        parity/change rule (do NOT re-list every table — that lives in the Onboarding
+        Guide).
+    12. ## Constraints & Trade-offs — bullet list of guardrails.
+
+    For anything outside this scope (full endpoint list, all tables, code-health
+    metrics, scores), add a one-line pointer such as "See the Onboarding Guide" or
+    "See the Technical Audit" instead of a table.
 
     Reference env KEY NAMES only, never values. Be concrete and grounded.
 """).strip()
 
 
 _SCORECARD_SYSTEM = dedent(f"""
+    {_DOC_FAMILY_MAP}
+
+    YOUR DOCUMENT: Engineering Scorecard. Produce scoring and executive signals ONLY.
+    Do NOT include setup steps, endpoint/table/module inventories, architecture
+    diagrams, or detailed remediation walkthroughs — those live in the Onboarding
+    Guide, Architecture, and Technical Audit. Keep findings to one-line signals and
+    point to the Technical Audit for detail.
+
     You are a principal engineer producing an executive-readable ENGINEERING SCORECARD
     for a repository. Work ONLY from the provided repository context (architecture map
     and packed source). Be candid but calibrated, and keep it high-level: this is a
@@ -198,6 +250,15 @@ _SCORECARD_SYSTEM = dedent(f"""
 
 
 _AUDIT_SYSTEM = dedent(f"""
+    {_DOC_FAMILY_MAP}
+
+    YOUR DOCUMENT: Technical Audit. Cover code-health and remediation ONLY. Do NOT
+    include getting-started/setup, business-feature descriptions, the full endpoint/
+    table inventory, architecture diagrams, or the scored rubric (the Engineering
+    Scorecard owns scoring). You DO own the detailed metrics — complexity, coupling,
+    blast-radius, high-risk inventory, dependency hygiene, dead code. Reference the
+    other documents in one line where needed.
+
     You are a principal engineer producing a TECHNICAL AUDIT of a repository for
     engineering leadership. Work ONLY from the provided repository context
     (architecture map and packed source). Be specific and grounded; cite real files.
