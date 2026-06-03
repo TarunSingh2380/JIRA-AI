@@ -65,6 +65,52 @@ def _empty_usage() -> dict[str, Any]:
     }
 
 
+def estimate_doc_job(repo: str, doc_type: str) -> dict[str, Any]:
+    """Pre-flight cost/cache check for a (repo, doc_type) before starting a job.
+
+    Builds the model context (just reads cached artifacts, spends no tokens),
+    then for each document type reports whether a previously generated copy can
+    be reused for the current code (cost 0) and estimates the USD cost of the
+    documents that would actually be generated. The UI uses this to confirm
+    spend up front — and to skip the cost prompt when everything is already
+    cached. ``doc_type == "all"`` covers every document type.
+
+    Raises ValueError on bad input / missing artifacts (same as generation).
+    """
+    mode = "all" if doc_type == "all" else "single"
+    doc_types = document_type_ids() if mode == "all" else [doc_type]
+
+    context, _stats = build_document_context(repo)
+    ctx_hash = context_hash(context)
+    est_input = max(1, len(context) // 4)
+
+    docs: list[dict[str, Any]] = []
+    est_cost = 0.0
+    est_tokens = 0
+    cached_count = 0
+    for dtype in doc_types:
+        cached = get_cached_artifact(repo, dtype, ctx_hash) is not None
+        if cached:
+            cached_count += 1
+        else:
+            est_cost += compute_cost(settings.llm_model, est_input, _ESTIMATED_OUTPUT_TOKENS)
+            est_tokens += est_input
+        docs.append({"doc_type": dtype, "label": document_label(dtype), "cached": cached})
+
+    uncached_count = len(doc_types) - cached_count
+    return {
+        "repo": repo,
+        "doc_type": doc_type,
+        "mode": mode,
+        "docs": docs,
+        "cached_count": cached_count,
+        "uncached_count": uncached_count,
+        "all_cached": uncached_count == 0,
+        "estimated_input_tokens": est_tokens,
+        "estimated_cost_usd": round(est_cost, 6),
+    }
+
+
 def start_doc_job(repo: str, doc_type: str, user_email: Optional[str] = None) -> str:
     """Create a job and run generation on a background thread. Returns job_id.
 

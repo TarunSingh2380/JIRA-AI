@@ -430,6 +430,29 @@ def graph_admin_generate_repo_doc(
     return {"job_id": job_id, "status": "pending"}
 
 
+@app.post("/graph-admin/repo-docs/estimate")
+def graph_admin_estimate_repo_doc(
+    request: RepoDocRequest,
+    _user: CurrentUser = Depends(require_tab("docs")),
+) -> dict[str, Any]:
+    """Pre-flight cost + cache check used by the UI to confirm spend before
+    starting a paid job. Documents already generated for the current code are
+    reused at no cost, so when ``all_cached`` is true the UI can skip the cost
+    prompt. Spends no tokens.
+    """
+    log.info(
+        "POST /graph-admin/repo-docs/estimate repo=%s doc_type=%s",
+        request.repo,
+        request.doc_type,
+    )
+    from app.repo_doc_jobs import estimate_doc_job
+
+    try:
+        return estimate_doc_job(request.repo, request.doc_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/graph-admin/repo-docs/jobs/{job_id}")
 def graph_admin_repo_doc_job(
     job_id: str,

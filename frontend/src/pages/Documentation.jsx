@@ -20,6 +20,9 @@ export default function Documentation() {
   const [jobId, setJobId] = useState("");
   const [emailTo, setEmailTo] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
+  const [estimating, setEstimating] = useState(false);
+  const [confirm, setConfirm] = useState(null); // pre-flight estimate awaiting confirmation
+  const [delivery, setDelivery] = useState("download"); // "download" | "email"
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -50,11 +53,46 @@ export default function Documentation() {
   const estimate = (job && job.estimate) || {};
   const progress = (job && job.progress) || {};
 
-  async function generate() {
+  // Step 1: ask the backend for a cost/cache estimate, then show the confirm panel.
+  async function requestGenerate() {
     if (!repo) {
       setStatus({ msg: "Pick a repository first", cls: "error" });
       return;
     }
+    setEstimating(true);
+    setConfirm(null);
+    setStatus({ msg: "Checking cost…", cls: "running" });
+    try {
+      const est = await apiFetch("/graph-admin/repo-docs/estimate", {
+        method: "POST",
+        body: { repo, doc_type: docType },
+      });
+      setConfirm(est);
+      setStatus({ msg: "", cls: "" });
+    } catch (err) {
+      setStatus({ msg: err.message, cls: "error" });
+    } finally {
+      setEstimating(false);
+    }
+  }
+
+  // Step 2: user confirmed the estimate + picked a delivery method — start the job.
+  function confirmGenerate() {
+    if (delivery === "email" && !emailTo.trim()) {
+      setStatus({ msg: "Enter a recipient email before generating", cls: "error" });
+      return;
+    }
+    const chosenDelivery = delivery;
+    setConfirm(null);
+    generate(chosenDelivery);
+  }
+
+  function cancelConfirm() {
+    setConfirm(null);
+    setStatus({ msg: "Generation cancelled", cls: "" });
+  }
+
+  async function generate(deliveryChoice) {
     setBusy(true);
     setJob(null);
     setJobId("");
@@ -77,6 +115,8 @@ export default function Documentation() {
         setJob(cur);
         if (cur.status === "done") {
           setStatus({ msg: "Done", cls: "ok" });
+          // Honour the delivery choice made before generation started.
+          await deliver(deliveryChoice, cur);
           break;
         }
         if (cur.status === "error") {
@@ -97,8 +137,19 @@ export default function Documentation() {
     }
   }
 
-  async function downloadSingle() {
-    const d = docs[0];
+  // Run the chosen post-generation action against a fresh job record (state may
+  // not have re-rendered yet, so we read straight from the polled job).
+  async function deliver(choice, jobRec) {
+    if (choice === "email") {
+      await sendEmailTo(jobRec.job_id, emailTo.trim());
+    } else if (jobRec.doc_type === "all") {
+      await downloadZipFor(jobRec.job_id, jobRec.repo || repo);
+    } else {
+      await downloadDoc((jobRec.docs || [])[0]);
+    }
+  }
+
+  async function downloadDoc(d) {
     if (!d) return;
     const baseName = d.filename.replace(/\.md$/i, "");
     if (format === "md") {
@@ -121,12 +172,12 @@ export default function Documentation() {
     }
   }
 
-  async function downloadZip() {
+  async function downloadZipFor(id, repoName) {
     setDownloadBusy(true);
     setStatus({ msg: "Building ZIP…", cls: "running" });
     try {
-      await apiDownload(`/graph-admin/repo-docs/jobs/${jobId}/zip`, {
-        fallbackName: `${repo}-docs.zip`,
+      await apiDownload(`/graph-admin/repo-docs/jobs/${id}/zip`, {
+        fallbackName: `${repoName}-docs.zip`,
       });
       setStatus({ msg: "ZIP ready", cls: "ok" });
     } catch (err) {
@@ -136,8 +187,8 @@ export default function Documentation() {
     }
   }
 
-  async function sendEmail() {
-    if (!emailTo.trim()) {
+  async function sendEmailTo(id, to) {
+    if (!to) {
       setStatus({ msg: "Enter a recipient email", cls: "error" });
       return;
     }
@@ -146,7 +197,7 @@ export default function Documentation() {
     try {
       const res = await apiFetch("/graph-admin/repo-docs/email", {
         method: "POST",
-        body: { job_id: jobId, to_email: emailTo.trim() },
+        body: { job_id: id, to_email: to },
       });
       setStatus({ msg: `Emailed to ${res.recipients.join(", ")}`, cls: "ok" });
     } catch (err) {
@@ -155,6 +206,11 @@ export default function Documentation() {
       setEmailBusy(false);
     }
   }
+
+  // Thin wrappers so the manual post-generation buttons reuse the same helpers.
+  const downloadSingle = () => downloadDoc(docs[0]);
+  const downloadZip = () => downloadZipFor(jobId, repo);
+  const sendEmail = () => sendEmailTo(jobId, emailTo.trim());
 
   return (
     <>
@@ -189,10 +245,78 @@ export default function Documentation() {
                 <option value="md">Markdown (.md)</option>
               </select>
             </div>
-            <button style={{ marginTop: 18 }} disabled={busy} onClick={generate}>
-              {isAll ? "Generate All Documents" : "Generate Document"}
+            <button
+              style={{ marginTop: 18 }}
+              disabled={busy || estimating || !!confirm}
+              onClick={requestGenerate}
+            >
+              {estimating ? "Checking cost…" : isAll ? "Generate All Documents" : "Generate Document"}
             </button>
             <div className={`status-bar ${status.cls}`} style={{ marginTop: 10 }}>{status.msg}</div>
+
+            {/* Confirmation: show estimated cost (skipped when reused/free) and pick delivery */}
+            {confirm && (
+              <div className="sim-card" style={{ marginTop: 12, padding: 14 }}>
+                <p className="tc-section-label" style={{ marginTop: 0 }}>Confirm generation</p>
+                {confirm.all_cached ? (
+                  <p className="tc-optional" style={{ marginTop: 0, lineHeight: 1.5 }}>
+                    {confirm.mode === "all" ? "These documents were" : "This document was"} already generated
+                    for the current code and will be <strong>reused at no cost</strong> (0 tokens).
+                  </p>
+                ) : (
+                  <p className="tc-optional" style={{ marginTop: 0, lineHeight: 1.5 }}>
+                    Estimated cost ≈ <strong>{fmtCost(confirm.estimated_cost_usd)}</strong>{" "}
+                    ({fmtTokens(confirm.estimated_input_tokens)} input tokens).
+                    {confirm.mode === "all" &&
+                      ` ${confirm.uncached_count} of ${confirm.docs.length} documents will be generated` +
+                        (confirm.cached_count ? `; ${confirm.cached_count} reused free.` : ".")}
+                  </p>
+                )}
+
+                <div className="tc-field" style={{ marginBottom: 8 }}>
+                  <label className="tc-label">After generation</label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400, cursor: "pointer" }}>
+                    <input
+                      type="radio"
+                      name="delivery"
+                      checked={delivery === "download"}
+                      onChange={() => setDelivery("download")}
+                    />
+                    Auto-download the {isAll ? "ZIP" : format === "md" ? "Markdown" : "Word document"}
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400, cursor: "pointer", marginTop: 4 }}>
+                    <input
+                      type="radio"
+                      name="delivery"
+                      checked={delivery === "email"}
+                      onChange={() => setDelivery("email")}
+                    />
+                    Email it
+                  </label>
+                </div>
+
+                {delivery === "email" && (
+                  <div className="tc-field">
+                    <input
+                      className="tc-input"
+                      type="text"
+                      placeholder="name@example.com, other@example.com"
+                      value={emailTo}
+                      onChange={(e) => setEmailTo(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <button style={{ width: "auto" }} onClick={confirmGenerate}>
+                    {confirm.all_cached ? "Confirm (free)" : "Confirm & Generate"}
+                  </button>
+                  <button className="secondary" style={{ width: "auto" }} onClick={cancelConfirm}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Live progress + token/cost meter */}
             {job && (job.status === "running" || done) && (
