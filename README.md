@@ -86,16 +86,20 @@ admin and skips user auth. The open workflow/scan endpoints are unaffected.
 Roles map to the set of UI tabs / API capabilities they may use. Defaults
 (`app/auth.py` → `DEFAULT_ROLE_TABS`, override with `AUTH_ROLE_TABS`):
 
-| Role        | Tabs                                                   |
-| ----------- | ------------------------------------------------------ |
-| `admin`     | all (plus the Users page)                              |
-| `developer` | repos, logs, jira, testcases, similar, docs            |
-| `qa`        | jira, insights, testcases, similar, docs               |
-| `viewer`    | jira, insights, logs                                   |
+| Role            | Capabilities                                       | Lands on        |
+| --------------- | -------------------------------------------------- | --------------- |
+| `admin`         | everything (incl. Users page)                      | Dashboard       |
+| `developer`     | repos, logs, jira, testcases, similar, docs        | Dashboard       |
+| `qa`            | jira, insights, testcases, similar, docs           | Dashboard       |
+| `viewer`        | jira, insights, logs                               | Dashboard       |
+| `documentation` | docs only                                          | Documentation   |
+| `usermgr`       | users only (manage users without full admin)       | Users page      |
 
-Tab keys: `repos, jira, insights, logs, testcases, similar, docs`. The backend
-enforces these per endpoint; the SPA hides tabs the role cannot use. Admins
-manage users and roles at `/users`.
+Capability keys: `repos, jira, insights, logs, testcases, similar, docs, users`.
+The first six are dashboard tabs; `docs` gates the Documentation portal and
+`users` gates the User Management page. The backend enforces these per endpoint;
+the SPA hides what the role cannot use and routes each role to its home page
+(`/` redirects single-purpose roles straight to their one area).
 
 ### Documentation portal (separate URL)
 

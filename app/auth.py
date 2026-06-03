@@ -41,15 +41,21 @@ log = logging.getLogger(__name__)
 
 # ─── Tabs & roles ────────────────────────────────────────────────────────────
 
-ALL_TABS = ["repos", "jira", "insights", "logs", "testcases", "similar", "docs"]
+# Capability keys. The first six are dashboard tabs; "docs" gates the standalone
+# Documentation portal; "users" gates the User Management page (no full admin
+# rights needed). "*" in a role grants every capability.
+ALL_TABS = ["repos", "jira", "insights", "logs", "testcases", "similar", "docs", "users"]
 
 # Per-tab custom roles. Edit this map (or override with the AUTH_ROLE_TABS env
-# var as JSON) to change which role can reach which tab. "*" grants all tabs.
+# var as JSON) to change which role can reach which capability.
 DEFAULT_ROLE_TABS: dict[str, list[str]] = {
     "admin": ["*"],
     "developer": ["repos", "logs", "jira", "testcases", "similar", "docs"],
     "qa": ["jira", "insights", "testcases", "similar", "docs"],
     "viewer": ["jira", "insights", "logs"],
+    # Single-purpose roles: land on (and only see) one area.
+    "documentation": ["docs"],
+    "usermgr": ["users"],
 }
 
 
@@ -438,18 +444,18 @@ def me(user: CurrentUser = Depends(get_current_user)) -> UserOut:
 
 
 @router.get("/roles")
-def roles(_: CurrentUser = Depends(require_admin)) -> dict:
+def roles(_: CurrentUser = Depends(require_tab("users"))) -> dict:
     return {"roles": known_roles(), "tabs": ALL_TABS, "role_tabs": ROLE_TABS}
 
 
 @router.get("/users", response_model=list[UserOut])
-def admin_list_users(_: CurrentUser = Depends(require_admin)) -> list[UserOut]:
+def admin_list_users(_: CurrentUser = Depends(require_tab("users"))) -> list[UserOut]:
     return [_to_user_out(u) for u in list_users()]
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
 def admin_create_user(
-    payload: CreateUserRequest, _: CurrentUser = Depends(require_admin)
+    payload: CreateUserRequest, _: CurrentUser = Depends(require_tab("users"))
 ) -> UserOut:
     if payload.role not in ROLE_TABS:
         raise HTTPException(status_code=400, detail=f"Unknown role '{payload.role}'")
@@ -463,11 +469,11 @@ def admin_create_user(
 def admin_update_user(
     user_id: int,
     payload: UpdateUserRequest,
-    admin: CurrentUser = Depends(require_admin),
+    actor: CurrentUser = Depends(require_tab("users")),
 ) -> UserOut:
     if payload.role is not None and payload.role not in ROLE_TABS:
         raise HTTPException(status_code=400, detail=f"Unknown role '{payload.role}'")
-    if user_id == admin.id and payload.is_active is False:
+    if user_id == actor.id and payload.is_active is False:
         raise HTTPException(status_code=400, detail="You cannot disable your own account")
     row = update_user(
         user_id, role=payload.role, is_active=payload.is_active, password=payload.password
@@ -479,9 +485,9 @@ def admin_update_user(
 
 @router.delete("/users/{user_id}", status_code=204)
 def admin_delete_user(
-    user_id: int, admin: CurrentUser = Depends(require_admin)
+    user_id: int, actor: CurrentUser = Depends(require_tab("users"))
 ) -> None:
-    if user_id == admin.id:
+    if user_id == actor.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account")
     if not delete_user(user_id):
         raise HTTPException(status_code=404, detail="User not found")

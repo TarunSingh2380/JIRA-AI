@@ -1,10 +1,10 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./auth.jsx";
 import Login from "./pages/Login.jsx";
-import AdminDashboard from "./pages/AdminDashboard.jsx";
+import Home from "./pages/Home.jsx";
 import Documentation from "./pages/Documentation.jsx";
 import Users from "./pages/Users.jsx";
-import { ProtectedRoute, RequireTab, RequireAdmin } from "./components/ProtectedRoute.jsx";
+import { ProtectedRoute, RequireTab } from "./components/ProtectedRoute.jsx";
 
 export default function App() {
   const { loading } = useAuth();
@@ -19,7 +19,7 @@ export default function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <AdminDashboard />
+            <Home />
           </ProtectedRoute>
         }
       />
@@ -38,9 +38,9 @@ export default function App() {
       <Route
         path="/users"
         element={
-          <RequireAdmin>
+          <RequireTab tab="users">
             <Users />
-          </RequireAdmin>
+          </RequireTab>
         }
       />
 
