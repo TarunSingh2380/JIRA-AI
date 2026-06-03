@@ -180,11 +180,25 @@ def _seed_admin() -> None:
     if not email or not password:
         log.info("ADMIN_EMAIL / ADMIN_PASSWORD not set; no bootstrap admin seeded")
         return
+    # Opt-in: re-sync the bootstrap admin's password/role on startup. Useful when
+    # the admin was seeded earlier with a different password (the normal seeder
+    # never touches an existing user).
+    reset = (os.getenv("ADMIN_RESET_PASSWORD", "") or "").strip().lower() in {"1", "true", "yes", "on"}
     with _connect() as conn:
         existing = conn.execute(
             "SELECT id FROM app_users WHERE email = %s", (email,)
         ).fetchone()
         if existing:
+            if reset:
+                conn.execute(
+                    "UPDATE app_users SET password_hash = %s, role = 'admin', is_active = TRUE "
+                    "WHERE id = %s",
+                    (hash_password(password), existing["id"]),
+                )
+                conn.commit()
+                log.warning("ADMIN_RESET_PASSWORD set: reset bootstrap admin %s", email)
+            else:
+                log.info("Bootstrap admin %s already exists; leaving it unchanged", email)
             return
         conn.execute(
             "INSERT INTO app_users (email, password_hash, role, is_active) "
