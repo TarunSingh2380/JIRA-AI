@@ -6,7 +6,7 @@ import Header from "../components/Header.jsx";
 const fmtTokens = (n) => Number(n || 0).toLocaleString();
 
 // Costs are stored in USD; displayed in INR using the backend's USD_TO_INR rate.
-let usdToInr = 86.0;
+let usdToInr = 95.75;
 const fmtCost = (n) =>
   `₹${(Number(n || 0) * usdToInr).toLocaleString("en-IN", {
     minimumFractionDigits: 2,

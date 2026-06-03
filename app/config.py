@@ -133,7 +133,7 @@ class Settings:
     # USD→INR rate for displaying costs in rupees. Costs are computed and stored
     # in USD; this only affects what users see. Override per deployment to track
     # the current exchange rate.
-    usd_to_inr: float = float(os.getenv("USD_TO_INR", "86.0"))
+    usd_to_inr: float = float(os.getenv("USD_TO_INR", "95.75"))
 
     @property
     def database_url(self) -> str:

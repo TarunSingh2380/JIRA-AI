@@ -7,7 +7,7 @@ const fmtTokens = (n) => Number(n || 0).toLocaleString();
 
 // Costs come from the backend in USD; we display them in INR. The rate is
 // supplied by the backend config (USD_TO_INR) and refreshed on page load.
-let usdToInr = 86.0;
+let usdToInr = 95.75;
 const fmtCost = (n) =>
   `₹${(Number(n || 0) * usdToInr).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
