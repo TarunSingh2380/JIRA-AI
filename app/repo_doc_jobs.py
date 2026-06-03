@@ -38,6 +38,7 @@ from app.repo_doc_usage import (
     record_usage,
     save_artifact,
 )
+from app.repo_tree_integration import repo_tree_runtime
 
 log = logging.getLogger(__name__)
 
@@ -65,20 +66,66 @@ def _empty_usage() -> dict[str, Any]:
     }
 
 
+def reindex_repo(repo: str) -> dict[str, Any]:
+    """Refresh the Repomix packed source for one repo so the document context
+    reflects the latest code.
+
+    This runs Repomix (a local source pack), not the LLM, so it spends no tokens
+    — its cost is always 0. It pulls the repo and repacks only when HEAD changed;
+    unchanged repos are skipped (and their previously generated docs reused for
+    free). Never raises: on failure we log and fall back to the existing packed
+    data so document generation can still proceed.
+    """
+    info: dict[str, Any] = {
+        "ran": False,
+        "packed": [],
+        "skipped": [],
+        "failed": [],
+        "cost_usd": 0.0,
+    }
+    try:
+        from repo_architect.reindex import reindex_repomix
+
+        state = repo_tree_runtime()
+        summary = reindex_repomix(
+            state.config, repo_names=[repo], do_git_pull=True, force=False
+        )
+        info.update(
+            ran=True,
+            packed=summary.get("packed", []),
+            skipped=summary.get("skipped", []),
+            failed=summary.get("failed", []),
+        )
+        log.info(
+            "repo-doc reindex repo=%s packed=%s skipped=%s failed=%s",
+            repo, info["packed"], info["skipped"], info["failed"],
+        )
+    except Exception as exc:  # noqa: BLE001 - never block doc work on a refresh
+        info["error"] = str(exc)
+        log.warning(
+            "repo-doc reindex for %s failed; using existing packed data: %s", repo, exc
+        )
+    return info
+
+
 def estimate_doc_job(repo: str, doc_type: str) -> dict[str, Any]:
     """Pre-flight cost/cache check for a (repo, doc_type) before starting a job.
 
-    Builds the model context (just reads cached artifacts, spends no tokens),
-    then for each document type reports whether a previously generated copy can
-    be reused for the current code (cost 0) and estimates the USD cost of the
-    documents that would actually be generated. The UI uses this to confirm
-    spend up front — and to skip the cost prompt when everything is already
-    cached. ``doc_type == "all"`` covers every document type.
+    First refreshes the repo's Repomix data (a local pack — no tokens) so the
+    estimate reflects the latest code: if the code changed, the context hash
+    changes and the document is (correctly) shown as needing regeneration; if
+    not, it is reused for free. Then for each document type it reports whether a
+    previously generated copy can be reused (cost 0) and estimates the USD cost
+    of the documents that would actually be generated. ``doc_type == "all"``
+    covers every document type.
 
     Raises ValueError on bad input / missing artifacts (same as generation).
     """
     mode = "all" if doc_type == "all" else "single"
     doc_types = document_type_ids() if mode == "all" else [doc_type]
+
+    # Refresh first so the cache check below reflects the current code.
+    reindex = reindex_repo(repo)
 
     context, _stats = build_document_context(repo)
     ctx_hash = context_hash(context)
@@ -98,6 +145,7 @@ def estimate_doc_job(repo: str, doc_type: str) -> dict[str, Any]:
         docs.append({"doc_type": dtype, "label": document_label(dtype), "cached": cached})
 
     uncached_count = len(doc_types) - cached_count
+    reindex_cost = float(reindex.get("cost_usd", 0.0))
     return {
         "repo": repo,
         "doc_type": doc_type,
@@ -108,6 +156,10 @@ def estimate_doc_job(repo: str, doc_type: str) -> dict[str, Any]:
         "all_cached": uncached_count == 0,
         "estimated_input_tokens": est_tokens,
         "estimated_cost_usd": round(est_cost, 6),
+        # Repomix refresh is a local pack — no LLM tokens, so cost is 0.
+        "reindex": reindex,
+        "reindex_cost_usd": round(reindex_cost, 6),
+        "total_cost_usd": round(est_cost + reindex_cost, 6),
     }
 
 
@@ -133,6 +185,7 @@ def start_doc_job(repo: str, doc_type: str, user_email: Optional[str] = None) ->
             "progress": {"total": len(doc_types), "completed": 0, "current_label": "", "percent": 0},
             "usage": _empty_usage(),
             "estimate": {"input_tokens": 0, "cost_usd": 0.0},
+            "reindex": None,
             "error": None,
             "created_at": _now(),
             "updated_at": _now(),
@@ -160,6 +213,11 @@ def _run_job(
 ) -> None:
     try:
         _update(job_id, status="running")
+
+        # Refresh the repo's Repomix data first so generation uses the latest
+        # code (a local pack — no tokens). Repacks only when HEAD changed.
+        _set_progress(job_id, completed=0, total=len(doc_types), current_label="Refreshing repository data…")
+        _update(job_id, reindex=reindex_repo(repo))
 
         # Build the model context once; its hash is our "did the code change?" key.
         context, _stats = build_document_context(repo)

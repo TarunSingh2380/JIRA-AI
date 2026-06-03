@@ -130,6 +130,11 @@ class Settings:
     doc_price_cache_read_per_mtok: float = float(os.getenv("DOC_PRICE_CACHE_READ_PER_MTOK", "0.30"))
     doc_price_cache_write_per_mtok: float = float(os.getenv("DOC_PRICE_CACHE_WRITE_PER_MTOK", "3.75"))
 
+    # USD→INR rate for displaying costs in rupees. Costs are computed and stored
+    # in USD; this only affects what users see. Override per deployment to track
+    # the current exchange rate.
+    usd_to_inr: float = float(os.getenv("USD_TO_INR", "86.0"))
+
     @property
     def database_url(self) -> str:
         if self.database_url_override:

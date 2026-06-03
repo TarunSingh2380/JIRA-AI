@@ -4,7 +4,15 @@ import { renderMarkdown } from "../lib/markdown";
 import Header from "../components/Header.jsx";
 
 const fmtTokens = (n) => Number(n || 0).toLocaleString();
-const fmtCost = (n) => `$${Number(n || 0).toFixed(4)}`;
+
+// Costs come from the backend in USD; we display them in INR. The rate is
+// supplied by the backend config (USD_TO_INR) and refreshed on page load.
+let usdToInr = 86.0;
+const fmtCost = (n) =>
+  `₹${(Number(n || 0) * usdToInr).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 // Standalone Documentation portal. Reached only via its own URL (/docs-portal).
 export default function Documentation() {
@@ -30,6 +38,7 @@ export default function Documentation() {
     (async () => {
       try {
         const data = await apiFetch("/graph-admin/repo-docs/repositories");
+        if (data.usd_to_inr) usdToInr = data.usd_to_inr;
         const list = data.repositories || [];
         setRepos(list);
         const firstReady = list.find((r) => r.ready);
@@ -61,7 +70,7 @@ export default function Documentation() {
     }
     setEstimating(true);
     setConfirm(null);
-    setStatus({ msg: "Checking cost…", cls: "running" });
+    setStatus({ msg: "Refreshing repository data & checking cost…", cls: "running" });
     try {
       const est = await apiFetch("/graph-admin/repo-docs/estimate", {
         method: "POST",
@@ -250,7 +259,7 @@ export default function Documentation() {
               disabled={busy || estimating || !!confirm}
               onClick={requestGenerate}
             >
-              {estimating ? "Checking cost…" : isAll ? "Generate All Documents" : "Generate Document"}
+              {estimating ? "Refreshing data…" : isAll ? "Generate All Documents" : "Generate Document"}
             </button>
             <div className={`status-bar ${status.cls}`} style={{ marginTop: 10 }}>{status.msg}</div>
 
@@ -258,6 +267,18 @@ export default function Documentation() {
             {confirm && (
               <div className="sim-card" style={{ marginTop: 12, padding: 14 }}>
                 <p className="tc-section-label" style={{ marginTop: 0 }}>Confirm generation</p>
+
+                {/* Repomix refresh: ran before estimating, so the figures below reflect the latest code. */}
+                {confirm.reindex && (
+                  <p className="tc-optional" style={{ marginTop: 0, marginBottom: 6, lineHeight: 1.5 }}>
+                    {confirm.reindex.error
+                      ? `⚠ Could not refresh repository data (using last indexed copy): ${confirm.reindex.error}`
+                      : (confirm.reindex.packed || []).length
+                      ? "Repository code changed — Repomix data refreshed (free) before estimating."
+                      : "Repository unchanged since last index — using current data (refresh is free)."}
+                  </p>
+                )}
+
                 {confirm.all_cached ? (
                   <p className="tc-optional" style={{ marginTop: 0, lineHeight: 1.5 }}>
                     {confirm.mode === "all" ? "These documents were" : "This document was"} already generated
@@ -265,8 +286,8 @@ export default function Documentation() {
                   </p>
                 ) : (
                   <p className="tc-optional" style={{ marginTop: 0, lineHeight: 1.5 }}>
-                    Estimated cost ≈ <strong>{fmtCost(confirm.estimated_cost_usd)}</strong>{" "}
-                    ({fmtTokens(confirm.estimated_input_tokens)} input tokens).
+                    Estimated cost ≈ <strong>{fmtCost(confirm.total_cost_usd ?? confirm.estimated_cost_usd)}</strong>{" "}
+                    ({fmtTokens(confirm.estimated_input_tokens)} input tokens; reindex {fmtCost(confirm.reindex_cost_usd || 0)}).
                     {confirm.mode === "all" &&
                       ` ${confirm.uncached_count} of ${confirm.docs.length} documents will be generated` +
                         (confirm.cached_count ? `; ${confirm.cached_count} reused free.` : ".")}

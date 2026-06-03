@@ -4,7 +4,14 @@ import { useAuth } from "../auth.jsx";
 import Header from "../components/Header.jsx";
 
 const fmtTokens = (n) => Number(n || 0).toLocaleString();
-const fmtCost = (n) => `$${Number(n || 0).toFixed(4)}`;
+
+// Costs are stored in USD; displayed in INR using the backend's USD_TO_INR rate.
+let usdToInr = 86.0;
+const fmtCost = (n) =>
+  `₹${(Number(n || 0) * usdToInr).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 export default function Users() {
   const { user: me } = useAuth();
@@ -35,6 +42,7 @@ export default function Users() {
     // Document-generation usage is best-effort; never block user management on it.
     try {
       const u = await apiFetch("/graph-admin/repo-docs/usage?limit=1");
+      if (u.usd_to_inr) usdToInr = u.usd_to_inr;
       const map = {};
       (u.by_user || []).forEach((row) => {
         if (row.user_email) map[row.user_email] = row;

@@ -403,6 +403,8 @@ def graph_admin_repo_doc_repositories(
         "repositories": repositories,
         # Real generation types plus the synthetic "all" bundle option.
         "doc_types": list_document_types() + [{"id": "all", "label": "All documents (ZIP)"}],
+        # USD→INR rate so the UI can display costs in rupees.
+        "usd_to_inr": settings.usd_to_inr,
     }
 
 
@@ -552,8 +554,11 @@ def _doc_email_bodies(job: dict[str, Any], requester: str) -> tuple[str, str]:
     def toks(n: Any) -> str:
         return f"{int(n or 0):,}"
 
-    def usd(n: Any) -> str:
-        return f"${float(n or 0):.4f}"
+    # Costs are stored in USD; display them converted to INR.
+    rate = settings.usd_to_inr
+
+    def inr(n: Any) -> str:
+        return f"₹{float(n or 0) * rate:,.2f}"
 
     total_in = usage.get("input_tokens", 0)
     total_out = usage.get("output_tokens", 0)
@@ -577,11 +582,11 @@ def _doc_email_bodies(job: dict[str, Any], requester: str) -> tuple[str, str]:
         lines.append(
             f"  - {d.get('label', d.get('doc_type'))}: {state} · "
             f"{toks(d.get('input_tokens'))} in / {toks(d.get('output_tokens'))} out · "
-            f"{usd(d.get('cost_usd'))}"
+            f"{inr(d.get('cost_usd'))}"
         )
     lines += [
         "",
-        f"Totals: {toks(total_in)} input + {toks(total_out)} output tokens · {usd(total_cost)}",
+        f"Totals: {toks(total_in)} input + {toks(total_out)} output tokens · {inr(total_cost)}",
         f"        {generated} generated, {reused} reused",
         "",
         f"Attached: {', '.join(d['filename'].replace('.md', '.docx') for d in docs) if len(docs) == 1 else repo + '-docs.zip (' + str(len(docs)) + ' Word files)'}",
@@ -605,7 +610,7 @@ def _doc_email_bodies(job: dict[str, Any], requester: str) -> tuple[str, str]:
             f"<td style='{cell}'>{status_html}</td>"
             f"<td style='{cell_r}'>{toks(d.get('input_tokens'))}</td>"
             f"<td style='{cell_r}'>{toks(d.get('output_tokens'))}</td>"
-            f"<td style='{cell_r}'>{usd(d.get('cost_usd'))}</td>"
+            f"<td style='{cell_r}'>{inr(d.get('cost_usd'))}</td>"
             f"</tr>"
         )
     rows = "".join(row_parts)
@@ -635,7 +640,7 @@ def _doc_email_bodies(job: dict[str, Any], requester: str) -> tuple[str, str]:
         <td style="padding:9px 12px" colspan="2">Total ({generated} generated, {reused} reused)</td>
         <td style="padding:9px 12px;text-align:right">{toks(total_in)}</td>
         <td style="padding:9px 12px;text-align:right">{toks(total_out)}</td>
-        <td style="padding:9px 12px;text-align:right">{usd(total_cost)}</td>
+        <td style="padding:9px 12px;text-align:right">{inr(total_cost)}</td>
       </tr>
     </tfoot>
   </table>
@@ -724,7 +729,11 @@ def graph_admin_repo_doc_usage(
 
     can_see_all = user.is_service or user.role == "admin" or has_tab(user.role, "users")
     scope = None if can_see_all else user.email
-    return {"scope": "all" if can_see_all else user.email, **usage_summary(user_email=scope, limit=limit)}
+    return {
+        "scope": "all" if can_see_all else user.email,
+        "usd_to_inr": settings.usd_to_inr,
+        **usage_summary(user_email=scope, limit=limit),
+    }
 
 
 # ─── Jira ticket cache browser ───────────────────────────────────────────────
