@@ -107,6 +107,13 @@ class Settings:
     jira_cache_ttl_hours: int = int(os.getenv("JIRA_CACHE_TTL_HOURS", "1"))
     similar_ticket_match_threshold: float = _similar_ticket_match_threshold()
 
+    # Authentication / RBAC
+    jwt_secret: str = os.getenv("JWT_SECRET", "")
+    jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "720"))
+    admin_email: str = os.getenv("ADMIN_EMAIL", "")
+    admin_password: str = os.getenv("ADMIN_PASSWORD", "")
+    service_api_key: str = os.getenv("SERVICE_API_KEY", "")
+
     @property
     def database_url(self) -> str:
         if self.database_url_override:

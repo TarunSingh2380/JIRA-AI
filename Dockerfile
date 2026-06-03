@@ -20,6 +20,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Build the React admin SPA into frontend/dist so FastAPI can serve it at /.
+RUN cd frontend \
+    && npm install --no-audit --no-fund \
+    && npm run build \
+    && rm -rf node_modules \
+    && npm cache clean --force
+
 EXPOSE 8000
 
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "wsproto"]

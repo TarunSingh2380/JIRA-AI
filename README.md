@@ -45,11 +45,62 @@ Open:
 http://127.0.0.1:8000/docs
 ```
 
-Graph DB admin UI:
+Admin UI (React SPA, served at the site root):
 
 ```text
-http://127.0.0.1:8000/graph-admin
+http://127.0.0.1:8000/
 ```
+
+## Admin UI (React) + RBAC
+
+The admin UI is a Vite/React single-page app under `frontend/`. FastAPI serves
+the built assets from `frontend/dist`. Build it once before starting the API:
+
+```bash
+./scripts/build_frontend.sh          # or: cd frontend && npm install && npm run build
+```
+
+(The Docker image builds it automatically.) If `frontend/dist` is missing, the
+server still runs and shows a "Frontend not built" placeholder.
+
+### Authentication
+
+Login is JWT-based; users live in the Postgres `app_users` table (auto-created
+on startup). Configure in `.env`:
+
+```text
+JWT_SECRET=<random-secret>
+JWT_EXPIRE_MINUTES=720
+ADMIN_EMAIL=admin@example.com      # seeded as an admin on first startup
+ADMIN_PASSWORD=change-me
+SERVICE_API_KEY=                   # optional: callers sending X-Service-Key bypass auth
+AUTH_ROLE_TABS=                    # optional JSON override of the role->tab map
+```
+
+Server-to-server automation (n8n, webhooks) can keep calling the admin endpoints
+by sending the header `X-Service-Key: <SERVICE_API_KEY>`, which is treated as an
+admin and skips user auth. The open workflow/scan endpoints are unaffected.
+
+### Per-tab roles (RBAC)
+
+Roles map to the set of UI tabs / API capabilities they may use. Defaults
+(`app/auth.py` → `DEFAULT_ROLE_TABS`, override with `AUTH_ROLE_TABS`):
+
+| Role        | Tabs                                                   |
+| ----------- | ------------------------------------------------------ |
+| `admin`     | all (plus the Users page)                              |
+| `developer` | repos, logs, jira, testcases, similar, docs            |
+| `qa`        | jira, insights, testcases, similar, docs               |
+| `viewer`    | jira, insights, logs                                   |
+
+Tab keys: `repos, jira, insights, logs, testcases, similar, docs`. The backend
+enforces these per endpoint; the SPA hides tabs the role cannot use. Admins
+manage users and roles at `/users`.
+
+### Documentation portal (separate URL)
+
+Repository documentation is **no longer a tab**. It lives at its own route,
+`/docs-portal`, gated by the `docs` permission.
 
 RepoTree is bundled into this project as `repo_architect/` plus
 `repo_tree/config` and `repo_tree/workspace`. Its APIs are exposed by the same
@@ -119,8 +170,15 @@ docker compose down
 ## Endpoints
 
 - `GET /health`
+- `POST /auth/login`
+- `GET /auth/me`
+- `GET /auth/users` (admin)
+- `POST /auth/users` (admin)
+- `PATCH /auth/users/{id}` (admin)
+- `DELETE /auth/users/{id}` (admin)
 - `GET /prompts`
-- `GET /graph-admin`
+- `GET /` (React admin SPA)
+- `GET /graph-admin` (React admin SPA)
 - `GET /graph-admin/repositories`
 - `POST /graph-admin/trigger`
 - `POST /graph-admin/jobs`

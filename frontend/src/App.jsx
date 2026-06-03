@@ -1,0 +1,50 @@
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./auth.jsx";
+import Login from "./pages/Login.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
+import Documentation from "./pages/Documentation.jsx";
+import Users from "./pages/Users.jsx";
+import { ProtectedRoute, RequireTab, RequireAdmin } from "./components/ProtectedRoute.jsx";
+
+export default function App() {
+  const { loading } = useAuth();
+  if (loading) {
+    return <div className="app-loading">Loading…</div>;
+  }
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/graph-admin" element={<Navigate to="/" replace />} />
+
+      {/* Documentation lives at its own URL — not a tab in the main page. */}
+      <Route
+        path="/docs-portal"
+        element={
+          <RequireTab tab="docs">
+            <Documentation />
+          </RequireTab>
+        }
+      />
+
+      <Route
+        path="/users"
+        element={
+          <RequireAdmin>
+            <Users />
+          </RequireAdmin>
+        }
+      />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
