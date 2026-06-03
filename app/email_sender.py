@@ -32,6 +32,7 @@ def send_email(
     to: Sequence[str],
     subject: str,
     body: str,
+    html_body: str | None = None,
     attachments: Iterable[Attachment] = (),
 ) -> None:
     if not email_configured():
@@ -41,14 +42,17 @@ def send_email(
     recipients = [addr.strip() for addr in to if addr and addr.strip()]
     if not recipients:
         raise ValueError("At least one recipient email address is required")
+    attachment_list = list(attachments)
 
     msg = EmailMessage()
     msg["From"] = settings.smtp_from
     msg["To"] = ", ".join(recipients)
     msg["Subject"] = subject
     msg.set_content(body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
 
-    for filename, content, mime_type in attachments:
+    for filename, content, mime_type in attachment_list:
         maintype, _, subtype = mime_type.partition("/")
         msg.add_attachment(
             content,
@@ -58,7 +62,7 @@ def send_email(
         )
 
     host, port = settings.smtp_host, settings.smtp_port
-    log.info("Sending email to %s via %s:%s (%d attachment(s))", recipients, host, port, len(msg.get_payload()) - 1)
+    log.info("Sending email to %s via %s:%s (%d attachment(s))", recipients, host, port, len(attachment_list))
 
     if settings.smtp_use_ssl:
         with smtplib.SMTP_SSL(host, port, timeout=30) as server:

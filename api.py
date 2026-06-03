@@ -517,6 +517,113 @@ def _build_doc_attachments(job: dict[str, Any]) -> list[tuple[str, bytes, str]]:
     return [(f"{job.get('repo', 'repo')}-docs.zip", buf.getvalue(), "application/zip")]
 
 
+def _doc_email_bodies(job: dict[str, Any], requester: str) -> tuple[str, str]:
+    """Build the plain-text and HTML email body with full generation details:
+    repo, per-document token counts, and cost."""
+    repo = job.get("repo", "repository")
+    docs = job.get("docs") or []
+    usage = job.get("usage") or {}
+    generated_at = job.get("updated_at") or job.get("created_at") or ""
+    model = next((d.get("model") for d in docs if d.get("model")), "") or "—"
+
+    def toks(n: Any) -> str:
+        return f"{int(n or 0):,}"
+
+    def usd(n: Any) -> str:
+        return f"${float(n or 0):.4f}"
+
+    total_in = usage.get("input_tokens", 0)
+    total_out = usage.get("output_tokens", 0)
+    total_cost = usage.get("cost_usd", 0)
+    generated = usage.get("generated_count", 0)
+    reused = usage.get("reused_count", 0)
+
+    # ── Plain text ──
+    lines = [
+        f"Repository documentation for '{repo}'",
+        "",
+        f"Repository:    {repo}",
+        f"Requested by:  {requester}",
+        f"Generated at:  {generated_at}",
+        f"Model:         {model}",
+        "",
+        f"Documents ({len(docs)}):",
+    ]
+    for d in docs:
+        state = "reused (no code change)" if d.get("reused") else "generated"
+        lines.append(
+            f"  - {d.get('label', d.get('doc_type'))}: {state} · "
+            f"{toks(d.get('input_tokens'))} in / {toks(d.get('output_tokens'))} out · "
+            f"{usd(d.get('cost_usd'))}"
+        )
+    lines += [
+        "",
+        f"Totals: {toks(total_in)} input + {toks(total_out)} output tokens · {usd(total_cost)}",
+        f"        {generated} generated, {reused} reused",
+        "",
+        f"Attached: {', '.join(d['filename'].replace('.md', '.docx') for d in docs) if len(docs) == 1 else repo + '-docs.zip (' + str(len(docs)) + ' Word files)'}",
+    ]
+    text = "\n".join(lines)
+
+    # ── HTML ──
+    cell = "padding:8px 12px;border-bottom:1px solid #e6eaf2"
+    cell_r = cell + ";text-align:right"
+    row_parts = []
+    for d in docs:
+        status_html = (
+            "<span style='color:#059669;font-weight:600'>reused</span>"
+            if d.get("reused")
+            else "generated"
+        )
+        label = d.get("label", d.get("doc_type"))
+        row_parts.append(
+            f"<tr>"
+            f"<td style='{cell}'>{label}</td>"
+            f"<td style='{cell}'>{status_html}</td>"
+            f"<td style='{cell_r}'>{toks(d.get('input_tokens'))}</td>"
+            f"<td style='{cell_r}'>{toks(d.get('output_tokens'))}</td>"
+            f"<td style='{cell_r}'>{usd(d.get('cost_usd'))}</td>"
+            f"</tr>"
+        )
+    rows = "".join(row_parts)
+    html = f"""\
+<div style="font-family:Inter,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:640px">
+  <h2 style="margin:0 0 4px;font-size:20px">Repository documentation</h2>
+  <p style="margin:0 0 16px;color:#64748b">Generated for <b>{repo}</b></p>
+  <table style="border-collapse:collapse;font-size:13px;margin-bottom:16px">
+    <tr><td style="padding:2px 12px 2px 0;color:#64748b">Repository</td><td><b>{repo}</b></td></tr>
+    <tr><td style="padding:2px 12px 2px 0;color:#64748b">Requested by</td><td>{requester}</td></tr>
+    <tr><td style="padding:2px 12px 2px 0;color:#64748b">Generated at</td><td>{generated_at}</td></tr>
+    <tr><td style="padding:2px 12px 2px 0;color:#64748b">Model</td><td>{model}</td></tr>
+  </table>
+  <table style="border-collapse:collapse;width:100%;font-size:13px;border:1px solid #e6eaf2;border-radius:8px;overflow:hidden">
+    <thead>
+      <tr style="background:#eef2f9;text-align:left">
+        <th style="padding:9px 12px">Document</th>
+        <th style="padding:9px 12px">Status</th>
+        <th style="padding:9px 12px;text-align:right">Input tok</th>
+        <th style="padding:9px 12px;text-align:right">Output tok</th>
+        <th style="padding:9px 12px;text-align:right">Cost</th>
+      </tr>
+    </thead>
+    <tbody>{rows}</tbody>
+    <tfoot>
+      <tr style="background:#f7f9fd;font-weight:700">
+        <td style="padding:9px 12px" colspan="2">Total ({generated} generated, {reused} reused)</td>
+        <td style="padding:9px 12px;text-align:right">{toks(total_in)}</td>
+        <td style="padding:9px 12px;text-align:right">{toks(total_out)}</td>
+        <td style="padding:9px 12px;text-align:right">{usd(total_cost)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <p style="margin:16px 0 0;color:#64748b;font-size:12px">
+    The document{'s are' if len(docs) != 1 else ' is'} attached as
+    {'a ZIP of Word files' if len(docs) != 1 else 'a Word file'}.
+  </p>
+</div>"""
+    return text, html
+
+
 @app.get("/graph-admin/repo-docs/jobs/{job_id}/zip")
 def graph_admin_repo_doc_zip(
     job_id: str,
@@ -563,16 +670,12 @@ def graph_admin_email_repo_doc(
 
     attachments = _build_doc_attachments(job)
     repo = job.get("repo", "repository")
-    doc_count = len(job.get("docs") or [])
     subject = f"Repository documentation — {repo}"
-    body = (
-        f"Attached {'is' if doc_count == 1 else 'are'} the generated "
-        f"document{'s' if doc_count != 1 else ''} for '{repo}'.\n\n"
-        f"Requested by: {user.email}\n"
-        f"Documents: {', '.join(d['label'] for d in job.get('docs') or [])}\n"
-    )
+    body, html_body = _doc_email_bodies(job, user.email)
     try:
-        send_email(to=recipients, subject=subject, body=body, attachments=attachments)
+        send_email(
+            to=recipients, subject=subject, body=body, html_body=html_body, attachments=attachments
+        )
     except EmailConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
