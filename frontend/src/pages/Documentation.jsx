@@ -20,7 +20,6 @@ export default function Documentation() {
   const [jobId, setJobId] = useState("");
   const [emailTo, setEmailTo] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -157,15 +156,6 @@ export default function Documentation() {
     }
   }
 
-  function copyFirst() {
-    const d = docs[0];
-    if (!d) return;
-    navigator.clipboard.writeText(d.markdown).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    });
-  }
-
   return (
     <>
       <Header title="Documentation Portal" />
@@ -283,13 +273,6 @@ export default function Documentation() {
                       <span>{fmtTokens(docs[0]?.output_tokens)}</span> out · {fmtCost(docs[0]?.cost_usd)}
                     </span>
                   )}
-                  <button
-                    className="secondary"
-                    style={{ width: "auto", minHeight: 32, padding: "5px 14px", fontSize: 13, marginLeft: "auto" }}
-                    onClick={copyFirst}
-                  >
-                    {copied ? "Copied!" : "Copy Markdown"}
-                  </button>
                 </div>
                 <div className="tc-output" dangerouslySetInnerHTML={{ __html: renderMarkdown(docs[0]?.markdown || "") }} />
               </>

@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import { useAuth } from "../auth.jsx";
 import Header from "../components/Header.jsx";
-import { fmtDate } from "../lib/format";
+
+const fmtTokens = (n) => Number(n || 0).toLocaleString();
+const fmtCost = (n) => `$${Number(n || 0).toFixed(4)}`;
 
 export default function Users() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [roleTabs, setRoleTabs] = useState({});
+  const [usage, setUsage] = useState({}); // email -> { generations, input_tokens, output_tokens, cost_usd }
+  const [usageTotals, setUsageTotals] = useState({});
   const [banner, setBanner] = useState({ msg: "", cls: "" });
   const [form, setForm] = useState({ email: "", password: "", role: "viewer" });
   const [busy, setBusy] = useState(false);
@@ -27,6 +31,18 @@ export default function Users() {
       }
     } catch (err) {
       setBanner({ msg: err.message, cls: "error" });
+    }
+    // Document-generation usage is best-effort; never block user management on it.
+    try {
+      const u = await apiFetch("/graph-admin/repo-docs/usage?limit=1");
+      const map = {};
+      (u.by_user || []).forEach((row) => {
+        if (row.user_email) map[row.user_email] = row;
+      });
+      setUsage(map);
+      setUsageTotals(u.totals || {});
+    } catch {
+      /* usage unavailable (e.g. no DB) — leave columns blank */
     }
   }
 
@@ -124,52 +140,71 @@ export default function Users() {
           <button type="submit" disabled={busy}>Add user</button>
         </form>
 
+        <p className="tc-section-label" style={{ marginTop: 4 }}>
+          Document-generation usage
+        </p>
+        <div className="tc-stats" style={{ marginBottom: 12 }}>
+          <span className="tc-stat"><span>{fmtTokens(usageTotals.generations)}</span> docs</span>
+          <span className="tc-stat"><span>{fmtTokens(usageTotals.reused_count)}</span> reused</span>
+          <span className="tc-stat"><span>{fmtTokens(usageTotals.input_tokens)}</span> input</span>
+          <span className="tc-stat"><span>{fmtTokens(usageTotals.output_tokens)}</span> output</span>
+          <span className="tc-stat"><span>{fmtCost(usageTotals.cost_usd)}</span> total cost</span>
+        </div>
+
         <table>
           <thead>
             <tr>
-              <th style={{ width: "26%" }}>Email</th>
-              <th style={{ width: "16%" }}>Role</th>
-              <th>Tabs</th>
-              <th style={{ width: "10%" }}>Active</th>
-              <th style={{ width: "14%" }}>Created</th>
+              <th style={{ width: "20%" }}>Email</th>
+              <th style={{ width: "12%" }}>Role</th>
+              <th style={{ width: "7%" }}>Docs</th>
+              <th style={{ width: "12%" }}>Input tok</th>
+              <th style={{ width: "12%" }}>Output tok</th>
+              <th style={{ width: "9%" }}>Cost</th>
+              <th style={{ width: "8%" }}>Active</th>
               <th style={{ width: "16%" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>
-                  <b>{u.email}</b>
-                  {u.id === me.id && <span className="role-tag">you</span>}
-                </td>
-                <td>
-                  <select className="tc-select" value={u.role} onChange={(e) => changeRole(u, e.target.value)} disabled={u.id === me.id}>
-                    {roles.map((r) => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                    {!roles.includes(u.role) && <option value={u.role}>{u.role}</option>}
-                  </select>
-                </td>
-                <td style={{ fontSize: 12, color: "var(--muted)" }}>
-                  {(u.permissions || roleTabs[u.role] || []).join(", ") || "—"}
-                </td>
-                <td>
-                  <span className={`badge ${u.is_active ? "ok" : "err"}`}>{u.is_active ? "active" : "disabled"}</span>
-                </td>
-                <td>{fmtDate(u.created_at)}</td>
-                <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <button className="secondary inline-btn" onClick={() => resetPassword(u)}>Reset PW</button>
-                  {u.id !== me.id && (
-                    <>
-                      <button className="secondary inline-btn" onClick={() => toggleActive(u)}>
-                        {u.is_active ? "Disable" : "Enable"}
-                      </button>
-                      <button className="danger inline-btn" onClick={() => removeUser(u)}>Delete</button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {users.map((u) => {
+              const usg = usage[u.email] || {};
+              return (
+                <tr key={u.id}>
+                  <td>
+                    <b>{u.email}</b>
+                    {u.id === me.id && <span className="role-tag">you</span>}
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                      {(u.permissions || roleTabs[u.role] || []).join(", ") || "—"}
+                    </div>
+                  </td>
+                  <td>
+                    <select className="tc-select" value={u.role} onChange={(e) => changeRole(u, e.target.value)} disabled={u.id === me.id}>
+                      {roles.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                      {!roles.includes(u.role) && <option value={u.role}>{u.role}</option>}
+                    </select>
+                  </td>
+                  <td>{fmtTokens(usg.generations)}{usg.reused_count ? ` (${fmtTokens(usg.reused_count)} reused)` : ""}</td>
+                  <td>{fmtTokens(usg.input_tokens)}</td>
+                  <td>{fmtTokens(usg.output_tokens)}</td>
+                  <td>{fmtCost(usg.cost_usd)}</td>
+                  <td>
+                    <span className={`badge ${u.is_active ? "ok" : "err"}`}>{u.is_active ? "active" : "disabled"}</span>
+                  </td>
+                  <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button className="secondary inline-btn" onClick={() => resetPassword(u)}>Reset PW</button>
+                    {u.id !== me.id && (
+                      <>
+                        <button className="secondary inline-btn" onClick={() => toggleActive(u)}>
+                          {u.is_active ? "Disable" : "Enable"}
+                        </button>
+                        <button className="danger inline-btn" onClick={() => removeUser(u)}>Delete</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

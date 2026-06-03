@@ -586,7 +586,7 @@ def graph_admin_email_repo_doc(
 @app.get("/graph-admin/repo-docs/usage")
 def graph_admin_repo_doc_usage(
     limit: int = 50,
-    user: CurrentUser = Depends(require_tab("docs")),
+    user: CurrentUser = Depends(require_tab("docs", "users")),
 ) -> dict[str, Any]:
     """Token/cost usage analytics for document generation.
 
