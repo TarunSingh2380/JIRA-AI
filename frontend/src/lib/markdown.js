@@ -26,6 +26,29 @@ function firstFieldLine(lines) {
   return (trimBlankLines(lines || [])[0] || "").trim();
 }
 
+function splitTableCells(line) {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((c) => c.trim());
+}
+
+function isTableSeparator(line) {
+  const s = line.replace(/\s/g, "");
+  return s.includes("-") && s.includes("|") && /^\|?:?-{1,}:?(\|:?-{1,}:?)*\|?$/.test(s);
+}
+
+function renderTable(header, rows) {
+  const head = header.map((c) => `<th>${inlineFormat(c)}</th>`).join("");
+  const body = rows
+    .map(
+      (r) =>
+        `<tr>${header.map((_, k) => `<td>${inlineFormat(r[k] || "")}</td>`).join("")}</tr>`,
+    )
+    .join("");
+  return `<div class="md-table-wrap"><table class="md-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
 function renderLines(lines) {
   const html = [];
   let list = null;
@@ -42,46 +65,66 @@ function renderLines(lines) {
     html.push(`<${tag}>`);
   };
 
-  trimBlankLines(lines).forEach((raw) => {
-    const line = raw.trim();
+  const arr = trimBlankLines(lines);
+  for (let i = 0; i < arr.length; i++) {
+    const line = arr[i].trim();
     if (!line) {
       closeList();
-      return;
+      continue;
     }
+
+    // GitHub-style table: a row of pipes followed by a separator row.
+    if (line.includes("|") && i + 1 < arr.length && isTableSeparator(arr[i + 1].trim())) {
+      closeList();
+      const header = splitTableCells(arr[i]);
+      const rows = [];
+      let j = i + 2;
+      while (j < arr.length && arr[j].trim() && arr[j].includes("|")) {
+        rows.push(splitTableCells(arr[j]));
+        j++;
+      }
+      html.push(renderTable(header, rows));
+      i = j - 1;
+      continue;
+    }
+
+    // Headings at any depth (# -> h2 … ###+ -> h4).
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      closeList();
+      const level = Math.min(heading[1].length + 1, 4);
+      html.push(`<h${level}>${inlineFormat(heading[2].trim())}</h${level}>`);
+      continue;
+    }
+
     const bullet = line.match(/^[-*]\s+(.+)$/);
     if (bullet) {
       openList("ul");
       html.push(`<li>${inlineFormat(bullet[1])}</li>`);
-      return;
+      continue;
     }
     const numbered = line.match(/^\d+[.)]\s+(.+)$/);
     if (numbered) {
       openList("ol");
       html.push(`<li>${inlineFormat(numbered[1])}</li>`);
-      return;
+      continue;
     }
     closeList();
-    if (/^---+$/.test(line)) html.push("<hr>");
+    if (/^([-*_]\s*){3,}$/.test(line)) html.push("<hr>");
     else html.push(`<p>${inlineFormat(line)}</p>`);
-  });
+  }
   closeList();
   return html.join("");
 }
 
 function renderBasicMarkdown(text, fallbackTitle = "") {
   const lines = String(text || "").split("\n");
+  const firstNonEmpty = (lines.find((l) => l.trim()) || "").trim();
   const html = [];
-  let bodyLines = lines;
-  const first = (lines[0] || "").trim();
-
-  if (/^#{1,6}\s+/.test(first)) {
-    html.push(`<h3>${inlineFormat(first.replace(/^#{1,6}\s+/, ""))}</h3>`);
-    bodyLines = lines.slice(1);
-  } else if (fallbackTitle) {
+  if (fallbackTitle && !/^#{1,6}\s+/.test(firstNonEmpty)) {
     html.push(`<h3>${esc(fallbackTitle)}</h3>`);
   }
-
-  html.push(renderLines(bodyLines));
+  html.push(renderLines(lines));
   return html.join("");
 }
 
