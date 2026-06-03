@@ -104,7 +104,29 @@ the SPA hides what the role cannot use and routes each role to its home page
 ### Documentation portal (separate URL)
 
 Repository documentation is **no longer a tab**. It lives at its own route,
-`/docs-portal`, gated by the `docs` permission.
+`/docs-portal`, gated by the `docs` permission. It supports:
+
+- **All documents at once** — the Document Type dropdown has an "All documents
+  (ZIP)" option that generates all four types and bundles them as a `.zip` of
+  Word files.
+- **Email delivery** — enter recipient address(es) and send the generated
+  document(s) as Word attachments (a ZIP for the "all" bundle). Requires SMTP:
+  ```text
+  SMTP_HOST=smtp.example.com
+  SMTP_PORT=587
+  SMTP_USER=...
+  SMTP_PASSWORD=...
+  SMTP_FROM=ai@ramfincorp.com
+  SMTP_USE_TLS=true
+  ```
+- **Live progress, token count, and cost estimate** while generating.
+- **Reuse on no code change** — generation hashes the exact RepoTree context
+  (architecture map + packed source). If it matches a previous run, the saved
+  document is reused and **no tokens are spent**. Stored in `doc_artifacts`.
+- **Usage logging** — every generation (and reuse) is recorded per user in
+  `doc_generation_usage` (tokens, cost, doc count). The portal's "usage & cost
+  analytics" panel shows per-user totals; admins/`usermgr` see all users, others
+  see only their own. Override pricing with `DOC_PRICE_*_PER_MTOK` env vars.
 
 RepoTree is bundled into this project as `repo_architect/` plus
 `repo_tree/config` and `repo_tree/workspace`. Its APIs are exposed by the same
@@ -200,6 +222,11 @@ docker compose down
 - `POST /workflow2/reply`
 - `POST /workflow3`
 - `POST /workflow4`
+- `POST /graph-admin/repo-docs/generate` (doc_type can be `all`)
+- `GET /graph-admin/repo-docs/jobs/{id}` (live progress, tokens, cost)
+- `GET /graph-admin/repo-docs/jobs/{id}/zip` (all-docs bundle)
+- `POST /graph-admin/repo-docs/email` (email Word docs/ZIP)
+- `GET /graph-admin/repo-docs/usage` (per-user token/cost analytics)
 - `POST /scan/initial` (RepoTree, in-process)
 - `POST /scan/nightly` (RepoTree, in-process)
 - `POST /repomix/reindex` (RepoTree, in-process)

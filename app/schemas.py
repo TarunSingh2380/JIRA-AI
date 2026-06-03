@@ -206,6 +206,14 @@ class RepoDocExportRequest(BaseModel):
     )
 
 
+class RepoDocEmailRequest(BaseModel):
+    job_id: str = Field(..., description="Completed repo-doc job id to email.")
+    to_email: str = Field(
+        ...,
+        description="Recipient email address(es), comma or space separated.",
+    )
+
+
 class TestCaseRequest(BaseModel):
     ticket_data: Dict[str, Any] = Field(..., description="JIRA ticket metadata JSON.")
     repo: str | None = Field(

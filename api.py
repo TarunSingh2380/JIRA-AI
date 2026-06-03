@@ -9,6 +9,7 @@ Graph admin flow (replaces n8n):
 import asyncio
 import json
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
 
@@ -58,6 +59,7 @@ from app.schemas import (
     CodeAnalysisReportRequest,
     RepoDocRequest,
     RepoDocExportRequest,
+    RepoDocEmailRequest,
     GraphAdminTriggerRequest,
     GraphAdminTriggerResponse,
     GraphJobResponse,
@@ -107,6 +109,12 @@ async def lifespan(_app: FastAPI):
         auth.ensure_auth_schema()
     except Exception:  # noqa: BLE001 - never block startup on auth setup
         log.exception("Auth schema initialization failed")
+    try:
+        from app.repo_doc_usage import ensure_doc_usage_schema
+
+        ensure_doc_usage_schema()
+    except Exception:  # noqa: BLE001
+        log.exception("Document usage schema initialization failed")
     try:
         yield
     finally:
@@ -393,29 +401,32 @@ def graph_admin_repo_doc_repositories(
     return {
         "repository_count": len(repositories),
         "repositories": repositories,
-        "doc_types": list_document_types(),
+        # Real generation types plus the synthetic "all" bundle option.
+        "doc_types": list_document_types() + [{"id": "all", "label": "All documents (ZIP)"}],
     }
 
 
 @app.post("/graph-admin/repo-docs/generate")
 def graph_admin_generate_repo_doc(
     request: RepoDocRequest,
-    _user: CurrentUser = Depends(require_tab("docs")),
+    user: CurrentUser = Depends(require_tab("docs")),
 ) -> dict[str, Any]:
     """Start async document generation and return a job id to poll.
 
     Generation runs 30s-4min, so it is done on a background thread to avoid
     reverse-proxy read timeouts (e.g. nginx 504). Poll
-    /graph-admin/repo-docs/jobs/{job_id} for the result.
+    /graph-admin/repo-docs/jobs/{job_id} for the result. ``doc_type == "all"``
+    generates every document type and bundles them as a ZIP.
     """
     log.info(
-        "POST /graph-admin/repo-docs/generate repo=%s doc_type=%s",
+        "POST /graph-admin/repo-docs/generate repo=%s doc_type=%s by=%s",
         request.repo,
         request.doc_type,
+        user.email,
     )
     from app.repo_doc_jobs import start_doc_job
 
-    job_id = start_doc_job(request.repo, request.doc_type)
+    job_id = start_doc_job(request.repo, request.doc_type, user_email=user.email)
     return {"job_id": job_id, "status": "pending"}
 
 
@@ -462,6 +473,132 @@ def graph_admin_export_repo_doc(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _docx_for_doc(markdown: str, base: str) -> bytes:
+    from app.markdown_docx import markdown_to_docx_bytes
+
+    return markdown_to_docx_bytes(markdown, title=base)
+
+
+def _base_name(filename: str) -> str:
+    return filename[:-3] if filename.lower().endswith(".md") else filename
+
+
+def _build_doc_attachments(job: dict[str, Any]) -> list[tuple[str, bytes, str]]:
+    """Return email/download attachments for a finished doc job.
+
+    One .docx for a single document; a .zip of .docx files for an 'all' job.
+    """
+    docs = job.get("docs") or []
+    if not docs:
+        raise HTTPException(status_code=400, detail="Job has no generated documents")
+
+    if len(docs) == 1:
+        d = docs[0]
+        base = _base_name(d["filename"])
+        return [(f"{base}.docx", _docx_for_doc(d["markdown"], base), _DOCX_MIME)]
+
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for d in docs:
+            base = _base_name(d["filename"])
+            try:
+                zf.writestr(f"{base}.docx", _docx_for_doc(d["markdown"], base))
+            except Exception:  # noqa: BLE001 - fall back to markdown for this entry
+                log.exception("DOCX build failed for %s; zipping markdown instead", base)
+                zf.writestr(f"{base}.md", d["markdown"])
+    return [(f"{job.get('repo', 'repo')}-docs.zip", buf.getvalue(), "application/zip")]
+
+
+@app.get("/graph-admin/repo-docs/jobs/{job_id}/zip")
+def graph_admin_repo_doc_zip(
+    job_id: str,
+    _user: CurrentUser = Depends(require_tab("docs")),
+) -> Response:
+    from app.repo_doc_jobs import get_doc_job
+
+    job = get_doc_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown document job id")
+    if job.get("status") != "done":
+        raise HTTPException(status_code=409, detail="Job is not finished yet")
+    attachments = _build_doc_attachments(job)
+    filename, data, mime = attachments[0]
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/graph-admin/repo-docs/email")
+def graph_admin_email_repo_doc(
+    request: RepoDocEmailRequest,
+    user: CurrentUser = Depends(require_tab("docs")),
+) -> dict[str, Any]:
+    from app.email_sender import EmailConfigError, email_configured, send_email
+    from app.repo_doc_jobs import get_doc_job
+
+    if not email_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email is not configured. Set SMTP_HOST and SMTP_FROM (and credentials).",
+        )
+    job = get_doc_job(request.job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown document job id")
+    if job.get("status") != "done":
+        raise HTTPException(status_code=409, detail="Job is not finished yet")
+
+    recipients = [a for a in re.split(r"[,\s]+", request.to_email or "") if a]
+    if not recipients:
+        raise HTTPException(status_code=400, detail="Provide at least one recipient email")
+
+    attachments = _build_doc_attachments(job)
+    repo = job.get("repo", "repository")
+    doc_count = len(job.get("docs") or [])
+    subject = f"Repository documentation — {repo}"
+    body = (
+        f"Attached {'is' if doc_count == 1 else 'are'} the generated "
+        f"document{'s' if doc_count != 1 else ''} for '{repo}'.\n\n"
+        f"Requested by: {user.email}\n"
+        f"Documents: {', '.join(d['label'] for d in job.get('docs') or [])}\n"
+    )
+    try:
+        send_email(to=recipients, subject=subject, body=body, attachments=attachments)
+    except EmailConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Failed to email repo docs")
+        raise HTTPException(status_code=502, detail=f"Email send failed: {exc}") from exc
+
+    log.info("Emailed repo docs job=%s to=%s by=%s", request.job_id, recipients, user.email)
+    return {"sent": True, "recipients": recipients, "attachments": [a[0] for a in attachments]}
+
+
+@app.get("/graph-admin/repo-docs/usage")
+def graph_admin_repo_doc_usage(
+    limit: int = 50,
+    user: CurrentUser = Depends(require_tab("docs")),
+) -> dict[str, Any]:
+    """Token/cost usage analytics for document generation.
+
+    Admins (and the user-management role) see every user; others see only their
+    own consumption.
+    """
+    from app.auth import has_tab
+    from app.repo_doc_usage import usage_summary
+
+    can_see_all = user.is_service or user.role == "admin" or has_tab(user.role, "users")
+    scope = None if can_see_all else user.email
+    return {"scope": "all" if can_see_all else user.email, **usage_summary(user_email=scope, limit=limit)}
 
 
 # ─── Jira ticket cache browser ───────────────────────────────────────────────

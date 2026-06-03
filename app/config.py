@@ -114,6 +114,22 @@ class Settings:
     admin_password: str = os.getenv("ADMIN_PASSWORD", "")
     service_api_key: str = os.getenv("SERVICE_API_KEY", "")
 
+    # SMTP (for emailing generated documents)
+    smtp_host: str = os.getenv("SMTP_HOST", "")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user: str = os.getenv("SMTP_USER", "")
+    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    smtp_from: str = os.getenv("SMTP_FROM", os.getenv("SMTP_USER", ""))
+    smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
+    smtp_use_ssl: bool = os.getenv("SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "on"}
+
+    # LLM pricing for document-generation cost estimates (USD per 1M tokens).
+    # Defaults are Claude Sonnet 4.x list prices; override per deployment.
+    doc_price_input_per_mtok: float = float(os.getenv("DOC_PRICE_INPUT_PER_MTOK", "3.0"))
+    doc_price_output_per_mtok: float = float(os.getenv("DOC_PRICE_OUTPUT_PER_MTOK", "15.0"))
+    doc_price_cache_read_per_mtok: float = float(os.getenv("DOC_PRICE_CACHE_READ_PER_MTOK", "0.30"))
+    doc_price_cache_write_per_mtok: float = float(os.getenv("DOC_PRICE_CACHE_WRITE_PER_MTOK", "3.75"))
+
     @property
     def database_url(self) -> str:
         if self.database_url_override:

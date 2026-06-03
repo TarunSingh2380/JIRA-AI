@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from app.repo_tree_integration import repo_tree_runtime
 
@@ -329,6 +330,15 @@ def list_document_types() -> list[dict[str, str]]:
     return [{"id": key, "label": spec["label"]} for key, spec in _DOC_TYPES.items()]
 
 
+def document_type_ids() -> list[str]:
+    return list(_DOC_TYPES.keys())
+
+
+def document_label(doc_type: str) -> str:
+    spec = _DOC_TYPES.get(doc_type)
+    return spec["label"] if spec else doc_type
+
+
 # ============================================================
 # Repo discovery (only repos with usable RepoTree artifacts)
 # ============================================================
@@ -429,17 +439,25 @@ def _build_repo_context(cfg: Any, name: str) -> tuple[str, dict[str, int]]:
 # Entry point
 # ============================================================
 
-def generate_repo_document(repo_name: str, doc_type: str = "onboarding_guide") -> tuple[str, str]:
-    """Generate a Markdown document for `repo_name`.
+@dataclass
+class DocGenResult:
+    filename: str
+    markdown: str
+    model: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
 
-    Returns (filename, markdown). Raises ValueError for bad input/missing artifacts.
+
+def build_document_context(repo_name: str) -> tuple[str, dict[str, int]]:
+    """Build (and validate) the RepoTree context blob for a repo.
+
+    Returns (context, stats). The context is identical across all document types
+    for a repo, so callers generating several docs can build it once and pass it
+    to ``generate_repo_document_full``. Raises ValueError on bad input/missing
+    artifacts.
     """
-    spec = _DOC_TYPES.get(doc_type)
-    if not spec:
-        raise ValueError(
-            f"Unknown document type '{doc_type}'. Available: {', '.join(_DOC_TYPES)}"
-        )
-
     state = repo_tree_runtime()
     cfg = state.config
     valid_names = {r.name for r in cfg.repos}
@@ -448,13 +466,36 @@ def generate_repo_document(repo_name: str, doc_type: str = "onboarding_guide") -
             f"Repository '{repo_name}' is not configured in RepoTree. "
             f"Configured repos: {', '.join(sorted(valid_names))}"
         )
-
     context, stats = _build_repo_context(cfg, repo_name)
     if not context.strip():
         raise ValueError(
             f"No architecture map or packed source found for '{repo_name}'. "
             f"Run /scan/initial and the Repomix reindex for this repo first."
         )
+    return context, stats
+
+
+def generate_repo_document_full(
+    repo_name: str,
+    doc_type: str = "onboarding_guide",
+    *,
+    context: Optional[str] = None,
+) -> DocGenResult:
+    """Generate a document and return its text plus token usage.
+
+    Pass ``context`` (from ``build_document_context``) to avoid rebuilding it when
+    generating multiple documents for the same repo.
+    """
+    spec = _DOC_TYPES.get(doc_type)
+    if not spec:
+        raise ValueError(
+            f"Unknown document type '{doc_type}'. Available: {', '.join(_DOC_TYPES)}"
+        )
+
+    if context is None:
+        context, stats = build_document_context(repo_name)
+    else:
+        stats = {"architecture_context_chars": 0, "packed_context_chars": len(context)}
 
     user = dedent(f"""
         Repository name: {repo_name}
@@ -467,6 +508,7 @@ def generate_repo_document(repo_name: str, doc_type: str = "onboarding_guide") -
         {context}
     """).strip()
 
+    state = repo_tree_runtime()
     log.info(
         "Generating %s for repo=%s (arch=%d chars, packed=%d chars)",
         doc_type, repo_name, stats["architecture_context_chars"], stats["packed_context_chars"],
@@ -483,4 +525,18 @@ def generate_repo_document(repo_name: str, doc_type: str = "onboarding_guide") -
 
     stamp = date.today().strftime("%Y%m%d")
     filename = f"{spec['filename']}-{repo_name}-{stamp}.md"
-    return filename, markdown
+    return DocGenResult(
+        filename=filename,
+        markdown=markdown,
+        model=getattr(state.llm, "model", "") or "",
+        input_tokens=getattr(result, "input_tokens", 0) or 0,
+        output_tokens=getattr(result, "output_tokens", 0) or 0,
+        cache_read_tokens=getattr(result, "cache_read_tokens", 0) or 0,
+        cache_creation_tokens=getattr(result, "cache_creation_tokens", 0) or 0,
+    )
+
+
+def generate_repo_document(repo_name: str, doc_type: str = "onboarding_guide") -> tuple[str, str]:
+    """Backward-compatible wrapper returning (filename, markdown)."""
+    res = generate_repo_document_full(repo_name, doc_type)
+    return res.filename, res.markdown
