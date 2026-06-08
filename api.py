@@ -60,6 +60,8 @@ from app.schemas import (
     RepoDocRequest,
     RepoDocExportRequest,
     RepoDocEmailRequest,
+    RepomixReindexRequest,
+    RepomixReindexResponse,
     GraphAdminTriggerRequest,
     GraphAdminTriggerResponse,
     GraphJobResponse,
@@ -333,6 +335,71 @@ def graph_admin_trigger(
         status=job.status,
         repository_count=len(selected_repositories) if request.action != "jira_tickets_only" else 0,
         excluded_repositories=_excluded_repositories(),
+    )
+
+
+@app.post("/graph-admin/repomix/reindex", response_model=RepomixReindexResponse)
+async def graph_admin_repomix_reindex(
+    request: RepomixReindexRequest,
+    _user: CurrentUser = Depends(require_tab("repos")),
+) -> RepomixReindexResponse:
+    """Refresh the RepoMix packed source for selected repositories.
+
+    This repacks the local RepoMix XML used as code context (it does not touch the
+    Graph DB). Only repacks repos whose HEAD changed since the last pack unless
+    ``force`` is set. Repo names not present in the RepoMix config are returned in
+    ``unknown`` rather than failing the whole call.
+    """
+    from repo_architect.reindex import reindex_repomix
+    from app.repo_tree_integration import repo_tree_runtime
+
+    log.info(
+        "POST /graph-admin/repomix/reindex repos=%d pull_code=%s force=%s",
+        len(request.repositories),
+        request.pull_latest_code,
+        request.force,
+    )
+
+    try:
+        state = repo_tree_runtime()
+        config = state.config
+    except Exception as exc:
+        log.exception("RepoMix runtime unavailable")
+        raise HTTPException(status_code=503, detail=f"RepoMix not available: {exc}") from exc
+
+    known_names = {repo.name for repo in config.repos}
+    requested = request.repositories or list(known_names)
+    selected = [name for name in requested if name in known_names]
+    unknown = [name for name in requested if name not in known_names]
+
+    if not selected:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No known RepoMix repositories selected. "
+                f"Known repos: {', '.join(sorted(known_names)) or 'none'}"
+            ),
+        )
+
+    try:
+        summary = await asyncio.to_thread(
+            reindex_repomix,
+            config,
+            repo_names=selected,
+            do_git_pull=request.pull_latest_code,
+            force=request.force,
+        )
+    except Exception as exc:
+        log.exception("RepoMix reindex failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return RepomixReindexResponse(
+        selected=summary.get("selected", selected),
+        packed=summary.get("packed", []),
+        skipped=summary.get("skipped", []),
+        failed=summary.get("failed", []),
+        unknown=unknown,
+        details=summary.get("details", []),
     )
 
 

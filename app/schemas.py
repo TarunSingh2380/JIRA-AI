@@ -183,6 +183,29 @@ class GraphJobResponse(BaseModel):
     completed_at: str | None = None
 
 
+class RepomixReindexRequest(BaseModel):
+    repositories: List[str] = Field(
+        default_factory=list,
+        description="Repository names to repack. Empty = all configured RepoMix repos.",
+    )
+    pull_latest_code: bool = Field(
+        default=True, description="Run git pull before repacking each repo."
+    )
+    force: bool = Field(
+        default=False,
+        description="Repack even when the repo HEAD is unchanged since the last pack.",
+    )
+
+
+class RepomixReindexResponse(BaseModel):
+    selected: List[str]
+    packed: List[str] = []
+    skipped: List[str] = []
+    failed: List[Dict[str, Any]] = []
+    unknown: List[str] = []
+    details: List[Dict[str, Any]] = []
+
+
 class CodeAnalysisReportRequest(BaseModel):
     repositories: List[str]
     include_graph_context: bool = True

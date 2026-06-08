@@ -1,14 +1,17 @@
-"""Background job orchestrator for graph build operations.
+"""Background job orchestrator for Qdrant Vector DB build operations.
 
 Each job runs as an asyncio background task. Progress is written back to the
 GraphJob in `job_store` *and* persisted to the `graph_jobs` table so history
 survives restarts. GitHub repositories and git pull results are also logged.
 
+The Graph DB (Neo4j / CodeGraphContext) is no longer used: jobs only build and
+upsert embeddings into the Qdrant Vector DB for Jira tickets and codebase files.
+
 Job actions:
-  update            – git pull (optional) + ingest repos + Jira fetch/graph
+  update            – git pull (optional) + embed repos + Jira fetch/embed
   regenerate        – same as update, forces Jira re-fetch (ignores cache)
-  create_new        – same as regenerate + clears Jira nodes in Neo4j first
-  jira_tickets_only – skip repos; only fetch/graph Jira tickets
+  create_new        – same as regenerate (re-embeds everything)
+  jira_tickets_only – skip repos; only fetch/embed Jira tickets
 """
 from __future__ import annotations
 
@@ -23,15 +26,13 @@ from uuid import UUID
 
 import psycopg
 from app.config import settings
-from app.codegraphcontext_runner import index_repository_with_codegraphcontext
 from app.codebase_graph import (
     build_codebase_embedding_documents,
     embed_codebase_documents,
-    ingest_codebase_graph,
 )
 from app.graph_job import GraphJob
 from app.jira_fetcher import fetch_all_tickets
-from app.jira_graph import _adf_to_text, make_neo4j_driver, upsert_jira_tickets
+from app.jira_graph import _adf_to_text
 from app.flag_embedder import BGEM3Embedder
 from app.ollama_embedder import OllamaEmbedder
 from app.qdrant_store import upsert_jira_embeddings, upsert_jira_hybrid_embeddings
@@ -239,18 +240,16 @@ async def run_graph_job(
     embedding_model: str = "codebase_bge_m3",
     selected_repositories: list[str] | None = None,
 ) -> None:
-    """Execute a graph build job in the background; updates `job` and persists to DB."""
+    """Execute a Qdrant build job in the background; updates `job` and persists to DB."""
     job.status = "running"
     _persist_job_start(job)
-    log.info("Graph job %s started (action=%s)", job.job_id, job.action)
+    log.info("Qdrant job %s started (action=%s)", job.job_id, job.action)
 
-    neo4j_driver = None
     codebase_documents: list[dict[str, Any]] = []
 
     try:
         action = job.action
         jira_only = action == "jira_tickets_only"
-        clear_jira = action == "create_new"
         force_jira_refresh = action in ("create_new", "regenerate", "jira_tickets_only")
 
         # ── Step 1: GitHub repos ──────────────────────────────────────────
@@ -303,17 +302,6 @@ async def run_graph_job(
                         finally:
                             conn.close()
 
-            if neo4j_driver is None:
-                neo4j_driver = make_neo4j_driver(
-                    settings.neo4j_uri,
-                    settings.neo4j_user,
-                    settings.neo4j_password,
-                )
-
-            codebase_files = 0
-            codebase_functions = 0
-            codebase_imports = 0
-            codebase_calls = 0
             repo_concurrency = max(1, settings.graph_job_repo_concurrency)
             repo_semaphore = asyncio.Semaphore(repo_concurrency)
 
@@ -321,18 +309,12 @@ async def run_graph_job(
                 job,
                 "repositories",
                 "info",
-                f"Indexing {len(repos)} repositories with concurrency {repo_concurrency}.",
+                f"Scanning {len(repos)} repositories for Qdrant embeddings with concurrency {repo_concurrency}.",
             )
             _persist_job_progress(job)
 
-            async def _process_repo(repo: dict[str, Any]) -> tuple[dict[str, Any], dict[str, int], list[dict[str, Any]]]:
+            async def _process_repo(repo: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                 async with repo_semaphore:
-                    counts = await ingest_codebase_graph(
-                        driver=neo4j_driver,
-                        database=settings.neo4j_database,
-                        repo=repo,
-                        clear_first=clear_jira,
-                    )
                     documents: list[dict[str, Any]] = []
                     if build_embeddings:
                         documents = await asyncio.to_thread(
@@ -341,17 +323,13 @@ async def run_graph_job(
                             max_files=settings.codebase_embed_max_files_per_repo,
                             max_chars=settings.codebase_embed_max_chars,
                         )
-                    return repo, counts, documents
+                    return repo, documents
 
             completed_repos = 0
             repo_index_started_at = time.monotonic()
             repo_tasks = [asyncio.create_task(_process_repo(repo)) for repo in repos]
             for repo_task in asyncio.as_completed(repo_tasks):
-                repo, counts, documents = await repo_task
-                codebase_files += counts.get("files", 0)
-                codebase_functions += counts.get("functions", 0)
-                codebase_imports += counts.get("imports", 0)
-                codebase_calls += counts.get("calls", 0)
+                repo, documents = await repo_task
                 codebase_documents.extend(documents)
                 completed_repos += 1
                 job.progress["repositories_done"] = completed_repos
@@ -362,14 +340,11 @@ async def run_graph_job(
                 )
                 _append_job_log(
                     job,
-                    "graph_ingest",
+                    "repositories",
                     "info",
                     (
-                        f"{repo.get('name', 'repository')}: indexed "
-                        f"{counts.get('files', 0)} files, "
-                        f"{counts.get('functions', 0)} functions, "
-                        f"{counts.get('imports', 0)} imports, "
-                        f"{counts.get('calls', 0)} calls. "
+                        f"{repo.get('name', 'repository')}: prepared "
+                        f"{len(documents)} embedding document(s). "
                         f"Progress {completed_repos}/{len(repos)}."
                         f"{_format_eta(completed_repos, len(repos), repo_index_started_at)}"
                     ),
@@ -386,49 +361,9 @@ async def run_graph_job(
                 job,
                 "repositories",
                 "info",
-                (
-                    "Codebase graph indexed "
-                    f"{codebase_files} files, {codebase_functions} functions, "
-                    f"{codebase_imports} imports, and {codebase_calls} calls."
-                ),
+                f"Prepared {len(codebase_documents)} codebase embedding document(s) across {len(repos)} repositories.",
             )
             _persist_job_progress(job)
-
-            if settings.codegraphcontext_enabled:
-                _append_job_log(
-                    job,
-                    "codegraphcontext",
-                    "info",
-                    f"Starting CodeGraphContext indexing for {len(repos)} selected repository/repositories.",
-                )
-                _persist_job_progress(job)
-                cgc_success = 0
-                for repo in repos:
-                    success, output = await index_repository_with_codegraphcontext(repo)
-                    repo_name = repo.get("name", "repository")
-                    if success:
-                        cgc_success += 1
-                        _append_job_log(
-                            job,
-                            "codegraphcontext",
-                            "info",
-                            f"{repo_name}: CodeGraphContext indexing completed.",
-                        )
-                    else:
-                        _append_job_log(
-                            job,
-                            "codegraphcontext",
-                            "warning",
-                            f"{repo_name}: CodeGraphContext indexing skipped/failed: {output}",
-                        )
-                    _persist_job_progress(job)
-                _append_job_log(
-                    job,
-                    "codegraphcontext",
-                    "info",
-                    f"CodeGraphContext indexed {cgc_success}/{len(repos)} repository/repositories.",
-                )
-                _persist_job_progress(job)
 
         # ── Step 2: Jira tickets ──────────────────────────────────────────
         if jira_only or (fetch_latest_jira and include_jira_in_graph):
@@ -453,25 +388,8 @@ async def run_graph_job(
             log.info("Got %d Jira tickets", len(tickets))
 
             if tickets and include_jira_in_graph:
-                if neo4j_driver is None:
-                    neo4j_driver = make_neo4j_driver(
-                        settings.neo4j_uri,
-                        settings.neo4j_user,
-                        settings.neo4j_password,
-                    )
-
-                written = await upsert_jira_tickets(
-                    driver=neo4j_driver,
-                    tickets=tickets,
-                    jira_base_url=settings.jira_base_url,
-                    database=settings.neo4j_database,
-                    clear_first=clear_jira,
-                )
-
-                job.progress["jira_tickets_done"] = written
+                job.progress["jira_tickets_done"] = len(tickets)
                 _persist_job_progress(job)
-
-                log.info("Wrote %d Jira tickets to Neo4j", written)
 
                 # ── Step 3: Jira embeddings ──────────────────────────────
                 if build_embeddings and settings.qdrant_url:
@@ -658,17 +576,13 @@ async def run_graph_job(
         job.mark_done()
         _persist_job_progress(job)
 
-        log.info("Graph job %s completed", job.job_id)
+        log.info("Qdrant job %s completed", job.job_id)
 
     except Exception as exc:
-        log.exception("Graph job %s failed: %s", job.job_id, exc)
+        log.exception("Qdrant job %s failed: %s", job.job_id, exc)
 
         job.mark_failed(str(exc))
         _persist_job_progress(job)
-
-    finally:
-        if neo4j_driver is not None:
-            await neo4j_driver.close()
 
 
 def _ticket_embed_texts(tickets: list[dict]) -> list[str]:

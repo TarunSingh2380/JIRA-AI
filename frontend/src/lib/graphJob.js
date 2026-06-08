@@ -104,6 +104,6 @@ export function runningStatusMessage(data, buildEmbeddings) {
   if (codeEmbTotal > 0 && codeEmbDone < codeEmbTotal) return "Building codebase embeddings...";
   if (embTotal > 0 && embDone < embTotal) return "Building embeddings...";
   if (embTotal === 0 && buildEmbeddings && repoDone) return "Building codebase embeddings...";
-  if (repoDone && jiraDone) return "Finalizing graph job...";
-  return "Graph job running...";
+  if (repoDone && jiraDone) return "Finalizing Qdrant update...";
+  return "Qdrant update running...";
 }

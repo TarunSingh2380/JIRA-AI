@@ -30,13 +30,13 @@ export default function Logs() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-        <span style={{ fontSize: 13, color: "var(--muted)" }}>Recent graph jobs &amp; Jira fetch log</span>
+        <span style={{ fontSize: 13, color: "var(--muted)" }}>Recent Qdrant jobs &amp; Jira fetch log</span>
         <button className="secondary" style={{ width: "auto", minHeight: "unset", padding: "6px 14px", fontSize: 13 }} onClick={load}>
           Refresh
         </button>
       </div>
 
-      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)", margin: "0 0 8px" }}>Graph Jobs</p>
+      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)", margin: "0 0 8px" }}>Qdrant Jobs</p>
       <table>
         <thead>
           <tr>

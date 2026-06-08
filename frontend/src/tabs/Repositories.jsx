@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { apiDownload } from "../api";
+import { apiDownload, apiFetch } from "../api";
 
 export default function Repositories({ repos, excluded, selected, setSelected, embeddingModel, setStatus }) {
   const [downloading, setDownloading] = useState(false);
+  const [repomixing, setRepomixing] = useState(false);
   const allSelected = repos.length > 0 && selected.size === repos.length;
 
   function toggleRepo(name, checked) {
@@ -29,8 +30,9 @@ export default function Repositories({ repos, excluded, selected, setSelected, e
       await apiDownload("/graph-admin/code-analysis-report", {
         method: "POST",
         body: {
+          // Graph DB is no longer used — rely on Qdrant/code context only.
           repositories: [...selected],
-          include_graph_context: true,
+          include_graph_context: false,
           embedding_model: embeddingModel,
         },
         fallbackName: "code-analysis-report.md",
@@ -43,6 +45,36 @@ export default function Repositories({ repos, excluded, selected, setSelected, e
     }
   }
 
+  async function updateRepomix() {
+    if (selected.size === 0) {
+      setStatus({ msg: "Select at least one repository to update RepoMix data", cls: "error" });
+      return;
+    }
+    setRepomixing(true);
+    setStatus({ msg: "Updating RepoMix data for selected repositories...", cls: "running" });
+    try {
+      const data = await apiFetch("/graph-admin/repomix/reindex", {
+        method: "POST",
+        body: { repositories: [...selected], pull_latest_code: true, force: false },
+      });
+      const packed = data.packed?.length || 0;
+      const skipped = data.skipped?.length || 0;
+      const failed = data.failed?.length || 0;
+      const unknown = data.unknown?.length || 0;
+      const parts = [`${packed} repacked`, `${skipped} unchanged`];
+      if (failed) parts.push(`${failed} failed`);
+      if (unknown) parts.push(`${unknown} not in RepoMix config`);
+      setStatus({
+        msg: `RepoMix update done: ${parts.join(", ")}`,
+        cls: failed ? "error" : "ok",
+      });
+    } catch (err) {
+      setStatus({ msg: err.message, cls: "error" });
+    } finally {
+      setRepomixing(false);
+    }
+  }
+
   return (
     <div>
       <div className="repo-actions">
@@ -52,6 +84,9 @@ export default function Repositories({ repos, excluded, selected, setSelected, e
         </label>
         <button className="secondary" disabled={downloading} onClick={downloadCodeAnalysis}>
           Download Code Analysis
+        </button>
+        <button className="secondary" disabled={repomixing} onClick={updateRepomix}>
+          {repomixing ? "Updating RepoMix…" : "Update RepoMix Data"}
         </button>
       </div>
 

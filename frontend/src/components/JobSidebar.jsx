@@ -25,7 +25,7 @@ export default function JobSidebar({ options, setOption, trigger, busy }) {
           checked={options.includeJira}
           onChange={(e) => setOption("includeJira", e.target.checked)}
         />
-        Include Jira tickets in graph
+        Embed Jira tickets into Qdrant
       </label>
       <label>
         <input
@@ -55,16 +55,16 @@ export default function JobSidebar({ options, setOption, trigger, busy }) {
       />
       <div className="toolbar">
         <button disabled={busy} onClick={() => trigger("update")}>
-          Update Graph DB
+          Update Qdrant Vector DB
         </button>
         <button className="secondary" disabled={busy} onClick={() => trigger("regenerate")}>
-          Regenerate Graph DB
+          Regenerate Qdrant Vector DB
         </button>
         <button className="warn" disabled={busy} onClick={() => trigger("jira_tickets_only")}>
-          Fetch Jira Tickets Only
+          Embed Jira Tickets Only
         </button>
         <button className="danger" disabled={busy} onClick={() => trigger("create_new")}>
-          Create New Graph DB
+          Rebuild Qdrant Vector DB
         </button>
         <button className="secondary" disabled={busy} onClick={() => trigger("jira_tickets_only")}>
           Refresh Jira Tickets Only
