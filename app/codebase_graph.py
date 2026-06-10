@@ -1,12 +1,11 @@
-"""Local codebase graph and embedding ingestion.
+"""Local codebase scanning and embedding ingestion.
 
 This is intentionally lightweight and language-agnostic enough for mixed
-repositories. It creates graph structure for impact analysis and stores
-model-specific file embeddings in Qdrant collections.
+repositories. It scans first-party source files and stores model-specific file
+embeddings in Qdrant collections.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import re
@@ -14,8 +13,6 @@ from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Optional
-
-from neo4j import AsyncDriver
 
 from app.ollama_embedder import OllamaEmbedder
 from app.qdrant_store import upsert_codebase_embeddings
@@ -87,108 +84,6 @@ _LANGUAGE_BY_EXTENSION = {
     ".cs": "C#",
     ".sql": "SQL",
 }
-
-_CYPHER_CLEAR_REPO = """
-MATCH (r:Repo {full_name: $full_name})
-OPTIONAL MATCH (r)<-[:IN_REPO]-(n)
-WHERE n:File OR n:Function
-DETACH DELETE n
-WITH r
-DETACH DELETE r
-"""
-
-_CYPHER_UPSERT_REPO = """
-MERGE (r:Repo {full_name: $repo.full_name})
-SET r.name = $repo.name,
-    r.url = $repo.url,
-    r.local_path = $repo.local_path,
-    r.default_branch = $repo.default_branch,
-    r.language = $repo.language,
-    r.ingested_at = datetime()
-"""
-
-_CYPHER_UPSERT_FILES = """
-MATCH (r:Repo {full_name: $full_name})
-UNWIND $files AS f
-MERGE (file:File {repo_full_name: $full_name, path: f.path})
-SET file.extension = f.extension,
-    file.language = f.language,
-    file.lines = f.lines,
-    file.size_bytes = f.size_bytes,
-    file.current = true,
-    file.ingested_at = datetime()
-MERGE (file)-[:IN_REPO]->(r)
-"""
-
-_CYPHER_UPSERT_FUNCTIONS = """
-UNWIND $functions AS fn
-MATCH (file:File {repo_full_name: $full_name, path: fn.file_path})
-MERGE (f:Function {qualified_name: fn.qualified_name})
-SET f.repo_full_name = $full_name,
-    f.name = fn.name,
-    f.file_path = fn.file_path,
-    f.language = fn.language,
-    f.start_line = fn.start_line,
-    f.end_line = fn.end_line,
-    f.ingested_at = datetime()
-MERGE (f)-[:DEFINED_IN]->(file)
-"""
-
-_CYPHER_LINK_IMPORTS = """
-UNWIND $imports AS edge
-MATCH (source:File {repo_full_name: $full_name, path: edge.source_path})
-MATCH (target:File {repo_full_name: $full_name, path: edge.target_path})
-MERGE (source)-[:IMPORTS {kind: edge.kind}]->(target)
-"""
-
-_CYPHER_LINK_CALLS = """
-UNWIND $calls AS edge
-MATCH (caller:Function {repo_full_name: $full_name, qualified_name: edge.caller})
-MATCH (callee:Function {repo_full_name: $full_name, qualified_name: edge.callee})
-MERGE (caller)-[:CALLS]->(callee)
-"""
-
-_CYPHER_CLEAR_LEGACY_FUNCTIONS = """
-MATCH (fn:Function {repo_full_name: $full_name})
-WHERE NOT fn.qualified_name STARTS WITH $prefix
-DETACH DELETE fn
-"""
-
-
-async def ingest_codebase_graph(
-    *,
-    driver: AsyncDriver,
-    database: str,
-    repo: dict[str, Any],
-    clear_first: bool = False,
-    batch_size: int = 500,
-) -> dict[str, int]:
-    """Scan a local repo and upsert a code graph into Neo4j."""
-    scan = await asyncio.to_thread(scan_repository, repo)
-    full_name = scan["repo"]["full_name"]
-    async with driver.session(database=database) as session:
-        if clear_first:
-            await session.run(_CYPHER_CLEAR_REPO, full_name=full_name)
-        await session.run(_CYPHER_UPSERT_REPO, repo=scan["repo"])
-        await session.run(
-            _CYPHER_CLEAR_LEGACY_FUNCTIONS,
-            full_name=full_name,
-            prefix=f"{full_name}:",
-        )
-        for chunk in _chunks(scan["files"], batch_size):
-            await session.run(_CYPHER_UPSERT_FILES, full_name=full_name, files=chunk)
-        for chunk in _chunks(scan["functions"], batch_size):
-            await session.run(_CYPHER_UPSERT_FUNCTIONS, full_name=full_name, functions=chunk)
-        for chunk in _chunks(scan["imports"], batch_size):
-            await session.run(_CYPHER_LINK_IMPORTS, full_name=full_name, imports=chunk)
-        for chunk in _chunks(scan["calls"], batch_size):
-            await session.run(_CYPHER_LINK_CALLS, full_name=full_name, calls=chunk)
-    return {
-        "files": len(scan["files"]),
-        "functions": len(scan["functions"]),
-        "imports": len(scan["imports"]),
-        "calls": len(scan["calls"]),
-    }
 
 
 def build_codebase_embedding_documents(
@@ -488,10 +383,6 @@ def _embedding_text(repo: dict[str, Any], file_row: dict[str, Any], text: str, *
             trimmed,
         ]
     )
-
-
-def _chunks(items: list[Any], size: int) -> list[list[Any]]:
-    return [items[i:i + size] for i in range(0, len(items), size)]
 
 
 def _dedupe_edges(edges: list[dict[str, str]], keys: tuple[str, ...]) -> list[dict[str, str]]:

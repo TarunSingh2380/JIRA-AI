@@ -71,24 +71,12 @@ class Settings:
     n8n_api_key: str = os.getenv("N8N_API_KEY", "")
     repository_search_root: str = os.getenv("REPOSITORY_SEARCH_ROOT", "/home/ubuntu")
     repository_host_root: str = os.getenv("REPOSITORY_HOST_ROOT", os.getenv("REPOSITORY_SEARCH_ROOT", "/home/ubuntu"))
-    excluded_repository_names: str = os.getenv("EXCLUDED_REPOSITORY_NAMES", "JIRA-AI")
-    neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    neo4j_user: str = os.getenv("NEO4J_USER", "neo4j")
-    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "")
-    neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
+    excluded_repository_names: str = os.getenv("EXCLUDED_REPOSITORY_NAMES", "JIRA-AI,forge_fitness")
     graph_job_repo_timeout_seconds: int = int(os.getenv("GRAPH_JOB_REPO_TIMEOUT_SECONDS", "3600"))
     graph_job_commit_batch_size: int = int(os.getenv("GRAPH_JOB_COMMIT_BATCH_SIZE", "500"))
     graph_job_limit_jira_issues: int = int(os.getenv("GRAPH_JOB_LIMIT_JIRA_ISSUES", "0"))
     graph_job_build_embeddings: bool = os.getenv("GRAPH_JOB_BUILD_EMBEDDINGS", "true").lower() in {"1", "true", "yes", "on"}
     graph_job_repo_concurrency: int = int(os.getenv("GRAPH_JOB_REPO_CONCURRENCY", "4"))
-    codegraphcontext_enabled: bool = os.getenv("CODEGRAPHCONTEXT_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
-    codegraphcontext_timeout_seconds: int = int(os.getenv("CODEGRAPHCONTEXT_TIMEOUT_SECONDS", "1800"))
-
-    # Neo4j (for Jira ticket graph)
-    neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    neo4j_user: str = os.getenv("NEO4J_USER", "neo4j")
-    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "")
-    neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
 
     # Qdrant (vector store for embeddings)
     qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")

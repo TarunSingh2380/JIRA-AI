@@ -4,8 +4,8 @@ Each job runs as an asyncio background task. Progress is written back to the
 GraphJob in `job_store` *and* persisted to the `graph_jobs` table so history
 survives restarts. GitHub repositories and git pull results are also logged.
 
-The Graph DB (Neo4j / CodeGraphContext) is no longer used: jobs only build and
-upsert embeddings into the Qdrant Vector DB for Jira tickets and codebase files.
+Jobs only build and upsert embeddings into the Qdrant Vector DB for Jira
+tickets and codebase files.
 
 Job actions:
   update            – git pull (optional) + embed repos + Jira fetch/embed

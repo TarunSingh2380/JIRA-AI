@@ -161,7 +161,7 @@ For Docker, set these values in `.env`:
 DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/jira_ai
 REPOSITORY_SEARCH_ROOT=/host-repos
 REPOSITORY_HOST_ROOT=/home/ubuntu
-EXCLUDED_REPOSITORY_NAMES=JIRA-AI
+EXCLUDED_REPOSITORY_NAMES=JIRA-AI,forge_fitness
 REPO_TREE_SRC_PATH=/app
 REPO_TREE_CONFIG_PATH=/app/repo_tree/config/repos.yaml
 REPO_TREE_WORKSPACE_DIR=/app/repo_tree/workspace
@@ -252,10 +252,10 @@ Example request:
 
 The admin page triggers n8n graph jobs for every top-level Git repository already cloned under `REPOSITORY_SEARCH_ROOT`, excluding `JIRA-AI` by default. Each trigger sends n8n the local clone path, remote URL, current branch, current commit, Jira flags, and instructions to run `git pull --ff-only` before rebuilding graph context.
 
-The API also supports local graph jobs at `/graph-admin/jobs`. These run inside the API process, stream progress over the job WebSocket, persist repository metadata, run optional `git pull`, and optionally fetch Jira ticket history into Neo4j.
+The API also supports local graph jobs at `/graph-admin/jobs`. These run inside the API process, stream progress over the job WebSocket, persist repository metadata, run optional `git pull`, and optionally fetch Jira ticket history and embed it into the Qdrant vector store.
 Graph job state is persisted to Postgres when `DATABASE_URL` is configured, so refreshing `/graph-admin` restores the latest job status, logs, repository progress, and Jira ticket snapshot instead of resetting to an empty in-memory view.
 
-The repositories tab also supports downloadable code analysis reports. Select one or more repositories and click **Download Code Analysis** to generate a Markdown document from local clone inspection plus Neo4j graph context when available. The backing endpoint is `POST /graph-admin/code-analysis-report`.
+The repositories tab also supports downloadable code analysis reports. Select one or more repositories and click **Download Code Analysis** to generate a Markdown document from local clone inspection plus Qdrant vector-search context when available. The backing endpoint is `POST /graph-admin/code-analysis-report`.
 
 The Ticket Insights tab can download a Jira test-case quantity, quality, and clarity Excel workbook. The sheet excludes `AIGOV` by default, compares already-present ticket test cases against actual `/testcases/generate` output for a bounded sample of filtered tickets, includes the auto-detected `grounded_repos` from RepoTree/Anthropic using Repomix directory previews, and uses Anthropic Opus (`TEST_CASE_COMPARISON_MODEL`) to write a narrative tab. Add `format=md` to the endpoint if you need the older Markdown report.
 
@@ -272,11 +272,7 @@ TEST_CASE_COMPARISON_PIPELINE_LIMIT=5
 TEST_CASE_COMPARISON_PIPELINE_TOP_K=15
 REPOSITORY_SEARCH_ROOT=/home/ubuntu
 REPOSITORY_HOST_ROOT=/home/ubuntu
-EXCLUDED_REPOSITORY_NAMES=JIRA-AI
-NEO4J_URI=bolt://host.docker.internal:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your-neo4j-password
-NEO4J_DATABASE=neo4j
+EXCLUDED_REPOSITORY_NAMES=JIRA-AI,forge_fitness
 GRAPH_JOB_REPO_TIMEOUT_SECONDS=900
 GRAPH_JOB_COMMIT_BATCH_SIZE=500
 GRAPH_JOB_LIMIT_JIRA_ISSUES=0
@@ -306,15 +302,13 @@ If `N8N_GRAPH_WEBHOOK_URL` is not configured, the UI returns a dry-run payload s
 
 n8n should treat the repository paths as existing local clones. It should not clone them again.
 
-When embeddings are enabled, graph jobs create Jira ticket embeddings in
-Qdrant through the configured Ollama embedding model. Repository graph creation
-and Neo4j `EmbeddingDocument` rebuilds no longer use Repograph, because that
-path only covered Python repositories.
+When embeddings are enabled, graph jobs create Jira ticket and codebase
+embeddings in Qdrant through the configured Ollama embedding model.
 
 Test-case generation now calls the bundled RepoTree code in-process. RepoTree
-uses the existing Qdrant codebase collections plus its Repomix maps, so this
-flow no longer depends on Neo4j graph traversal. Set `REPO_TREE_BASE_URL` only
-if you intentionally want to fall back to a remote RepoTree service.
+uses the existing Qdrant codebase collections plus its Repomix maps. Set
+`REPO_TREE_BASE_URL` only if you intentionally want to fall back to a remote
+RepoTree service.
 
 ## Jira Review + Slack Follow-up Workflow
 

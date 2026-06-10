@@ -13,7 +13,7 @@ services:
     environment:
       REPOSITORY_SEARCH_ROOT: /host-repos
       REPOSITORY_HOST_ROOT: /home/ubuntu
-      EXCLUDED_REPOSITORY_NAMES: JIRA-AI
+      EXCLUDED_REPOSITORY_NAMES: JIRA-AI,forge_fitness
 
       # IMPORTANT — these point at host services
       OLLAMA_URL: http://host.docker.internal:11434
@@ -31,8 +31,6 @@ services:
 
       GRAPH_JOB_REPO_TIMEOUT_SECONDS: 3600
       GRAPH_JOB_REPO_CONCURRENCY: 8
-      CODEGRAPHCONTEXT_ENABLED: "true"
-      CODEGRAPHCONTEXT_TIMEOUT_SECONDS: 1800
 
     ports:
       - "8000:8000"
