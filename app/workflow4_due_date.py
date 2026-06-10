@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import json
+from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -594,3 +595,307 @@ class Workflow4DueDateChecker:
                 default=str,
             ),
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MoM-2 batch checkers (09:00 assignee / 15:00 TL)
+#
+# These run as separate scheduled batches and send ONE digest per recipient,
+# re-sent every day a ticket stays in band (deduped within the same day via an
+# `*_alerted_on` date column). "Time left" is measured against the active
+# phase's Jira due date (Dev / QA / Live), chosen from the ticket's status.
+# ─────────────────────────────────────────────────────────────────────────────
+class _Workflow4BatchChecker(Workflow4DueDateChecker):
+    """Shared scaffold for the MoM-2 batches; reuses the parent's working-day and
+    role-channel helpers. Subclasses set the daily-dedupe column, the time-left
+    threshold, and how the qualifying tickets fan out into digests."""
+
+    name: str = "workflow4-batch"
+    alerted_column: str = ""          # date column for once-per-day dedupe
+    max_time_left_pct: float = 0.0    # qualify when time_left_pct is under this
+    inclusive: bool = False           # True -> "<=" threshold, False -> "<"
+
+    # ── subclass hooks ──────────────────────────────────────────────────────
+    def _build_digests(
+        self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
+    ) -> list[dict[str, str]]:
+        raise NotImplementedError
+
+    # ── Jira phase resolution ───────────────────────────────────────────────
+    def _phase_fields(self) -> list[str]:
+        fields = ["status", "duedate"]
+        for fid in (
+            self.settings.jira_dev_due_date_field,
+            self.settings.jira_qa_due_date_field,
+            self.settings.jira_live_due_date_field,
+        ):
+            if fid:
+                fields.append(fid)
+        return fields
+
+    @staticmethod
+    def _parse_jira_date(value: Any) -> date | None:
+        if isinstance(value, str) and value.strip():
+            try:
+                return date.fromisoformat(value.strip()[:10])
+            except ValueError:
+                return None
+        return None
+
+    def _fetch_jira_phase(self, jira_ticket_id: str) -> dict[str, Any]:
+        if not jira_ticket_id:
+            raise ValueError("jira_ticket_id is required")
+        response = requests.get(
+            f"{self.settings.jira_base_url}/rest/api/3/issue/{jira_ticket_id}",
+            params={"fields": ",".join(self._phase_fields())},
+            auth=HTTPBasicAuth(self.settings.jira_email, self.settings.jira_api_token),
+            headers={"Accept": "application/json"},
+            timeout=self.settings.external_request_timeout_seconds,
+        )
+        response.raise_for_status()
+        data = response.json().get("fields", {}) or {}
+        status_name = ((data.get("status") or {}).get("name")) or ""
+        s = self.settings
+
+        def _d(fid: str) -> date | None:
+            return self._parse_jira_date(data.get(fid)) if fid else None
+
+        return {
+            "status": status_name,
+            "done": status_name in DONE_STATUSES,
+            "dev_due": _d(s.jira_dev_due_date_field),
+            "qa_due": _d(s.jira_qa_due_date_field),
+            "live_due": _d(s.jira_live_due_date_field),
+            "system_due": self._parse_jira_date(data.get("duedate")),
+        }
+
+    @staticmethod
+    def _status_set(raw: str) -> set[str]:
+        return {s.strip().lower() for s in (raw or "").split(",") if s.strip()}
+
+    def _active_phase(
+        self, status: str, info: dict[str, Any], ticket: dict[str, Any]
+    ) -> tuple[str | None, date | None]:
+        """Pick the phase due date that governs this ticket right now.
+
+        Status decides the preferred phase; we then fall through to the other
+        phase dates, the system `duedate`, and finally the SLA `due_date` so a
+        ticket is never silently skipped for a missing custom field."""
+        sl = (status or "").lower()
+        dev = ("Dev", info.get("dev_due"))
+        qa = ("QA", info.get("qa_due"))
+        live = ("Live", info.get("live_due"))
+        if sl in self._status_set(self.settings.jira_live_statuses):
+            order = [live, qa, dev]
+        elif sl in self._status_set(self.settings.jira_qa_statuses):
+            order = [qa, dev, live]
+        else:
+            order = [dev, qa, live]
+        for label, due in order:
+            if due:
+                return label, due
+        if info.get("system_due"):
+            return "Due", info["system_due"]
+        row_due = self._safe_date(ticket.get("due_date"))
+        return ("Due", row_due) if row_due else (None, None)
+
+    def _safe_date(self, value: Any) -> date | None:
+        try:
+            return self._coerce_date(value, "date")
+        except (ValueError, TypeError):
+            return None
+
+    def _phase_progress(self, ticket: dict[str, Any], active_due: date | None) -> dict[str, Any] | None:
+        tracking_start = self._safe_date(ticket.get("tracking_start_date"))
+        if active_due is None or tracking_start is None:
+            return None
+        today = date.today()
+        total = self._count_working_days(tracking_start, active_due)
+        remaining = 0 if today > active_due else self._count_working_days(today, active_due)
+        if total <= 0:
+            time_left_pct = 0.0
+        else:
+            time_left_pct = max(0.0, min(100.0, remaining / total * 100))
+        return {"today": today, "due": active_due, "total": total,
+                "remaining": remaining, "time_left_pct": time_left_pct}
+
+    def _qualifies(self, time_left_pct: float) -> bool:
+        if self.inclusive:
+            return time_left_pct <= self.max_time_left_pct
+        return time_left_pct < self.max_time_left_pct
+
+    # ── digest formatting (shared) ──────────────────────────────────────────
+    def _format_digest(self, title: str, items: list[dict[str, Any]], *, show_assignee: bool) -> str:
+        rows = sorted(items, key=lambda t: t["time_left_pct"])
+        lines = [f"*{title}*", f"_AI Governor · {date.today():%Y-%m-%d}_", ""]
+        for t in rows:
+            left = "overdue" if t["remaining"] <= 0 else f"{t['time_left_pct']:.0f}% left"
+            who = f" · <@{t['assignee_slack_id']}>" if show_assignee and t["assignee_slack_id"] else ""
+            prio = f" · {t['priority']}" if t["priority"] else ""
+            lines.append(
+                f"• *{t['key']}* — _{t['status']}_{prio} · {t['phase']} due {t['due']} · *{left}*{who}\n"
+                f"   https://ramfincorp.atlassian.net/browse/{t['key']}"
+            )
+        return "\n".join(lines)
+
+    # ── schema self-heal ────────────────────────────────────────────────────
+    def _ensure_alert_columns(self, cursor: Any) -> None:
+        cursor.execute("ALTER TABLE due_date_tracking ADD COLUMN IF NOT EXISTS dev_due_date date")
+        cursor.execute("ALTER TABLE due_date_tracking ADD COLUMN IF NOT EXISTS qa_due_date date")
+        cursor.execute("ALTER TABLE due_date_tracking ADD COLUMN IF NOT EXISTS live_due_date date")
+        # alerted_column is a class constant (never user input) -> safe to inline.
+        cursor.execute(
+            f"ALTER TABLE due_date_tracking ADD COLUMN IF NOT EXISTS {self.alerted_column} date"
+        )
+
+    def check(self) -> dict[str, Any]:
+        if not self.alerted_column:
+            raise RuntimeError("alerted_column must be set on the batch checker")
+        if not self.settings.database_url:
+            raise RuntimeError(f"DATABASE_URL is required for {self.name}")
+        if not self._jira_is_configured():
+            raise RuntimeError(f"Jira credentials are required for {self.name}")
+
+        try:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+        except ImportError as exc:
+            raise RuntimeError("The 'psycopg2-binary' package is required") from exc
+
+        today = date.today()
+        qualifying: list[dict[str, Any]] = []
+        completed_count = 0
+        alerts: list[dict[str, str]] = []
+
+        with psycopg2.connect(self.settings.database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                self._ensure_alert_columns(cursor)
+                conn.commit()
+                role_channels = self._fetch_role_channels(cursor)
+                tickets = self._fetch_active_tickets(cursor)
+                LOGGER.info("%s started: checking %s active tickets", self.name, len(tickets))
+
+                for ticket in tickets:
+                    key = str(ticket.get("jira_ticket_id") or "")
+                    try:
+                        info = self._fetch_jira_phase(key)
+                        if info["done"]:
+                            self._mark_completed(cursor, key)
+                            conn.commit()
+                            completed_count += 1
+                            continue
+
+                        # Cache the phase dates on the row for visibility.
+                        cursor.execute(
+                            "UPDATE due_date_tracking SET dev_due_date = %s, "
+                            "qa_due_date = %s, live_due_date = %s WHERE jira_ticket_id = %s",
+                            (info["dev_due"], info["qa_due"], info["live_due"], key),
+                        )
+
+                        label, active_due = self._active_phase(info["status"], info, ticket)
+                        progress = self._phase_progress(ticket, active_due)
+                        if progress is None or not self._qualifies(progress["time_left_pct"]):
+                            conn.commit()
+                            continue
+
+                        already = ticket.get(self.alerted_column)
+                        if isinstance(already, datetime):
+                            already = already.date()
+                        if already == today:
+                            conn.commit()
+                            continue  # already alerted today; daily dedupe
+
+                        qualifying.append({
+                            "key": key,
+                            "status": info["status"],
+                            "phase": label,
+                            "due": active_due,
+                            "time_left_pct": progress["time_left_pct"],
+                            "remaining": progress["remaining"],
+                            "total": progress["total"],
+                            "priority": str(ticket.get("priority") or ""),
+                            "assignee_slack_id": self._clean_channel(ticket.get("assignee_slack_id")),
+                        })
+                        cursor.execute(
+                            f"UPDATE due_date_tracking SET {self.alerted_column} = %s "
+                            f"WHERE jira_ticket_id = %s",
+                            (today, key),
+                        )
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+                        LOGGER.exception("%s %s: failed processing ticket", self.name, key)
+                        continue
+
+                alerts = self._build_digests(qualifying, role_channels)
+
+        LOGGER.info(
+            "%s completed: %s qualifying ticket(s), %s digest(s), %s completed",
+            self.name, len(qualifying), len(alerts), completed_count,
+        )
+        return {"alerts": alerts, "alerts_sent": len(alerts)}
+
+
+class Workflow4AssigneeChecker(_Workflow4BatchChecker):
+    """09:00 batch — under 75% time left -> a daily digest to each assignee plus
+    one consolidated digest to the Jira Governor (jira_owner / Aryan)."""
+
+    name = "workflow4-daily-assignee"
+    alerted_column = "assignee_alerted_on"
+    max_time_left_pct = 75.0
+    inclusive = False  # strictly under 75% left
+
+    def _build_digests(
+        self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
+    ) -> list[dict[str, str]]:
+        if not qualifying:
+            return []
+        alerts: list[dict[str, str]] = []
+
+        by_assignee: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for t in qualifying:
+            if t["assignee_slack_id"]:
+                by_assignee[t["assignee_slack_id"]].append(t)
+        for channel, items in by_assignee.items():
+            alerts.append({
+                "channel_id": channel,
+                "message": self._format_digest(
+                    f"⏰ You have {len(items)} ticket(s) with under 75% of time left",
+                    items, show_assignee=False,
+                ),
+            })
+
+        governor = role_channels.get("jira_owner")
+        if governor:
+            alerts.append({
+                "channel_id": governor,
+                "message": self._format_digest(
+                    f"⏰ Due-date summary — {len(qualifying)} ticket(s) under 75% time left",
+                    qualifying, show_assignee=True,
+                ),
+            })
+        return alerts
+
+
+class Workflow4TLChecker(_Workflow4BatchChecker):
+    """15:00 batch — 50% or less time left -> one consolidated digest to the
+    Tech-Lead channel (eng_lead)."""
+
+    name = "workflow4-tl"
+    alerted_column = "tl_alerted_on"
+    max_time_left_pct = 50.0
+    inclusive = True  # 50% or less left
+
+    def _build_digests(
+        self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
+    ) -> list[dict[str, str]]:
+        tl_channel = role_channels.get("eng_lead")
+        if not qualifying or not tl_channel:
+            return []
+        return [{
+            "channel_id": tl_channel,
+            "message": self._format_digest(
+                f"🚧 TL escalation — {len(qualifying)} ticket(s) with 50% or less time left",
+                qualifying, show_assignee=True,
+            ),
+        }]

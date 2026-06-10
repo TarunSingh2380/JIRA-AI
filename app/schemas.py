@@ -85,6 +85,48 @@ class Workflow4DueDateResponse(BaseModel):
     alerts: List[Workflow4SlackAlert]
 
 
+# ── MoM-2 batch alerts (09:00 assignee / 15:00 TL) ───────────────────────────
+class AlertItem(BaseModel):
+    channel_id: str
+    message: str
+
+
+class AlertBatchResponse(BaseModel):
+    alerts: List[AlertItem] = []
+    alerts_sent: int = 0
+
+
+# ── MoM-3 document review ────────────────────────────────────────────────────
+class DocReviewRequest(BaseModel):
+    issueKey: str
+    description: Any = ""          # plain string OR Jira ADF dict
+
+
+class DocReviewResponse(BaseModel):
+    issueKey: str
+    reviewed: int = 0
+    unchanged: int = 0
+    skipped: List[Dict[str, Any]] = []
+    commentPosted: bool = False
+    reason: str | None = None
+
+
+# ── MoM-4 test-case document attachment ──────────────────────────────────────
+class TestCaseDocRequest(BaseModel):
+    issueKey: str
+    summary: str = ""
+    testcases: List[Dict[str, Any]] = []
+
+
+class TestCaseDocResponse(BaseModel):
+    issueKey: str
+    attached: bool = False
+    attachmentId: str | None = None
+    filename: str | None = None
+    commentPosted: bool = False
+    reason: str | None = None
+
+
 class SlackMessageRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

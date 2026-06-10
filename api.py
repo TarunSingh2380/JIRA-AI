@@ -85,6 +85,11 @@ from app.schemas import (
     Workflow2Response,
     Workflow3SLAResponse,
     Workflow4DueDateResponse,
+    AlertBatchResponse,
+    DocReviewRequest,
+    DocReviewResponse,
+    TestCaseDocRequest,
+    TestCaseDocResponse,
 )
 from app.similar_ticket_finder import SimilarTicketFinder
 from app.slack_client import SlackClient
@@ -99,7 +104,13 @@ from app.ticket_analyzer import TicketAnalyzer
 from app.workflow1_reviewer import Workflow1Reviewer
 from app.workflow2_replier import Workflow2Replier
 from app.workflow3_sla import Workflow3SLAChecker
-from app.workflow4_due_date import Workflow4DueDateChecker
+from app.workflow4_due_date import (
+    Workflow4AssigneeChecker,
+    Workflow4DueDateChecker,
+    Workflow4TLChecker,
+)
+from app.doc_review import DocReviewer
+from app.testcase_document import build_and_attach
 
 log = logging.getLogger(__name__)
 
@@ -266,6 +277,57 @@ def workflow4_due_date_check() -> Workflow4DueDateResponse:
     except Exception as exc:
         log.exception("/workflow4 failed")
         raise HTTPException(status_code=500, detail=f"workflow4 failed: {exc}") from exc
+
+
+# MoM 2 — 09:00 batch: < 75% time left -> assignee + Jira Governor.
+@app.post("/workflow4/daily-assignee", response_model=AlertBatchResponse)
+def workflow4_daily_assignee() -> AlertBatchResponse:
+    log.info("POST /workflow4/daily-assignee")
+    try:
+        return AlertBatchResponse(**Workflow4AssigneeChecker(settings=settings).check())
+    except RuntimeError as exc:
+        log.exception("/workflow4/daily-assignee runtime failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow4/daily-assignee failed")
+        raise HTTPException(status_code=500, detail=f"daily-assignee failed: {exc}") from exc
+
+
+# MoM 2 — 15:00 batch: <= 50% time left -> TL channels.
+@app.post("/workflow4/tl", response_model=AlertBatchResponse)
+def workflow4_tl() -> AlertBatchResponse:
+    log.info("POST /workflow4/tl")
+    try:
+        return AlertBatchResponse(**Workflow4TLChecker(settings=settings).check())
+    except RuntimeError as exc:
+        log.exception("/workflow4/tl runtime failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow4/tl failed")
+        raise HTTPException(status_code=500, detail=f"workflow4/tl failed: {exc}") from exc
+
+
+# MoM 3 — review PRD / Tech-design docs linked on a ticket; comment the review.
+@app.post("/workflow/doc-review", response_model=DocReviewResponse)
+def workflow_doc_review(request: DocReviewRequest) -> DocReviewResponse:
+    log.info("POST /workflow/doc-review issue=%s", request.issueKey)
+    try:
+        reviewer = DocReviewer(settings=settings, llm_client=build_llm_client(settings))
+        return DocReviewResponse(**reviewer.review(request.issueKey, request.description))
+    except Exception as exc:
+        log.exception("/workflow/doc-review failed")
+        raise HTTPException(status_code=500, detail=f"doc-review failed: {exc}") from exc
+
+
+# MoM 4 — build a test-case .docx and attach it to the ticket at Ready for QA.
+@app.post("/testcases/document", response_model=TestCaseDocResponse)
+def testcases_document(request: TestCaseDocRequest) -> TestCaseDocResponse:
+    log.info("POST /testcases/document issue=%s tcs=%d", request.issueKey, len(request.testcases))
+    try:
+        return TestCaseDocResponse(**build_and_attach(request.issueKey, request.summary, request.testcases))
+    except Exception as exc:
+        log.exception("/testcases/document failed")
+        raise HTTPException(status_code=500, detail=f"testcases/document failed: {exc}") from exc
 
 
 # ─── Admin UI (React SPA) ─────────────────────────────────────────────────────

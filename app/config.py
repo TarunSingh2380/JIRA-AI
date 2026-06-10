@@ -60,6 +60,21 @@ class Settings:
     jira_project_keys: str = os.getenv("JIRA_PROJECT_KEYS", "")
     jira_excluded_project_keys: str = os.getenv("JIRA_EXCLUDED_PROJECT_KEYS", "AIGOV")
     jira_approved_transition_name: str = os.getenv("JIRA_APPROVED_TRANSITION_NAME", "")
+
+    # Workflow4 batch alerts (Task 2) — Jira custom-field IDs for the per-phase
+    # due dates. Find each in Jira: Settings → Issues → Custom fields → (field)
+    # → ⋯ → "cfid" (e.g. "customfield_10042"). Leave blank to fall back to the
+    # system `duedate` field. Time-left is measured against the active phase's date.
+    jira_dev_due_date_field: str = os.getenv("JIRA_DEV_DUE_DATE_FIELD", "")
+    jira_qa_due_date_field: str = os.getenv("JIRA_QA_DUE_DATE_FIELD", "")
+    jira_live_due_date_field: str = os.getenv("JIRA_LIVE_DUE_DATE_FIELD", "")
+    # Lowercased Jira status names that select the active phase. Anything not
+    # matched here is treated as the Dev phase (the default).
+    jira_qa_statuses: str = os.getenv("JIRA_QA_STATUSES", "ready for qa,in qa,qa,qa in progress,in review")
+    jira_live_statuses: str = os.getenv(
+        "JIRA_LIVE_STATUSES",
+        "ready for deployment,ready for release,in deployment,deploying,staging,uat",
+    )
     repograph_base_url: str = os.getenv("REPOGRAPH_BASE_URL", "http://127.0.0.1:8088").rstrip("/")
     repo_tree_base_url: str = os.getenv(
         "REPO_TREE_BASE_URL",
