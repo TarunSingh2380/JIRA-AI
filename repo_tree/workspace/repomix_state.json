@@ -5,5 +5,19 @@
     "last_packed_at": "2026-05-28T08:23:49.212343Z",
     "last_status": "ok",
     "last_error": null
+  },
+  "AWS": {
+    "name": "AWS",
+    "last_packed_sha": "775bcc3fbae83226e39574f5a8d7310170bfd8aa",
+    "last_packed_at": "2026-06-03T12:39:42.746756Z",
+    "last_status": "ok",
+    "last_error": null
+  },
+  "node_crm": {
+    "name": "node_crm",
+    "last_packed_sha": "396505ccf970cf91c2b320523e8d4965d686351d",
+    "last_packed_at": "2026-06-03T12:40:05.009845Z",
+    "last_status": "ok",
+    "last_error": null
   }
 }

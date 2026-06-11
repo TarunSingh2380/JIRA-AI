@@ -33,12 +33,12 @@ class Settings:
     prompt_dir: str = os.getenv("PROMPT_DIR", "Prompt")
     default_prompt: str = os.getenv("DEFAULT_PROMPT", "ticket_prompt")
     llm_provider: str = os.getenv("LLM_PROVIDER", "anthropic")
-    llm_model: str = os.getenv("LLM_MODEL", "claude-sonnet-4-20250514")
+    llm_model: str = os.getenv("LLM_MODEL", "claude-sonnet-4-6")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
     testcase_chat_model: str = os.getenv(
         "TESTCASE_CHAT_MODEL",
-        os.getenv("ANTHROPIC_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-5")),
+        os.getenv("ANTHROPIC_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-6")),
     )
     test_case_comparison_model: str = os.getenv("TEST_CASE_COMPARISON_MODEL", "claude-opus-4-5")
     test_case_comparison_max_tokens: int = int(os.getenv("TEST_CASE_COMPARISON_MAX_TOKENS", "6000"))
