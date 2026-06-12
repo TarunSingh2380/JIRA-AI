@@ -67,8 +67,12 @@ ROUTE_TOOL = {
 
 SYSTEM_PROMPT = (
     "You are the AI Governor assistant inside a Slack thread attached to a Jira "
-    "ticket. You receive the ticket details, the QA test cases, and recent "
-    "thread history. Always call the respond_to_user tool. Classify the user's "
+    "ticket. You receive the ticket details, the ticket's Jira comments "
+    "(including AI-Governor doc-review and test-case comments plus any human "
+    "discussion), the QA test cases, and recent thread history. Use the Jira "
+    "comments as authoritative context when answering questions about the "
+    "ticket, its PRD/Tech-doc review, or prior decisions. Always call the "
+    "respond_to_user tool. Classify the user's "
     "message as ticket_question (about the ticket itself), testcase_question "
     "(about the QA cases), or testcase_edit (modify the QA cases). For edits, "
     "return the COMPLETE new test-case list. Keep replies concise and friendly "
@@ -160,6 +164,7 @@ class TestCaseChatWorkflow:
         )
         ticket_live = self.fetch_jira_ticket(ticket_id)
         ticket_context = ticket_live or self._ticket_context_from_row(ticket_row)
+        ticket_context["comments"] = self.fetch_jira_comments(ticket_id)
         self._log_step(
             "2_fetch_ticket_context",
             "completed",
@@ -172,6 +177,7 @@ class TestCaseChatWorkflow:
                 "priority": ticket_context.get("priority") or "",
                 "assignee_present": bool(ticket_context.get("assignee")),
                 "labels_count": len(ticket_context.get("labels") or []),
+                "comments_count": len(ticket_context.get("comments") or []),
             },
         )
 
@@ -776,6 +782,63 @@ class TestCaseChatWorkflow:
             "url": f"{self.settings.jira_base_url}/browse/{ticket_id}",
         }
 
+    def fetch_jira_comments(self, ticket_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Fetch the ticket's Jira comments (newest first) so the bot can use
+        them as context — including the AI-Governor doc-review / test-case
+        comments and any human discussion on the ticket."""
+        if not self._jira_configured():
+            self._log_step(
+                "2b_jira_comments_request",
+                "skipped",
+                output={"jira_ticket_id": ticket_id, "reason": "jira_not_configured"},
+            )
+            return []
+
+        self._log_step("2b_jira_comments_request", "started", input_data={"jira_ticket_id": ticket_id})
+        try:
+            response = requests.get(
+                f"{self.settings.jira_base_url}/rest/api/2/issue/{ticket_id}/comment",
+                params={"maxResults": limit, "orderBy": "-created"},
+                auth=HTTPBasicAuth(self.settings.jira_email, self.settings.jira_api_token),
+                headers={"Accept": "application/json"},
+                timeout=self.settings.external_request_timeout_seconds,
+            )
+            if response.status_code >= 400:
+                self._log_step(
+                    "2b_jira_comments_request",
+                    "failed",
+                    output={
+                        "jira_ticket_id": ticket_id,
+                        "status_code": response.status_code,
+                        "response_preview": self._preview(response.text, limit=300),
+                    },
+                )
+                log.warning("Could not fetch Jira comments for %s: %s", ticket_id, response.text[:300])
+                return []
+        except requests.RequestException:
+            self._log_step("2b_jira_comments_request", "failed", input_data={"jira_ticket_id": ticket_id})
+            log.exception("Could not fetch Jira comments for %s", ticket_id)
+            return []
+
+        raw = (response.json() or {}).get("comments", [])
+        comments: list[dict[str, Any]] = []
+        for comment in raw:
+            comments.append(
+                {
+                    "author": ((comment.get("author") or {}).get("displayName") or ""),
+                    "created": comment.get("created") or "",
+                    "body": self._jira_description_text(comment.get("body"))[:1500],
+                }
+            )
+        # Present oldest-first for a natural reading order in the prompt.
+        comments.reverse()
+        self._log_step(
+            "2b_jira_comments_request",
+            "completed",
+            output={"jira_ticket_id": ticket_id, "comments_count": len(comments)},
+        )
+        return comments
+
     def reason(
         self,
         user_message: str,
@@ -810,15 +873,23 @@ class TestCaseChatWorkflow:
             indent=2,
             ensure_ascii=False,
         )
-        ticket_context = {key: value for key, value in ticket.items() if key != "description"}
+        ticket_context = {
+            key: value for key, value in ticket.items() if key not in ("description", "comments")
+        }
         if ticket.get("description"):
             ticket_context["description"] = str(ticket["description"])[:4000]
         ticket_blob = json.dumps(ticket_context, indent=2, ensure_ascii=False)
+        comments = ticket.get("comments") or []
+        comments_blob = "\n".join(
+            f"  [{c.get('created') or ''}] {c.get('author') or 'unknown'}: {str(c.get('body') or '')[:800]}"
+            for c in comments
+        ) or "  (no comments)"
         history_blob = "\n".join(
             f"  {row.get('sender')}: {str(row.get('message') or '')[:300]}" for row in history
         ) or "  (no prior messages)"
         user_block = (
             f"Ticket details:\n{ticket_blob}\n\n"
+            f"Jira comments ({len(comments)}, oldest first):\n{comments_blob}\n\n"
             f"Test cases ({len(test_cases)}):\n{tc_context}\n\n"
             f"Recent thread history (oldest first):\n{history_blob}\n\n"
             f"User message:\n{user_message}"
@@ -829,6 +900,8 @@ class TestCaseChatWorkflow:
             output={
                 "jira_ticket_id": ticket.get("issueKey") or "",
                 "ticket_context_chars": len(ticket_blob),
+                "comments_count": len(comments),
+                "comments_context_chars": len(comments_blob),
                 "test_case_context_chars": len(tc_context),
                 "history_context_chars": len(history_blob),
                 "user_block_chars": len(user_block),
