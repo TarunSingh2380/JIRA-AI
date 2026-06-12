@@ -69,6 +69,12 @@ class DocLink:
     reviewed_now: bool = False     # LLM was actually called this run
 
 
+@dataclass
+class CommentPostResult:
+    comment_id: str | None = None
+    error: str | None = None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Link extraction
 # ─────────────────────────────────────────────────────────────────────────────
@@ -139,7 +145,10 @@ def fetch_doc_text(url: str, limit_chars: int = 60_000) -> tuple[str, str]:
     if "html" in ctype:
         text = re.sub(r"<[^>]+>", " ", text)
         text = re.sub(r"\s+", " ", text)
-    return text.strip()[:limit_chars], ""
+    text = text.strip()[:limit_chars]
+    if not re.search(r"[A-Za-z0-9]", text):
+        return "", "document is empty or has no reviewable text"
+    return text, ""
 
 
 def _hash_text(text: str) -> str:
@@ -291,13 +300,18 @@ class DocReviewer:
 
         # 2. If nothing changed, skip the LLM and the comment entirely.
         if not changed:
+            reason = (
+                "no reviewable PRD/TechDoc content found"
+                if errored and len(errored) == len(links)
+                else "no document changes since last review"
+            )
             return {
                 "issueKey": issue_key,
                 "reviewed": 0,
                 "unchanged": len([l for l in links if not l.error and not l.changed]),
                 "skipped": [{"url": l.url, "error": l.error} for l in errored],
                 "commentPosted": False,
-                "reason": "no document changes since last review",
+                "reason": reason,
             }
 
         # 3. Review only the changed docs.
@@ -326,41 +340,87 @@ class DocReviewer:
             f"_Automated review of PRD / Tech-design docs linked on {issue_key}._\n"
             f"{{anchor:{COMMENT_MARKER}}}\n\n" + "\n\n----\n\n".join(blocks)
         )
-        comment_id = _upsert_comment(issue_key, comment_body)
+        comment_result = _upsert_comment(issue_key, comment_body)
 
         # 5. Persist new hash + review for the changed docs.
         for link in changed:
-            _upsert_review(issue_key, link, comment_id)
+            _upsert_review(issue_key, link, comment_result.comment_id)
 
         return {
             "issueKey": issue_key,
             "reviewed": len(changed),
             "unchanged": len([l for l in links if not l.error and not l.changed]),
             "skipped": [{"url": l.url, "error": l.error} for l in errored],
-            "commentPosted": bool(comment_id),
+            "commentPosted": bool(comment_result.comment_id),
+            "reason": comment_result.error,
         }
 
 
-def _upsert_comment(issue_key: str, body: str) -> str | None:
+def _upsert_comment(issue_key: str, body: str) -> CommentPostResult:
     """Create or update the marker-anchored review comment; return its id."""
+    if not JIRA_BASE_URL or not JIRA_EMAIL or not JIRA_API_TOKEN:
+        return CommentPostResult(error="Jira credentials are not configured")
+
     auth = (JIRA_EMAIL, JIRA_API_TOKEN)
     base = f"{JIRA_BASE_URL}/rest/api/2/issue/{issue_key}/comment"
     existing_id = None
     try:
         listing = requests.get(f"{base}?maxResults=100", auth=auth,
                                headers={"Accept": "application/json"}, timeout=JIRA_TIMEOUT)
-        if listing.status_code < 400:
-            for c in listing.json().get("comments", []):
-                if COMMENT_MARKER in (c.get("body") or ""):
-                    existing_id = c.get("id")
-                    break
+        if listing.status_code >= 400:
+            detail = _jira_error_detail(listing)
+            log.warning(
+                "Jira comment lookup failed for %s: HTTP %s %s",
+                issue_key,
+                listing.status_code,
+                detail,
+            )
+            return CommentPostResult(
+                error=f"Jira comment lookup failed: HTTP {listing.status_code}: {detail}"
+            )
+
+        for c in listing.json().get("comments", []):
+            if COMMENT_MARKER in (c.get("body") or ""):
+                existing_id = c.get("id")
+                break
+
         method = requests.put if existing_id else requests.post
         url = f"{base}/{existing_id}" if existing_id else base
         resp = method(url, auth=auth,
                       headers={"Accept": "application/json", "Content-Type": "application/json"},
                       json={"body": body}, timeout=JIRA_TIMEOUT)
         if resp.status_code < 400:
-            return (resp.json().get("id") if resp.content else None) or existing_id
-        return existing_id
-    except requests.RequestException:
-        return existing_id
+            comment_id = (resp.json().get("id") if resp.content else None) or existing_id
+            if comment_id:
+                return CommentPostResult(comment_id=comment_id)
+            return CommentPostResult(error="Jira accepted the comment request but returned no comment id")
+
+        detail = _jira_error_detail(resp)
+        log.warning(
+            "Jira comment upsert failed for %s: HTTP %s %s",
+            issue_key,
+            resp.status_code,
+            detail,
+        )
+        return CommentPostResult(
+            comment_id=existing_id,
+            error=f"Jira comment upsert failed: HTTP {resp.status_code}: {detail}",
+        )
+    except requests.RequestException as exc:
+        log.warning("Jira comment upsert request failed for %s: %s", issue_key, exc)
+        return CommentPostResult(comment_id=existing_id, error=f"Jira comment request failed: {exc}")
+
+
+def _jira_error_detail(resp: requests.Response) -> str:
+    try:
+        data = resp.json()
+    except ValueError:
+        return resp.text[:500]
+    if isinstance(data, dict):
+        messages = data.get("errorMessages")
+        if isinstance(messages, list) and messages:
+            return "; ".join(str(msg) for msg in messages)
+        errors = data.get("errors")
+        if errors:
+            return str(errors)
+    return resp.text[:500]
