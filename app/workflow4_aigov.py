@@ -25,6 +25,29 @@ LOGGER = logging.getLogger(__name__)
 
 AIGOV_PROJECT_KEY = "AIGOV"
 
+# due_date_tracking.priority is varchar(10) and production stores P0–P4 codes,
+# so map the Jira priority *name* down to a code (empty when unknown).
+_PRIORITY_NAME_TO_CODE = {
+    "highest": "P0",
+    "critical": "P0",
+    "blocker": "P0",
+    "high": "P1",
+    "medium": "P2",
+    "low": "P3",
+    "lowest": "P4",
+}
+
+
+def _normalize_priority(raw: Any) -> str:
+    """Coerce a Jira priority (name or code) into a P0–P4 code, capped to 10 chars."""
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    upper = value.upper()
+    if upper in {"P0", "P1", "P2", "P3", "P4"}:
+        return upper
+    return _PRIORITY_NAME_TO_CODE.get(value.lower(), "")[:10]
+
 _SUMMARY_SYSTEM_PROMPT = (
     "You are the AI Governor's due-date assistant. You are given a pre-formatted "
     "Slack digest of Jira tickets in the AIGOV project whose remaining time is "
@@ -145,7 +168,7 @@ class _AigovFlowMixin:
                         total = self._count_working_days(tracking_start, due)
                         if total <= 0:
                             total = 1
-                        priority = str((fields.get("priority") or {}).get("name") or "")
+                        priority = _normalize_priority((fields.get("priority") or {}).get("name"))
 
                         cursor.execute(
                             """
