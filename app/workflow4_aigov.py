@@ -20,7 +20,11 @@ from datetime import date
 from typing import Any
 
 from app.llm_client import build_llm_client
-from app.workflow4_due_date import Workflow4AssigneeChecker, Workflow4TLChecker
+from app.workflow4_due_date import (
+    DONE_STATUSES,
+    Workflow4AssigneeChecker,
+    Workflow4TLChecker,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -106,10 +110,104 @@ class _Workflow4SummaryMixin:
     # Production honours the cache TTL to avoid hammering Jira twice a day;
     # the AIGOV test flow forces a refresh for immediacy.
     summary_force_refresh: bool = False
-    summary_build_embeddings: bool = True
     # Workflow4 is self-sufficient: it enrolls its own fetched tickets into
     # due_date_tracking rather than depending on workflow1/workflow3.
     auto_enroll: bool = True
+
+    # Phase data ({key: {status, done, dev_due, qa_due, live_due, system_due}})
+    # prefetched once per run via one JQL so enrollment + the scan don't make a
+    # Jira call per ticket. None until _pre_check builds it.
+    _phase_cache: dict[str, dict[str, Any]] | None = None
+
+    def _build_embeddings_enabled(self) -> bool:
+        """Embeddings are off by default in production (unused by the digest,
+        and embedding every ticket per run blows the request budget). Toggle
+        via WORKFLOW4_BUILD_EMBEDDINGS."""
+        return bool(getattr(self.settings, "workflow4_build_embeddings", False))
+
+    def _scope_jql(self) -> str:
+        """JQL project clause for this checker's scope (empty = all projects)."""
+        include = self._included_project_keys()
+        if include:
+            return "project in ({})".format(",".join(f'"{k}"' for k in include))
+        excluded = self._excluded_project_keys()
+        if excluded:
+            return "project not in ({})".format(",".join(f'"{k}"' for k in excluded))
+        return ""
+
+    def _build_phase_cache(self) -> dict[str, dict[str, Any]]:
+        """One paginated JQL over the scope (non-Done issues) returning each
+        ticket's phase due dates — replaces per-ticket `_fetch_jira_phase` calls."""
+        from app.jira_fetcher import _jira_get
+
+        s = self.settings
+        field_ids = ["status", "duedate"]
+        for fid in (
+            s.jira_dev_due_date_field,
+            s.jira_qa_due_date_field,
+            s.jira_live_due_date_field,
+        ):
+            if fid:
+                field_ids.append(fid)
+
+        scope = self._scope_jql()
+        jql = (f"{scope} AND " if scope else "") + "statusCategory != Done ORDER BY updated DESC"
+
+        cache: dict[str, dict[str, Any]] = {}
+        start = 0
+        next_token: str | None = None
+        while True:
+            params: dict[str, Any] = {
+                "jql": jql,
+                "maxResults": 100,
+                "fields": ",".join(field_ids),
+            }
+            if next_token:
+                params["nextPageToken"] = next_token
+            else:
+                params["startAt"] = start
+
+            data = _jira_get("/rest/api/3/search/jql", params)
+            batch = data.get("issues", [])
+            for issue in batch:
+                key = str(issue.get("key") or "")
+                if not key:
+                    continue
+                f = issue.get("fields", {}) or {}
+                status = ((f.get("status") or {}).get("name")) or ""
+                cache[key] = {
+                    "status": status,
+                    "done": status in DONE_STATUSES,
+                    "dev_due": self._parse_jira_date(f.get(s.jira_dev_due_date_field))
+                    if s.jira_dev_due_date_field else None,
+                    "qa_due": self._parse_jira_date(f.get(s.jira_qa_due_date_field))
+                    if s.jira_qa_due_date_field else None,
+                    "live_due": self._parse_jira_date(f.get(s.jira_live_due_date_field))
+                    if s.jira_live_due_date_field else None,
+                    "system_due": self._parse_jira_date(f.get("duedate")),
+                }
+            start += len(batch)
+            next_token = data.get("nextPageToken")
+            if data.get("isLast") is True:
+                break
+            if next_token:
+                continue
+            total = data.get("total")
+            if total is not None and start >= total:
+                break
+            if not batch:
+                break
+
+        LOGGER.info("workflow4-summary: prefetched phase data for %d ticket(s)", len(cache))
+        return cache
+
+    def _fetch_jira_phase(self, jira_ticket_id: str) -> dict[str, Any]:
+        # Serve from the per-run bulk cache; fall back to a live call for keys
+        # not covered (e.g. a now-Done ticket excluded by the cache JQL).
+        cache = getattr(self, "_phase_cache", None)
+        if cache and jira_ticket_id in cache:
+            return cache[jira_ticket_id]
+        return super()._fetch_jira_phase(jira_ticket_id)
 
     def _fetch_tickets(self) -> list[dict[str, Any]]:
         from app.jira_fetcher import fetch_all_tickets, fetch_project_tickets
@@ -132,13 +230,19 @@ class _Workflow4SummaryMixin:
 
     def _pre_check(self) -> None:
         try:
+            self._phase_cache = self._build_phase_cache()
+        except Exception:
+            LOGGER.exception("workflow4-summary: phase prefetch failed (non-fatal)")
+            self._phase_cache = {}
+
+        try:
             tickets = self._fetch_tickets()
         except Exception:
             LOGGER.exception("workflow4-summary: refetch failed (non-fatal)")
             tickets = []
         LOGGER.info("workflow4-summary: refetched %d ticket(s)", len(tickets))
 
-        if tickets and self.summary_build_embeddings:
+        if tickets and self._build_embeddings_enabled():
             try:
                 _embed_tickets(tickets)
             except Exception:
@@ -290,6 +394,14 @@ class _AigovFlowMixin(_Workflow4SummaryMixin):
 
     project_key = AIGOV_PROJECT_KEY
     summary_force_refresh = True
+
+    def _build_embeddings_enabled(self) -> bool:
+        # AIGOV is a small sandbox — keep embeddings on for parity with the
+        # original test flow regardless of the production toggle.
+        return True
+
+    def _scope_jql(self) -> str:
+        return f'project = "{AIGOV_PROJECT_KEY}"'
 
     def _fetch_tickets(self) -> list[dict[str, Any]]:
         from app.jira_fetcher import fetch_project_tickets

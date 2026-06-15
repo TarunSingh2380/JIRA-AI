@@ -78,6 +78,12 @@ class Settings:
     # mapping) to these project keys, e.g. "RFT". Blank = all spaces minus
     # JIRA_EXCLUDED_PROJECT_KEYS. Does not affect the AIGOV test endpoints.
     workflow4_project_keys: str = os.getenv("WORKFLOW4_PROJECT_KEYS", "")
+    # Whether the PRODUCTION Workflow4 batches rebuild Qdrant embeddings on each
+    # run. Off by default: the digest doesn't use them (the graph job owns the
+    # vector store) and embedding every ticket per run blows the request budget.
+    workflow4_build_embeddings: bool = os.getenv(
+        "WORKFLOW4_BUILD_EMBEDDINGS", "false"
+    ).lower() in {"1", "true", "yes", "on"}
     # Lowercased Jira status names that select the active phase. Anything not
     # matched here is treated as the Dev phase (the default).
     jira_qa_statuses: str = os.getenv("JIRA_QA_STATUSES", "ready for qa,in qa,qa,qa in progress,in review")
