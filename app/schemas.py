@@ -5,7 +5,7 @@ the ticket-analysis request body, model-output response, and prompt-listing
 response.
 """
 
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -89,6 +89,7 @@ class Workflow4DueDateResponse(BaseModel):
 class AlertItem(BaseModel):
     channel_id: str
     message: str
+    blocks: Optional[List[Any]] = None
 
 
 class AlertBatchResponse(BaseModel):

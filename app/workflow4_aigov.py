@@ -357,13 +357,13 @@ class _Workflow4SummaryMixin:
     # ── deterministic tabular digest (Jira Owner + TL) ──────────────────────
     def _build_digests(
         self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
-    ) -> list[dict[str, str]]:
-        """Build ONE banded, tabular report and send it to the Jira Owner
-        (jira_owner) and TL (eng_lead) channels. Replaces the per-assignee /
-        per-recipient digests and the LLM rewrite. `qualifying` is ignored —
-        the report is built from the phase cache + story_subtasks mapping."""
+    ) -> list[dict[str, Any]]:
+        """Build ONE banded report (hyperlinked mrkdwn `message` + Block Kit
+        `blocks`) and send it to the Jira Owner (jira_owner) and TL (eng_lead)
+        channels. `qualifying` is ignored — the report is built from the phase
+        cache + story_subtasks mapping."""
         try:
-            message = self._build_tabular_message()
+            message, blocks = self._build_payload()
         except Exception:
             LOGGER.exception("workflow4-summary: tabular digest build failed")
             return []
@@ -374,7 +374,10 @@ class _Workflow4SummaryMixin:
             channel = role_channels.get(role)
             if channel and channel not in channels:
                 channels.append(channel)
-        return [{"channel_id": channel, "message": message} for channel in channels]
+        return [
+            {"channel_id": channel, "message": message, "blocks": blocks}
+            for channel in channels
+        ]
 
     @staticmethod
     def _effective_due(entry: dict[str, Any]) -> Any:
@@ -421,25 +424,46 @@ class _Workflow4SummaryMixin:
             or row.get("qa_due_date")
         )
 
-    @staticmethod
-    def _format_table(headers: list[str], rows: list[list[Any]]) -> str:
-        """Render an aligned monospace table inside a Slack code block."""
-        str_rows = [["" if c is None else str(c) for c in r] for r in rows]
-        widths = [len(h) for h in headers]
-        for r in str_rows:
-            for i, cell in enumerate(r):
-                widths[i] = max(widths[i], len(cell))
-        line = lambda r: "  ".join(c.ljust(widths[i]) for i, c in enumerate(r))
-        return "```\n" + "\n".join([line(headers)] + [line(r) for r in str_rows]) + "\n```"
+    # ── hyperlink helpers ────────────────────────────────────────────────────
+    _IND_LABEL = {"overdue": "Overdue", "75": "≤75% left", "50": "≤50% left", "25": "≤25% left"}
+    _IND_BASE_JQL = "issuetype != Story AND parent is EMPTY AND statusCategory != Done"
+    _IND_JQL = {
+        "overdue": _IND_BASE_JQL + " AND duedate < endOfDay()",
+        "75": _IND_BASE_JQL,
+        "50": _IND_BASE_JQL,
+        "25": _IND_BASE_JQL,
+    }
 
-    def _build_tabular_message(self) -> str | None:
-        """Compose the banded Story tables + independent-task table. Returns
-        None when nothing is at risk (so no Slack message is sent)."""
+    def _base_url(self) -> str:
+        return (getattr(self.settings, "jira_base_url", "") or "").rstrip("/")
+
+    def _link(self, key: Any) -> str:
+        """Slack mrkdwn link to a Jira issue (plain key when no base URL)."""
+        key = str(key or "—")
+        base = self._base_url()
+        return f"<{base}/browse/{key}|{key}>" if base and key != "—" else key
+
+    def _search_link(self, extra_jql: str, label: str) -> str:
+        base = self._base_url()
+        if not base:
+            return label
+        from urllib.parse import quote
+
+        scope = self._scope_jql()
+        jql = " AND ".join(p for p in (scope, extra_jql) if p)
+        return f"<{base}/issues/?jql={quote(jql)}|{label}>"
+
+    def _story_line(self, row: list[Any]) -> str:
+        story_key, task_key, state, due, assignee = row
+        task = f" / {self._link(task_key)}" if task_key and task_key != "—" else ""
+        return f"• {self._link(story_key)}{task} · {state} · {due} · {assignee}"
+
+    # ── collect + render ─────────────────────────────────────────────────────
+    def _collect(self) -> tuple[dict[str, list[list[Any]]], list[list[Any]], dict[str, int]]:
         from app.story_subtasks import get_all_subtasks
 
         cache = getattr(self, "_phase_cache", None) or {}
-        scope = self._mapping_project_keys()
-        grouped = get_all_subtasks(self.settings, scope)
+        grouped = get_all_subtasks(self.settings, self._mapping_project_keys())
 
         bands: dict[str, list[list[Any]]] = {"overdue": [], "75": [], "50": [], "25": []}
         undated: list[list[Any]] = []
@@ -450,16 +474,14 @@ class _Workflow4SummaryMixin:
                 subtask_keys.add(r["subtask_key"])
             entry = cache.get(story_key)
             if entry is None or entry.get("done"):
-                continue  # Story is Done or out of scope
+                continue
             story_rows = [
-                [
-                    story_key,
-                    r["subtask_key"],
-                    r.get("status") or "—",
-                    str(self._subtask_due(r) or "—"),
-                    r.get("assignee_name") or "Unassigned",
-                ]
+                [story_key, r["subtask_key"], r.get("status") or "—",
+                 str(self._subtask_due(r) or "—"), r.get("assignee_name") or "Unassigned"]
                 for r in rows
+            ] or [
+                [story_key, "—", entry.get("status") or "—",
+                 str(self._effective_due(entry) or "—"), entry.get("assignee_name") or "Unassigned"]
             ]
             tl = self._time_left(entry)
             if tl is None:
@@ -469,58 +491,99 @@ class _Workflow4SummaryMixin:
             if band is not None:
                 bands[band].extend(story_rows)
 
-        # Independent tasks: in scope, not a Story, not a child of any Story.
         story_keys = set(grouped.keys())
-        independent: list[list[Any]] = []
+        ind_counts = {"overdue": 0, "75": 0, "50": 0, "25": 0}
         for key, entry in cache.items():
             if key in story_keys or key in subtask_keys:
                 continue
             if str(entry.get("issuetype") or "").strip().lower() == "story":
                 continue
             tl = self._time_left(entry)
-            if tl is None or self._band(tl["remaining"], tl["pct"]) is None:
+            if tl is None:
                 continue
-            independent.append(
-                [key, entry.get("status") or "—", str(tl["due"]), entry.get("assignee_name") or "Unassigned"]
-            )
+            band = self._band(tl["remaining"], tl["pct"])
+            if band is not None:
+                ind_counts[band] += 1
+        return bands, undated, ind_counts
 
-        total = sum(len(v) for v in bands.values()) + len(undated) + len(independent)
-        if total == 0:
+    def _groups(self) -> list[tuple[str, list[str]]] | None:
+        """Heading + line groups shared by the mrkdwn and Block Kit renderers,
+        or None when nothing is at risk."""
+        bands, undated, ind_counts = self._collect()
+        total_ind = sum(ind_counts.values())
+        if not any(bands.values()) and not undated and total_ind == 0:
             return None
 
-        scope_label = ", ".join(scope) if scope else "all spaces"
-        story_headers = ["Story", "Task", "State", "Due", "Assignee"]
-        parts = [
-            f"*Due-Date Compliance — {scope_label} — {date.today():%Y-%m-%d}*",
-            "",
-            "*1. Stories*",
+        scope_label = ", ".join(self._mapping_project_keys() or []) or self._scope_label()
+        groups: list[tuple[str, list[str]]] = [
+            (f"*Due-Date Compliance — {scope_label} — {date.today():%Y-%m-%d}*", []),
+            ("*1. Stories*", []),
         ]
         for band_key, label in _BAND_ORDER:
             rows = bands[band_key]
-            parts.append(f"\n*{label}* ({len(rows)})")
-            if rows:
-                parts.append(self._format_table(story_headers, rows[:_MAX_TABLE_ROWS]))
-                if len(rows) > _MAX_TABLE_ROWS:
-                    parts.append(f"_…and {len(rows) - _MAX_TABLE_ROWS} more_")
-            else:
-                parts.append("_none_")
+            lines = [self._story_line(r) for r in rows[:_MAX_TABLE_ROWS]]
+            if len(rows) > _MAX_TABLE_ROWS:
+                lines.append(f"_…and {len(rows) - _MAX_TABLE_ROWS} more_")
+            groups.append((f"*{label}* ({len(rows)})", lines or ["_none_"]))
+
         if undated:
-            parts.append(f"\n*e. No due date on Story* ({len(undated)})")
-            parts.append(self._format_table(story_headers, undated[:_MAX_TABLE_ROWS]))
+            lines = [self._story_line(r) for r in undated[:_MAX_TABLE_ROWS]]
             if len(undated) > _MAX_TABLE_ROWS:
-                parts.append(f"_…and {len(undated) - _MAX_TABLE_ROWS} more_")
+                lines.append(f"_…and {len(undated) - _MAX_TABLE_ROWS} more_")
+            groups.append((f"*e. No due date on Story* ({len(undated)})", lines))
 
-        parts.append("\n*2. Independent Tasks (not under any Story)*")
-        if independent:
-            parts.append(
-                self._format_table(["Task", "State", "Due", "Assignee"], independent[:_MAX_TABLE_ROWS])
-            )
-            if len(independent) > _MAX_TABLE_ROWS:
-                parts.append(f"_…and {len(independent) - _MAX_TABLE_ROWS} more_")
+        if total_ind:
+            parts = [
+                self._search_link(self._IND_JQL[bk], f"{self._IND_LABEL[bk]}: {ind_counts[bk]}")
+                for bk, _ in _BAND_ORDER if ind_counts[bk]
+            ]
+            ind_lines = [" · ".join(parts)]
         else:
-            parts.append("_none_")
+            ind_lines = ["_none_"]
+        groups.append(
+            (f"*2. Independent Tasks (not under any Story)* ({total_ind})", ind_lines)
+        )
+        return groups
 
-        return "\n".join(parts)
+    @staticmethod
+    def _chunk(text: str, limit: int) -> list[str]:
+        if len(text) <= limit:
+            return [text]
+        out: list[str] = []
+        cur = ""
+        for ln in text.split("\n"):
+            if cur and len(cur) + len(ln) + 1 > limit:
+                out.append(cur)
+                cur = ln
+            else:
+                cur = f"{cur}\n{ln}" if cur else ln
+        if cur:
+            out.append(cur)
+        return out
+
+    def _build_payload(self) -> tuple[str | None, list[dict[str, Any]] | None]:
+        """Return (mrkdwn text, Block Kit blocks). text is None when nothing is
+        at risk (so no Slack message is sent)."""
+        groups = self._groups()
+        if groups is None:
+            return None, None
+
+        text = "\n\n".join(
+            heading + ("\n" + "\n".join(lines) if lines else "")
+            for heading, lines in groups
+        )
+
+        blocks: list[dict[str, Any]] = [
+            {"type": "header",
+             "text": {"type": "plain_text", "text": groups[0][0].strip("*")[:150]}}
+        ]
+        for heading, lines in groups[1:]:
+            body = heading + ("\n" + "\n".join(lines) if lines else "")
+            for chunk in self._chunk(body, 2900):
+                if len(blocks) >= 48:
+                    break
+                blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": chunk}})
+        return text, blocks
 
 
 # ── production (all spaces) ──────────────────────────────────────────────────
