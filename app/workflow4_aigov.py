@@ -19,6 +19,8 @@ import logging
 from datetime import date
 from typing import Any
 
+import requests
+
 from app.llm_client import build_llm_client
 from app.workflow4_due_date import (
     DONE_STATUSES,
@@ -141,7 +143,7 @@ class _Workflow4SummaryMixin:
         from app.jira_fetcher import _jira_get
 
         s = self.settings
-        field_ids = ["status", "duedate"]
+        field_ids = ["status", "duedate", "created", "priority"]
         for fid in (
             s.jira_dev_due_date_field,
             s.jira_qa_due_date_field,
@@ -185,6 +187,8 @@ class _Workflow4SummaryMixin:
                     "live_due": self._parse_jira_date(f.get(s.jira_live_due_date_field))
                     if s.jira_live_due_date_field else None,
                     "system_due": self._parse_jira_date(f.get("duedate")),
+                    "created": self._parse_jira_date(f.get("created")),
+                    "priority": (f.get("priority") or {}).get("name"),
                 }
             start += len(batch)
             next_token = data.get("nextPageToken")
@@ -201,13 +205,34 @@ class _Workflow4SummaryMixin:
         LOGGER.info("workflow4-summary: prefetched phase data for %d ticket(s)", len(cache))
         return cache
 
+    _DONE_PHASE = {
+        "status": "",
+        "done": True,
+        "dev_due": None,
+        "qa_due": None,
+        "live_due": None,
+        "system_due": None,
+    }
+
     def _fetch_jira_phase(self, jira_ticket_id: str) -> dict[str, Any]:
-        # Serve from the per-run bulk cache; fall back to a live call for keys
-        # not covered (e.g. a now-Done ticket excluded by the cache JQL).
+        # Serve from the per-run bulk cache; fall back to a live call only for
+        # keys not covered (e.g. an already-enrolled ticket that is now Done or
+        # was deleted). A 404 means the issue is gone → treat as Done so the
+        # scan completes/skips it instead of erroring.
         cache = getattr(self, "_phase_cache", None)
         if cache and jira_ticket_id in cache:
             return cache[jira_ticket_id]
-        return super()._fetch_jira_phase(jira_ticket_id)
+        try:
+            return super()._fetch_jira_phase(jira_ticket_id)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                LOGGER.info(
+                    "%s: %s not found in Jira (404); treating as Done",
+                    self.name,
+                    jira_ticket_id,
+                )
+                return dict(self._DONE_PHASE)
+            raise
 
     def _fetch_tickets(self) -> list[dict[str, Any]]:
         from app.jira_fetcher import fetch_all_tickets, fetch_project_tickets
@@ -235,20 +260,21 @@ class _Workflow4SummaryMixin:
             LOGGER.exception("workflow4-summary: phase prefetch failed (non-fatal)")
             self._phase_cache = {}
 
-        try:
-            tickets = self._fetch_tickets()
-        except Exception:
-            LOGGER.exception("workflow4-summary: refetch failed (non-fatal)")
-            tickets = []
-        LOGGER.info("workflow4-summary: refetched %d ticket(s)", len(tickets))
-
-        if tickets and self._build_embeddings_enabled():
+        # The mirror fetch + embeddings are only needed when embeddings are on;
+        # enrollment and the scan both read the phase cache, not the mirror.
+        if self._build_embeddings_enabled():
             try:
-                _embed_tickets(tickets)
+                tickets = self._fetch_tickets()
+                if tickets:
+                    _embed_tickets(tickets)
             except Exception:
-                LOGGER.exception("workflow4-summary: embedding step failed (non-fatal)")
+                LOGGER.exception("workflow4-summary: refetch/embed failed (non-fatal)")
 
-        self._extra_pre_check(tickets)
+        if self.auto_enroll:
+            try:
+                self._enroll_tickets()
+            except Exception:
+                LOGGER.exception("%s: enrollment step failed (non-fatal)", self.name)
 
         try:
             from app.story_subtasks import map_and_store
@@ -257,57 +283,40 @@ class _Workflow4SummaryMixin:
         except Exception:
             LOGGER.exception("workflow4-summary: story→subtask mapping failed (non-fatal)")
 
-    def _extra_pre_check(self, tickets: list[dict[str, Any]]) -> None:
-        """Auto-enroll fetched tickets (both production and AIGOV) so Workflow4
-        is independent of workflow1/workflow3."""
-        if not self.auto_enroll:
-            return
-        try:
-            self._enroll_tickets(tickets)
-        except Exception:
-            LOGGER.exception("%s: enrollment step failed (non-fatal)", self.name)
+    def _enroll_tickets(self) -> None:
+        """Enroll every phase-cached ticket that has a due date into
+        ``due_date_tracking`` so the scan can alert on it.
 
-    def _enroll_tickets(self, tickets: list[dict[str, Any]]) -> None:
-        """Enroll fetched tickets that carry a due date (and aren't Done) into
-        ``due_date_tracking`` so the scan can alert on them.
-
-        A minimal ``tickets`` row is upserted first to satisfy the
-        ``due_date_tracking.ticket_id`` FK. The assignee→Slack mapping isn't
-        resolved here, so ``assignee_slack_id`` is left empty: per-assignee DMs
-        won't fire, but the consolidated Governor (jira_owner) and TL (eng_lead)
-        digests will."""
-        if not tickets:
+        Driven by the per-run phase cache (current, in-scope, non-Done tickets),
+        so there are no per-ticket Jira calls and no stale/deleted keys. A
+        minimal ``tickets`` row is upserted first for the
+        ``due_date_tracking.ticket_id`` FK; ``assignee_slack_id`` is left empty,
+        so alerts route via the Governor/TL digests, not per-assignee DMs."""
+        cache = getattr(self, "_phase_cache", None) or {}
+        if not cache:
             return
         import psycopg2
 
         enrolled = 0
         with psycopg2.connect(self.settings.database_url) as conn:
             with conn.cursor() as cursor:
-                for ticket in tickets:
-                    key = str(ticket.get("key") or "")
-                    if not key:
+                for key, info in cache.items():
+                    if info.get("done"):
                         continue
+                    due = (
+                        info.get("system_due")
+                        or info.get("dev_due")
+                        or info.get("qa_due")
+                        or info.get("live_due")
+                    )
+                    if due is None:
+                        continue  # nothing to track without a due date
                     try:
-                        info = self._fetch_jira_phase(key)
-                        if info.get("done"):
-                            continue
-                        due = (
-                            info.get("system_due")
-                            or info.get("dev_due")
-                            or info.get("qa_due")
-                            or info.get("live_due")
-                        )
-                        if due is None:
-                            continue  # nothing to track without a due date
-
-                        fields = ticket.get("fields", {}) or {}
-                        tracking_start = (
-                            self._parse_jira_date(fields.get("created")) or date.today()
-                        )
+                        tracking_start = info.get("created") or date.today()
                         total = self._count_working_days(tracking_start, due)
                         if total <= 0:
                             total = 1
-                        priority = _normalize_priority((fields.get("priority") or {}).get("name"))
+                        priority = _normalize_priority(info.get("priority"))
 
                         cursor.execute(
                             """
