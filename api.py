@@ -104,14 +104,12 @@ from app.ticket_analyzer import TicketAnalyzer
 from app.workflow1_reviewer import Workflow1Reviewer
 from app.workflow2_replier import Workflow2Replier
 from app.workflow3_sla import Workflow3SLAChecker
-from app.workflow4_due_date import (
-    Workflow4AssigneeChecker,
-    Workflow4DueDateChecker,
-    Workflow4TLChecker,
-)
+from app.workflow4_due_date import Workflow4DueDateChecker
 from app.workflow4_aigov import (
     Workflow4AigovAssigneeChecker,
     Workflow4AigovTLChecker,
+    Workflow4SummaryAssigneeChecker,
+    Workflow4SummaryTLChecker,
 )
 from app.doc_review import DocReviewer
 from app.testcase_document import build_and_attach
@@ -288,7 +286,7 @@ def workflow4_due_date_check() -> Workflow4DueDateResponse:
 def workflow4_daily_assignee() -> AlertBatchResponse:
     log.info("POST /workflow4/daily-assignee")
     try:
-        return AlertBatchResponse(**Workflow4AssigneeChecker(settings=settings).check())
+        return AlertBatchResponse(**Workflow4SummaryAssigneeChecker(settings=settings).check())
     except RuntimeError as exc:
         log.exception("/workflow4/daily-assignee runtime failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -302,7 +300,7 @@ def workflow4_daily_assignee() -> AlertBatchResponse:
 def workflow4_tl() -> AlertBatchResponse:
     log.info("POST /workflow4/tl")
     try:
-        return AlertBatchResponse(**Workflow4TLChecker(settings=settings).check())
+        return AlertBatchResponse(**Workflow4SummaryTLChecker(settings=settings).check())
     except RuntimeError as exc:
         log.exception("/workflow4/tl runtime failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc

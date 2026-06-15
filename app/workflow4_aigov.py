@@ -1,16 +1,17 @@
-"""AIGOV-scoped Workflow4 due-date batches.
+"""Enriched Workflow4 due-date batches (production + AIGOV test).
 
-Mirrors the standard 09:00 assignee / 15:00 TL batches in
-:mod:`app.workflow4_due_date`, but restricted to the AIGOV sandbox project.
+Both the production 09:00/15:00 batches and the AIGOV sandbox variants share one
+enrichment pipeline (:class:`_Workflow4SummaryMixin`): before the digest is sent
+they refetch tickets, rebuild dense embeddings (best-effort), map each Story to
+its child issues (assignee + dev/QA due dates), and rewrite the digest through
+the LLM with that subtask breakdown nested under each Story.
 
-Each run additionally:
-  1. Refetches the AIGOV tickets from Jira into ``jira_ticket_cache``
-     (ignoring ``JIRA_EXCLUDED_PROJECT_KEYS``, which excludes AIGOV by default).
-  2. Rebuilds their dense embeddings in Qdrant — the same fetch→embed pattern
-     used by the graph ingest — best-effort, so a missing Ollama/Qdrant never
-     blocks the alert.
-  3. Summarizes the qualifying at-risk tickets through the configured LLM and
-     sends that summary (rather than the raw template digest) to Slack via n8n.
+  * Production (:class:`Workflow4SummaryAssigneeChecker` / ``…TLChecker``) runs
+    across all spaces — story scope follows ``STORY_SUBTASK_PROJECT_KEYS``
+    (blank = all visible projects minus ``JIRA_EXCLUDED_PROJECT_KEYS``).
+  * AIGOV (:class:`Workflow4AigovAssigneeChecker` / ``…TLChecker``) is restricted
+    to the AIGOV sandbox and additionally auto-enrolls fetched tickets into
+    ``due_date_tracking`` (production relies on workflow1/workflow3 for that).
 """
 from __future__ import annotations
 
@@ -48,39 +49,22 @@ def _normalize_priority(raw: Any) -> str:
         return upper
     return _PRIORITY_NAME_TO_CODE.get(value.lower(), "")[:10]
 
+
 _SUMMARY_SYSTEM_PROMPT = (
     "You are the AI Governor's due-date assistant. You are given a pre-formatted "
-    "Slack digest of Jira tickets in the AIGOV project whose remaining time is "
-    "running low. Rewrite it as a concise, well-structured Slack message using "
-    "Slack mrkdwn. Open with a one-line situation summary, then keep one line per "
-    "ticket. Preserve every ticket key, status, due date and browse URL exactly as "
-    "given — do not invent or drop tickets, dates, statuses, or links."
+    "Slack digest of Jira tickets whose remaining time is running low, optionally "
+    "followed by a 'Subtask breakdown by Story' section listing each Story's child "
+    "issues with assignee and dev/qa due dates. Rewrite it as a concise, "
+    "well-structured Slack message using Slack mrkdwn. Open with a one-line "
+    "situation summary, then keep one line per ticket. When a ticket is a Story "
+    "that has a subtask breakdown, nest its child issues beneath it, calling out "
+    "the assignee and any dev/qa due date that is overdue or at risk. Preserve "
+    "every ticket/subtask key, status, due date and browse URL exactly as given — "
+    "do not invent or drop tickets, dates, statuses, or links."
 )
 
 
-# ── refetch + embed (best-effort) ───────────────────────────────────────────
-def _refetch_and_embed_aigov() -> list[dict[str, Any]]:
-    """Refresh the AIGOV ticket cache, rebuild embeddings best-effort, and return
-    the fetched raw Jira issue dicts (empty list on failure)."""
-    from app.jira_fetcher import fetch_project_tickets
-
-    try:
-        tickets = fetch_project_tickets(AIGOV_PROJECT_KEY, force_refresh=True)
-    except Exception:
-        LOGGER.exception("workflow4-aigov: AIGOV refetch failed (non-fatal)")
-        return []
-
-    LOGGER.info("workflow4-aigov: refetched %d AIGOV ticket(s)", len(tickets))
-    if not tickets:
-        return []
-
-    try:
-        _embed_tickets(tickets)
-    except Exception:
-        LOGGER.exception("workflow4-aigov: embedding step failed (non-fatal)")
-    return tickets
-
-
+# ── embeddings (best-effort) ─────────────────────────────────────────────────
 def _embed_tickets(tickets: list[dict[str, Any]]) -> None:
     from app.config import settings as global_settings
     from app.graph_job_runner import _ticket_embed_texts
@@ -88,7 +72,7 @@ def _embed_tickets(tickets: list[dict[str, Any]]) -> None:
     from app.qdrant_store import upsert_jira_embeddings
 
     if not global_settings.qdrant_url:
-        LOGGER.info("workflow4-aigov: QDRANT_URL not set; skipping embeddings")
+        LOGGER.info("workflow4-summary: QDRANT_URL not set; skipping embeddings")
         return
 
     embedder = OllamaEmbedder(
@@ -99,7 +83,7 @@ def _embed_tickets(tickets: list[dict[str, Any]]) -> None:
         concurrency=global_settings.ollama_embed_concurrency,
     )
     if not embedder.is_available():
-        LOGGER.warning("workflow4-aigov: Ollama unavailable; skipping embeddings")
+        LOGGER.warning("workflow4-summary: Ollama unavailable; skipping embeddings")
         return
 
     texts = _ticket_embed_texts(tickets)
@@ -110,18 +94,107 @@ def _embed_tickets(tickets: list[dict[str, Any]]) -> None:
         embeddings=embeddings,
         api_key=global_settings.qdrant_api_key or None,
     )
-    LOGGER.info("workflow4-aigov: stored %d AIGOV embedding(s) in Qdrant", stored)
+    LOGGER.info("workflow4-summary: stored %d embedding(s) in Qdrant", stored)
 
 
-# ── shared AIGOV behaviour ──────────────────────────────────────────────────
-class _AigovFlowMixin:
-    """Scopes a batch checker to AIGOV, refreshes data first, and routes each
-    template digest through the LLM before it is sent."""
+# ── shared enrichment: refetch + embed + map + LLM summary ───────────────────
+class _Workflow4SummaryMixin:
+    """Refetch tickets, rebuild embeddings, map Story→subtasks, and summarize the
+    digest through the LLM. Production scope by default; subclasses override
+    ``_fetch_tickets`` / hooks to narrow it."""
 
-    project_key = AIGOV_PROJECT_KEY
+    # Production honours the cache TTL to avoid hammering Jira twice a day;
+    # the AIGOV test flow forces a refresh for immediacy.
+    summary_force_refresh: bool = False
+    summary_build_embeddings: bool = True
+
+    def _fetch_tickets(self) -> list[dict[str, Any]]:
+        from app.jira_fetcher import fetch_all_tickets
+
+        return fetch_all_tickets(force_refresh=self.summary_force_refresh)
 
     def _pre_check(self) -> None:
-        tickets = _refetch_and_embed_aigov()
+        try:
+            tickets = self._fetch_tickets()
+        except Exception:
+            LOGGER.exception("workflow4-summary: refetch failed (non-fatal)")
+            tickets = []
+        LOGGER.info("workflow4-summary: refetched %d ticket(s)", len(tickets))
+
+        if tickets and self.summary_build_embeddings:
+            try:
+                _embed_tickets(tickets)
+            except Exception:
+                LOGGER.exception("workflow4-summary: embedding step failed (non-fatal)")
+
+        self._extra_pre_check(tickets)
+
+        try:
+            from app.story_subtasks import map_and_store
+
+            map_and_store(self.settings)
+        except Exception:
+            LOGGER.exception("workflow4-summary: story→subtask mapping failed (non-fatal)")
+
+    def _extra_pre_check(self, tickets: list[dict[str, Any]]) -> None:
+        """Hook for scope-specific pre-work (AIGOV auto-enrollment)."""
+        return None
+
+    def _format_digest(
+        self, title: str, items: list[dict[str, Any]], *, show_assignee: bool
+    ) -> str:
+        template = super()._format_digest(title, items, show_assignee=show_assignee)
+        prompt_input = template + self._subtask_breakdown(items)
+        try:
+            client = build_llm_client(self.settings)
+            summary = client.complete(_SUMMARY_SYSTEM_PROMPT, prompt_input)
+            return summary.strip() or template
+        except Exception:
+            LOGGER.exception(
+                "workflow4-summary: LLM summary failed; falling back to template digest"
+            )
+            return template
+
+    def _subtask_breakdown(self, items: list[dict[str, Any]]) -> str:
+        """Append each digest Story's stored subtask breakdown for the LLM."""
+        try:
+            from app.story_subtasks import format_breakdown, get_subtasks_for_stories
+
+            keys = [str(i.get("key") or "") for i in items if i.get("key")]
+            grouped = get_subtasks_for_stories(self.settings, keys)
+            return format_breakdown(grouped)
+        except Exception:
+            LOGGER.exception("workflow4-summary: subtask breakdown failed (non-fatal)")
+            return ""
+
+
+# ── production (all spaces) ──────────────────────────────────────────────────
+class Workflow4SummaryAssigneeChecker(_Workflow4SummaryMixin, Workflow4AssigneeChecker):
+    """Production 09:00 batch — under 75% time left, enriched + summarized."""
+
+    name = "workflow4-summary-daily-assignee"
+
+
+class Workflow4SummaryTLChecker(_Workflow4SummaryMixin, Workflow4TLChecker):
+    """Production 15:00 batch — 50% or less time left, enriched + summarized."""
+
+    name = "workflow4-summary-tl"
+
+
+# ── AIGOV sandbox (test scope + auto-enroll) ─────────────────────────────────
+class _AigovFlowMixin(_Workflow4SummaryMixin):
+    """Restrict the enriched flow to the AIGOV sandbox and auto-enroll fetched
+    tickets into ``due_date_tracking`` (production relies on workflow1/workflow3)."""
+
+    project_key = AIGOV_PROJECT_KEY
+    summary_force_refresh = True
+
+    def _fetch_tickets(self) -> list[dict[str, Any]]:
+        from app.jira_fetcher import fetch_project_tickets
+
+        return fetch_project_tickets(AIGOV_PROJECT_KEY, force_refresh=True)
+
+    def _extra_pre_check(self, tickets: list[dict[str, Any]]) -> None:
         try:
             self._enroll_aigov_tickets(tickets)
         except Exception:
@@ -131,12 +204,11 @@ class _AigovFlowMixin:
         """Auto-enroll fetched AIGOV tickets that carry a due date into
         ``due_date_tracking`` so the scan can alert on them.
 
-        Unlike production (where workflow1/workflow3 own enrollment), the AIGOV
-        sandbox enrolls straight from the Jira fetch. A minimal ``tickets`` row
-        is upserted first to satisfy the ``due_date_tracking.ticket_id`` FK.
-        The assignee→Slack mapping isn't resolved here, so ``assignee_slack_id``
-        is left empty: per-assignee DMs won't fire, but the consolidated
-        Governor (jira_owner) and TL (eng_lead) digests will."""
+        A minimal ``tickets`` row is upserted first to satisfy the
+        ``due_date_tracking.ticket_id`` FK. The assignee→Slack mapping isn't
+        resolved here, so ``assignee_slack_id`` is left empty: per-assignee DMs
+        won't fire, but the consolidated Governor (jira_owner) and TL (eng_lead)
+        digests will."""
         if not tickets:
             return
         import psycopg2
@@ -209,20 +281,6 @@ class _AigovFlowMixin:
             "workflow4-aigov: enrolled/updated %d AIGOV ticket(s) in due_date_tracking",
             enrolled,
         )
-
-    def _format_digest(
-        self, title: str, items: list[dict[str, Any]], *, show_assignee: bool
-    ) -> str:
-        template = super()._format_digest(title, items, show_assignee=show_assignee)
-        try:
-            client = build_llm_client(self.settings)
-            summary = client.complete(_SUMMARY_SYSTEM_PROMPT, template)
-            return summary.strip() or template
-        except Exception:
-            LOGGER.exception(
-                "workflow4-aigov: LLM summary failed; falling back to template digest"
-            )
-            return template
 
 
 class Workflow4AigovAssigneeChecker(_AigovFlowMixin, Workflow4AssigneeChecker):
