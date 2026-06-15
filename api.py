@@ -109,6 +109,10 @@ from app.workflow4_due_date import (
     Workflow4DueDateChecker,
     Workflow4TLChecker,
 )
+from app.workflow4_aigov import (
+    Workflow4AigovAssigneeChecker,
+    Workflow4AigovTLChecker,
+)
 from app.doc_review import DocReviewer
 from app.testcase_document import build_and_attach
 
@@ -305,6 +309,33 @@ def workflow4_tl() -> AlertBatchResponse:
     except Exception as exc:
         log.exception("/workflow4/tl failed")
         raise HTTPException(status_code=500, detail=f"workflow4/tl failed: {exc}") from exc
+
+
+# AIGOV sandbox variants — refetch AIGOV + rebuild embeddings + LLM summary.
+@app.post("/workflow4/aigov/daily-assignee", response_model=AlertBatchResponse)
+def workflow4_aigov_daily_assignee() -> AlertBatchResponse:
+    log.info("POST /workflow4/aigov/daily-assignee")
+    try:
+        return AlertBatchResponse(**Workflow4AigovAssigneeChecker(settings=settings).check())
+    except RuntimeError as exc:
+        log.exception("/workflow4/aigov/daily-assignee runtime failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow4/aigov/daily-assignee failed")
+        raise HTTPException(status_code=500, detail=f"aigov daily-assignee failed: {exc}") from exc
+
+
+@app.post("/workflow4/aigov/tl", response_model=AlertBatchResponse)
+def workflow4_aigov_tl() -> AlertBatchResponse:
+    log.info("POST /workflow4/aigov/tl")
+    try:
+        return AlertBatchResponse(**Workflow4AigovTLChecker(settings=settings).check())
+    except RuntimeError as exc:
+        log.exception("/workflow4/aigov/tl runtime failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow4/aigov/tl failed")
+        raise HTTPException(status_code=500, detail=f"aigov workflow4/tl failed: {exc}") from exc
 
 
 # MoM 3 — review PRD / Tech-design docs linked on a ticket; comment the review.

@@ -463,6 +463,78 @@ def fetch_all_tickets(
     return all_tickets
 
 
+def fetch_project_tickets(
+    project_key: str,
+    force_refresh: bool = True,
+) -> list[dict[str, Any]]:
+    """Fetch and cache all tickets for a single Jira project.
+
+    Unlike :func:`fetch_all_tickets`, this ignores ``JIRA_EXCLUDED_PROJECT_KEYS``
+    so an excluded sandbox project (e.g. AIGOV) can still be refreshed on demand.
+    Serves from the PostgreSQL cache when fresh unless ``force_refresh`` is set.
+    Returns an empty list gracefully when credentials are absent/invalid.
+    """
+    if not all([settings.jira_base_url, settings.jira_email, settings.jira_api_token]):
+        log.warning("Jira credentials not configured; returning empty ticket list")
+        return []
+    if not _jira_credentials_are_valid():
+        return []
+
+    with psycopg.connect(settings.database_url) as conn:
+        t0 = time.monotonic()
+        try:
+            project = _fetch_project(project_key)
+        except ProjectGoneError as exc:
+            log.info("Project %s is gone/archived; skipping: %s", project_key, exc)
+            return []
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "unknown"
+            log.warning(
+                "Project %s not visible via project lookup (HTTP %s); "
+                "attempting JQL fetch anyway",
+                project_key,
+                status,
+            )
+            project = _project_stub(project_key)
+
+        _upsert_project(conn, project)
+        key = project.get("key") or project_key
+
+        if not force_refresh and _is_cache_fresh(conn, key, settings.jira_cache_ttl_hours):
+            cached = _load_from_cache(conn, key)
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
+            _log_fetch(conn, key, len(cached), from_cache=True,
+                       force_refresh=False, duration_ms=elapsed_ms)
+            conn.commit()
+            log.info("Cache hit: %d tickets for project %s", len(cached), key)
+            return cached
+
+        error_msg: Optional[str] = None
+        tickets: list[dict] = []
+        try:
+            tickets = _fetch_tickets_for_project(key)
+            _upsert_tickets(conn, tickets)
+        except ProjectGoneError as exc:
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
+            log.info("Project %s returned 410 (archived); skipping: %s", key, exc)
+            _log_fetch(conn, key, 0, from_cache=False,
+                       force_refresh=force_refresh, duration_ms=elapsed_ms,
+                       error="410 Gone – project is archived")
+            conn.commit()
+            return []
+        except Exception as exc:
+            error_msg = str(exc)[:500]
+            log.warning("Failed to fetch/store project %s: %s", key, error_msg)
+
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        _log_fetch(conn, key, len(tickets), from_cache=False,
+                   force_refresh=force_refresh, duration_ms=elapsed_ms,
+                   error=error_msg)
+        conn.commit()
+        log.info("Fetched and stored %d tickets for project %s", len(tickets), key)
+        return tickets
+
+
 def get_cached_ticket_count() -> int:
     """Return the total number of tickets currently in the cache (any age)."""
     if not settings.database_url:

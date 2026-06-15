@@ -329,14 +329,29 @@ class Workflow4DueDateChecker:
         return channels
 
     def _fetch_active_tickets(self, cursor: Any) -> list[dict[str, Any]]:
-        cursor.execute(
-            """
-            SELECT *
-            FROM due_date_tracking
-            WHERE is_completed = FALSE
-            ORDER BY due_date ASC
-            """
-        )
+        # `project_key`, when set on a subclass, scopes the scan to one Jira
+        # project (e.g. the AIGOV sandbox) by matching the `PROJECT-…` prefix.
+        project_key = getattr(self, "project_key", None)
+        if project_key:
+            cursor.execute(
+                """
+                SELECT *
+                FROM due_date_tracking
+                WHERE is_completed = FALSE
+                  AND jira_ticket_id LIKE %s
+                ORDER BY due_date ASC
+                """,
+                (f"{project_key}-%",),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT *
+                FROM due_date_tracking
+                WHERE is_completed = FALSE
+                ORDER BY due_date ASC
+                """
+            )
         return [dict(row) for row in cursor.fetchall()]
 
     def _jira_ticket_is_done(self, jira_ticket_id: str) -> bool:
@@ -614,8 +629,16 @@ class _Workflow4BatchChecker(Workflow4DueDateChecker):
     alerted_column: str = ""          # date column for once-per-day dedupe
     max_time_left_pct: float = 0.0    # qualify when time_left_pct is under this
     inclusive: bool = False           # True -> "<=" threshold, False -> "<"
+    project_key: str | None = None    # when set, scope the scan to one project
 
     # ── subclass hooks ──────────────────────────────────────────────────────
+    def _pre_check(self) -> None:
+        """Hook run once before the due-date scan.
+
+        Default is a no-op; subclasses may override to refresh upstream data
+        (e.g. refetch Jira tickets and rebuild embeddings) before scanning."""
+        return None
+
     def _build_digests(
         self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
     ) -> list[dict[str, str]]:
@@ -755,6 +778,8 @@ class _Workflow4BatchChecker(Workflow4DueDateChecker):
             raise RuntimeError(f"DATABASE_URL is required for {self.name}")
         if not self._jira_is_configured():
             raise RuntimeError(f"Jira credentials are required for {self.name}")
+
+        self._pre_check()
 
         try:
             import psycopg2
