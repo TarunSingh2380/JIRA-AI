@@ -15,6 +15,7 @@ Each run additionally:
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any
 
 from app.llm_client import build_llm_client
@@ -35,24 +36,26 @@ _SUMMARY_SYSTEM_PROMPT = (
 
 
 # ── refetch + embed (best-effort) ───────────────────────────────────────────
-def _refetch_and_embed_aigov() -> None:
-    """Refresh the AIGOV ticket cache, then rebuild its embeddings best-effort."""
+def _refetch_and_embed_aigov() -> list[dict[str, Any]]:
+    """Refresh the AIGOV ticket cache, rebuild embeddings best-effort, and return
+    the fetched raw Jira issue dicts (empty list on failure)."""
     from app.jira_fetcher import fetch_project_tickets
 
     try:
         tickets = fetch_project_tickets(AIGOV_PROJECT_KEY, force_refresh=True)
     except Exception:
         LOGGER.exception("workflow4-aigov: AIGOV refetch failed (non-fatal)")
-        return
+        return []
 
     LOGGER.info("workflow4-aigov: refetched %d AIGOV ticket(s)", len(tickets))
     if not tickets:
-        return
+        return []
 
     try:
         _embed_tickets(tickets)
     except Exception:
         LOGGER.exception("workflow4-aigov: embedding step failed (non-fatal)")
+    return tickets
 
 
 def _embed_tickets(tickets: list[dict[str, Any]]) -> None:
@@ -95,7 +98,94 @@ class _AigovFlowMixin:
     project_key = AIGOV_PROJECT_KEY
 
     def _pre_check(self) -> None:
-        _refetch_and_embed_aigov()
+        tickets = _refetch_and_embed_aigov()
+        try:
+            self._enroll_aigov_tickets(tickets)
+        except Exception:
+            LOGGER.exception("workflow4-aigov: enrollment step failed (non-fatal)")
+
+    def _enroll_aigov_tickets(self, tickets: list[dict[str, Any]]) -> None:
+        """Auto-enroll fetched AIGOV tickets that carry a due date into
+        ``due_date_tracking`` so the scan can alert on them.
+
+        Unlike production (where workflow1/workflow3 own enrollment), the AIGOV
+        sandbox enrolls straight from the Jira fetch. A minimal ``tickets`` row
+        is upserted first to satisfy the ``due_date_tracking.ticket_id`` FK.
+        The assignee→Slack mapping isn't resolved here, so ``assignee_slack_id``
+        is left empty: per-assignee DMs won't fire, but the consolidated
+        Governor (jira_owner) and TL (eng_lead) digests will."""
+        if not tickets:
+            return
+        import psycopg2
+
+        enrolled = 0
+        with psycopg2.connect(self.settings.database_url) as conn:
+            with conn.cursor() as cursor:
+                for ticket in tickets:
+                    key = str(ticket.get("key") or "")
+                    if not key:
+                        continue
+                    try:
+                        info = self._fetch_jira_phase(key)
+                        if info.get("done"):
+                            continue
+                        due = (
+                            info.get("system_due")
+                            or info.get("dev_due")
+                            or info.get("qa_due")
+                            or info.get("live_due")
+                        )
+                        if due is None:
+                            continue  # nothing to track without a due date
+
+                        fields = ticket.get("fields", {}) or {}
+                        tracking_start = (
+                            self._parse_jira_date(fields.get("created")) or date.today()
+                        )
+                        total = self._count_working_days(tracking_start, due)
+                        if total <= 0:
+                            total = 1
+                        priority = str((fields.get("priority") or {}).get("name") or "")
+
+                        cursor.execute(
+                            """
+                            INSERT INTO tickets (jira_ticket_id, status)
+                            VALUES (%s, 'open')
+                            ON CONFLICT (jira_ticket_id)
+                            DO UPDATE SET jira_ticket_id = EXCLUDED.jira_ticket_id
+                            RETURNING id
+                            """,
+                            (key,),
+                        )
+                        ticket_row_id = cursor.fetchone()[0]
+
+                        cursor.execute(
+                            """
+                            INSERT INTO due_date_tracking (
+                                ticket_id, jira_ticket_id, priority, assignee_slack_id,
+                                due_date, tracking_start_date, total_working_days
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (jira_ticket_id) DO UPDATE SET
+                                due_date            = EXCLUDED.due_date,
+                                tracking_start_date = EXCLUDED.tracking_start_date,
+                                total_working_days  = EXCLUDED.total_working_days,
+                                priority            = EXCLUDED.priority,
+                                is_completed        = FALSE
+                            """,
+                            (ticket_row_id, key, priority, "", due, tracking_start, total),
+                        )
+                        conn.commit()
+                        enrolled += 1
+                    except Exception:
+                        conn.rollback()
+                        LOGGER.exception(
+                            "workflow4-aigov: enroll failed for %s (skipping)", key
+                        )
+        LOGGER.info(
+            "workflow4-aigov: enrolled/updated %d AIGOV ticket(s) in due_date_tracking",
+            enrolled,
+        )
 
     def _format_digest(
         self, title: str, items: list[dict[str, Any]], *, show_assignee: bool
