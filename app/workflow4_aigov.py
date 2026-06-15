@@ -107,6 +107,9 @@ class _Workflow4SummaryMixin:
     # the AIGOV test flow forces a refresh for immediacy.
     summary_force_refresh: bool = False
     summary_build_embeddings: bool = True
+    # Workflow4 is self-sufficient: it enrolls its own fetched tickets into
+    # due_date_tracking rather than depending on workflow1/workflow3.
+    auto_enroll: bool = True
 
     def _fetch_tickets(self) -> list[dict[str, Any]]:
         from app.jira_fetcher import fetch_all_tickets, fetch_project_tickets
@@ -151,74 +154,17 @@ class _Workflow4SummaryMixin:
             LOGGER.exception("workflow4-summary: story→subtask mapping failed (non-fatal)")
 
     def _extra_pre_check(self, tickets: list[dict[str, Any]]) -> None:
-        """Hook for scope-specific pre-work (AIGOV auto-enrollment)."""
-        return None
-
-    def _format_digest(
-        self, title: str, items: list[dict[str, Any]], *, show_assignee: bool
-    ) -> str:
-        template = super()._format_digest(title, items, show_assignee=show_assignee)
-        prompt_input = template + self._subtask_breakdown(items)
+        """Auto-enroll fetched tickets (both production and AIGOV) so Workflow4
+        is independent of workflow1/workflow3."""
+        if not self.auto_enroll:
+            return
         try:
-            client = build_llm_client(self.settings)
-            summary = client.complete(_SUMMARY_SYSTEM_PROMPT, prompt_input)
-            return summary.strip() or template
+            self._enroll_tickets(tickets)
         except Exception:
-            LOGGER.exception(
-                "workflow4-summary: LLM summary failed; falling back to template digest"
-            )
-            return template
+            LOGGER.exception("%s: enrollment step failed (non-fatal)", self.name)
 
-    def _subtask_breakdown(self, items: list[dict[str, Any]]) -> str:
-        """Append each digest Story's stored subtask breakdown for the LLM."""
-        try:
-            from app.story_subtasks import format_breakdown, get_subtasks_for_stories
-
-            keys = [str(i.get("key") or "") for i in items if i.get("key")]
-            grouped = get_subtasks_for_stories(self.settings, keys)
-            return format_breakdown(grouped)
-        except Exception:
-            LOGGER.exception("workflow4-summary: subtask breakdown failed (non-fatal)")
-            return ""
-
-
-# ── production (all spaces) ──────────────────────────────────────────────────
-class Workflow4SummaryAssigneeChecker(_Workflow4SummaryMixin, Workflow4AssigneeChecker):
-    """Production 09:00 batch — under 75% time left, enriched + summarized."""
-
-    name = "workflow4-summary-daily-assignee"
-
-
-class Workflow4SummaryTLChecker(_Workflow4SummaryMixin, Workflow4TLChecker):
-    """Production 15:00 batch — 50% or less time left, enriched + summarized."""
-
-    name = "workflow4-summary-tl"
-
-
-# ── AIGOV sandbox (test scope + auto-enroll) ─────────────────────────────────
-class _AigovFlowMixin(_Workflow4SummaryMixin):
-    """Restrict the enriched flow to the AIGOV sandbox and auto-enroll fetched
-    tickets into ``due_date_tracking`` (production relies on workflow1/workflow3)."""
-
-    project_key = AIGOV_PROJECT_KEY
-    summary_force_refresh = True
-
-    def _fetch_tickets(self) -> list[dict[str, Any]]:
-        from app.jira_fetcher import fetch_project_tickets
-
-        return fetch_project_tickets(AIGOV_PROJECT_KEY, force_refresh=True)
-
-    def _mapping_project_keys(self) -> list[str] | None:
-        return [AIGOV_PROJECT_KEY]
-
-    def _extra_pre_check(self, tickets: list[dict[str, Any]]) -> None:
-        try:
-            self._enroll_aigov_tickets(tickets)
-        except Exception:
-            LOGGER.exception("workflow4-aigov: enrollment step failed (non-fatal)")
-
-    def _enroll_aigov_tickets(self, tickets: list[dict[str, Any]]) -> None:
-        """Auto-enroll fetched AIGOV tickets that carry a due date into
+    def _enroll_tickets(self, tickets: list[dict[str, Any]]) -> None:
+        """Enroll fetched tickets that carry a due date (and aren't Done) into
         ``due_date_tracking`` so the scan can alert on them.
 
         A minimal ``tickets`` row is upserted first to satisfy the
@@ -291,13 +237,67 @@ class _AigovFlowMixin(_Workflow4SummaryMixin):
                         enrolled += 1
                     except Exception:
                         conn.rollback()
-                        LOGGER.exception(
-                            "workflow4-aigov: enroll failed for %s (skipping)", key
-                        )
+                        LOGGER.exception("%s: enroll failed for %s (skipping)", self.name, key)
         LOGGER.info(
-            "workflow4-aigov: enrolled/updated %d AIGOV ticket(s) in due_date_tracking",
-            enrolled,
+            "%s: enrolled/updated %d ticket(s) in due_date_tracking", self.name, enrolled
         )
+
+    def _format_digest(
+        self, title: str, items: list[dict[str, Any]], *, show_assignee: bool
+    ) -> str:
+        template = super()._format_digest(title, items, show_assignee=show_assignee)
+        prompt_input = template + self._subtask_breakdown(items)
+        try:
+            client = build_llm_client(self.settings)
+            summary = client.complete(_SUMMARY_SYSTEM_PROMPT, prompt_input)
+            return summary.strip() or template
+        except Exception:
+            LOGGER.exception(
+                "workflow4-summary: LLM summary failed; falling back to template digest"
+            )
+            return template
+
+    def _subtask_breakdown(self, items: list[dict[str, Any]]) -> str:
+        """Append each digest Story's stored subtask breakdown for the LLM."""
+        try:
+            from app.story_subtasks import format_breakdown, get_subtasks_for_stories
+
+            keys = [str(i.get("key") or "") for i in items if i.get("key")]
+            grouped = get_subtasks_for_stories(self.settings, keys)
+            return format_breakdown(grouped)
+        except Exception:
+            LOGGER.exception("workflow4-summary: subtask breakdown failed (non-fatal)")
+            return ""
+
+
+# ── production (all spaces) ──────────────────────────────────────────────────
+class Workflow4SummaryAssigneeChecker(_Workflow4SummaryMixin, Workflow4AssigneeChecker):
+    """Production 09:00 batch — under 75% time left, enriched + summarized."""
+
+    name = "workflow4-summary-daily-assignee"
+
+
+class Workflow4SummaryTLChecker(_Workflow4SummaryMixin, Workflow4TLChecker):
+    """Production 15:00 batch — 50% or less time left, enriched + summarized."""
+
+    name = "workflow4-summary-tl"
+
+
+# ── AIGOV sandbox (test scope + auto-enroll) ─────────────────────────────────
+class _AigovFlowMixin(_Workflow4SummaryMixin):
+    """Restrict the enriched flow to the AIGOV sandbox. Auto-enrollment is
+    inherited from the shared mixin (Workflow4 is self-sufficient)."""
+
+    project_key = AIGOV_PROJECT_KEY
+    summary_force_refresh = True
+
+    def _fetch_tickets(self) -> list[dict[str, Any]]:
+        from app.jira_fetcher import fetch_project_tickets
+
+        return fetch_project_tickets(AIGOV_PROJECT_KEY, force_refresh=True)
+
+    def _mapping_project_keys(self) -> list[str] | None:
+        return [AIGOV_PROJECT_KEY]
 
 
 class Workflow4AigovAssigneeChecker(_AigovFlowMixin, Workflow4AssigneeChecker):
