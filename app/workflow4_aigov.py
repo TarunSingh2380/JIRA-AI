@@ -453,10 +453,25 @@ class _Workflow4SummaryMixin:
         jql = " AND ".join(p for p in (scope, extra_jql) if p)
         return f"<{base}/issues/?jql={quote(jql)}|{label}>"
 
+    _DIVIDER = "──────────────────────────"
+
     def _story_line(self, row: list[Any]) -> str:
         story_key, task_key, state, due, assignee = row
         task = f" / {self._link(task_key)}" if task_key and task_key != "—" else ""
         return f"• {self._link(story_key)}{task} · {state} · {due} · {assignee}"
+
+    def _render_rows(self, rows: list[list[Any]]) -> list[str]:
+        """Render story/task rows, inserting a horizontal rule between each
+        distinct Story so its tasks read as one block."""
+        lines: list[str] = []
+        prev: Any = None
+        for row in rows:
+            story_key = row[0]
+            if prev is not None and story_key != prev:
+                lines.append(self._DIVIDER)
+            lines.append(self._story_line(row))
+            prev = story_key
+        return lines
 
     # ── collect + render ─────────────────────────────────────────────────────
     def _collect(self) -> tuple[dict[str, list[list[Any]]], list[list[Any]], dict[str, int]]:
@@ -521,13 +536,13 @@ class _Workflow4SummaryMixin:
         ]
         for band_key, label in _BAND_ORDER:
             rows = bands[band_key]
-            lines = [self._story_line(r) for r in rows[:_MAX_TABLE_ROWS]]
+            lines = self._render_rows(rows[:_MAX_TABLE_ROWS])
             if len(rows) > _MAX_TABLE_ROWS:
                 lines.append(f"_…and {len(rows) - _MAX_TABLE_ROWS} more_")
             groups.append((f"*{label}* ({len(rows)})", lines or ["_none_"]))
 
         if undated:
-            lines = [self._story_line(r) for r in undated[:_MAX_TABLE_ROWS]]
+            lines = self._render_rows(undated[:_MAX_TABLE_ROWS])
             if len(undated) > _MAX_TABLE_ROWS:
                 lines.append(f"_…and {len(undated) - _MAX_TABLE_ROWS} more_")
             groups.append((f"*e. No due date on Story* ({len(undated)})", lines))
