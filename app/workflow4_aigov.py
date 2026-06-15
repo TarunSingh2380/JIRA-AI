@@ -454,57 +454,94 @@ class _Workflow4SummaryMixin:
         return f"<{base}/issues/?jql={quote(jql)}|{label}>"
 
     _DIVIDER = "──────────────────────────"
+    # Statuses treated as completed and hidden from the report (in addition to
+    # the statusCategory=Done filter the phase-cache JQL already applies).
+    _COMPLETED_STATUSES = {"completed", "not a bug"}
+    _CAT_LABEL = {"overdue": "Overdue", "75": "≤75% left", "50": "≤50% left", "25": "≤25% left"}
 
-    def _story_line(self, row: list[Any]) -> str:
-        story_key, task_key, state, due, assignee = row
-        task = f" / {self._link(task_key)}" if task_key and task_key != "—" else ""
-        return f"• {self._link(story_key)}{task} · {state} · {due} · {assignee}"
+    def _is_completed(self, status: Any) -> bool:
+        return str(status or "").strip().lower() in self._COMPLETED_STATUSES
 
-    def _render_rows(self, rows: list[list[Any]]) -> list[str]:
-        """Render story/task rows, inserting a horizontal rule between each
-        distinct Story so its tasks read as one block."""
+    def _cat_label(self, band: str | None) -> str:
+        return self._CAT_LABEL.get(band, ">75% left")
+
+    def _render_stories(self, stories: list[dict[str, Any]]) -> list[str]:
+        """Render each Story as a header (with its own due date) followed by its
+        dated, active tasks (each tagged with its time-left category), with a
+        horizontal rule between Stories."""
         lines: list[str] = []
-        prev: Any = None
-        for row in rows:
-            story_key = row[0]
-            if prev is not None and story_key != prev:
+        for i, s in enumerate(stories[:_MAX_TABLE_ROWS]):
+            if i:
                 lines.append(self._DIVIDER)
-            lines.append(self._story_line(row))
-            prev = story_key
+            lines.append(
+                f"*{self._link(s['key'])}* · {s['state']} · due {s['due']} · {s['assignee']}"
+            )
+            for t in s["tasks"]:
+                lines.append(
+                    f"   ↳ {self._link(t['key'])} · {t['state']} · due {t['due']} "
+                    f"· {t['cat']} · {t['assignee']}"
+                )
+            if not s["tasks"]:
+                lines.append("   _(no dated tasks)_")
+        if len(stories) > _MAX_TABLE_ROWS:
+            lines.append(f"_…and {len(stories) - _MAX_TABLE_ROWS} more stories_")
         return lines
 
     # ── collect + render ─────────────────────────────────────────────────────
-    def _collect(self) -> tuple[dict[str, list[list[Any]]], list[list[Any]], dict[str, int]]:
+    def _collect(self) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
+        """Group at-risk, dated, non-completed Stories by their own time-left
+        band; each Story carries its dated, active tasks. Independent tasks are
+        reduced to per-band counts."""
         from app.story_subtasks import get_all_subtasks
 
         cache = getattr(self, "_phase_cache", None) or {}
         grouped = get_all_subtasks(self.settings, self._mapping_project_keys())
 
-        bands: dict[str, list[list[Any]]] = {"overdue": [], "75": [], "50": [], "25": []}
-        undated: list[list[Any]] = []
+        bands: dict[str, list[dict[str, Any]]] = {"overdue": [], "75": [], "50": [], "25": []}
         subtask_keys: set[str] = set()
 
         for story_key, rows in grouped.items():
             for r in rows:
                 subtask_keys.add(r["subtask_key"])
             entry = cache.get(story_key)
-            if entry is None or entry.get("done"):
+            # Skip Done (not in cache) / Completed / Not-a-Bug stories.
+            if entry is None or self._is_completed(entry.get("status")):
                 continue
-            story_rows = [
-                [story_key, r["subtask_key"], r.get("status") or "—",
-                 str(self._subtask_due(r) or "—"), r.get("assignee_name") or "Unassigned"]
-                for r in rows
-            ] or [
-                [story_key, "—", entry.get("status") or "—",
-                 str(self._effective_due(entry) or "—"), entry.get("assignee_name") or "Unassigned"]
-            ]
+            due = self._effective_due(entry)
+            if due is None:
+                continue  # skip Stories with no due date
             tl = self._time_left(entry)
-            if tl is None:
-                undated.extend(story_rows)
-                continue
-            band = self._band(tl["remaining"], tl["pct"])
-            if band is not None:
-                bands[band].extend(story_rows)
+            band = self._band(tl["remaining"], tl["pct"]) if tl else None
+            if band is None:
+                continue  # Story not at risk (>75% time left)
+
+            tasks: list[dict[str, Any]] = []
+            for r in rows:
+                tk = r["subtask_key"]
+                tentry = cache.get(tk)
+                # Only active tasks (in cache = not Done) that aren't Completed.
+                if tentry is None or self._is_completed(tentry.get("status")):
+                    continue
+                tdue = self._effective_due(tentry)
+                if tdue is None:
+                    continue  # skip tasks with no due date
+                ttl = self._time_left(tentry)
+                cat = self._cat_label(self._band(ttl["remaining"], ttl["pct"])) if ttl else "—"
+                tasks.append({
+                    "key": tk,
+                    "state": tentry.get("status") or "—",
+                    "due": tdue,
+                    "cat": cat,
+                    "assignee": tentry.get("assignee_name") or "Unassigned",
+                })
+
+            bands[band].append({
+                "key": story_key,
+                "state": entry.get("status") or "—",
+                "due": due,
+                "assignee": entry.get("assignee_name") or "Unassigned",
+                "tasks": tasks,
+            })
 
         story_keys = set(grouped.keys())
         ind_counts = {"overdue": 0, "75": 0, "50": 0, "25": 0}
@@ -513,20 +550,24 @@ class _Workflow4SummaryMixin:
                 continue
             if str(entry.get("issuetype") or "").strip().lower() == "story":
                 continue
+            if self._is_completed(entry.get("status")):
+                continue
+            if self._effective_due(entry) is None:
+                continue  # skip tasks with no due date
             tl = self._time_left(entry)
             if tl is None:
                 continue
             band = self._band(tl["remaining"], tl["pct"])
             if band is not None:
                 ind_counts[band] += 1
-        return bands, undated, ind_counts
+        return bands, ind_counts
 
     def _groups(self) -> list[tuple[str, list[str]]] | None:
         """Heading + line groups shared by the mrkdwn and Block Kit renderers,
         or None when nothing is at risk."""
-        bands, undated, ind_counts = self._collect()
+        bands, ind_counts = self._collect()
         total_ind = sum(ind_counts.values())
-        if not any(bands.values()) and not undated and total_ind == 0:
+        if not any(bands.values()) and total_ind == 0:
             return None
 
         scope_label = ", ".join(self._mapping_project_keys() or []) or self._scope_label()
@@ -535,17 +576,9 @@ class _Workflow4SummaryMixin:
             ("*1. Stories*", []),
         ]
         for band_key, label in _BAND_ORDER:
-            rows = bands[band_key]
-            lines = self._render_rows(rows[:_MAX_TABLE_ROWS])
-            if len(rows) > _MAX_TABLE_ROWS:
-                lines.append(f"_…and {len(rows) - _MAX_TABLE_ROWS} more_")
-            groups.append((f"*{label}* ({len(rows)})", lines or ["_none_"]))
-
-        if undated:
-            lines = self._render_rows(undated[:_MAX_TABLE_ROWS])
-            if len(undated) > _MAX_TABLE_ROWS:
-                lines.append(f"_…and {len(undated) - _MAX_TABLE_ROWS} more_")
-            groups.append((f"*e. No due date on Story* ({len(undated)})", lines))
+            stories = bands[band_key]
+            lines = self._render_stories(stories)
+            groups.append((f"*{label}* ({len(stories)})", lines or ["_none_"]))
 
         if total_ind:
             parts = [
