@@ -330,8 +330,11 @@ class Workflow4DueDateChecker:
 
     def _fetch_active_tickets(self, cursor: Any) -> list[dict[str, Any]]:
         # `project_key`, when set on a subclass, scopes the scan to one Jira
-        # project (e.g. the AIGOV sandbox) by matching the `PROJECT-…` prefix.
+        # project (e.g. the AIGOV sandbox). Otherwise we scan every project but
+        # exclude the sandbox key(s) in JIRA_EXCLUDED_PROJECT_KEYS so leftover
+        # AIGOV test rows never surface in the production digest.
         project_key = getattr(self, "project_key", None)
+        include = self._included_project_keys()
         if project_key:
             cursor.execute(
                 """
@@ -343,16 +346,65 @@ class Workflow4DueDateChecker:
                 """,
                 (f"{project_key}-%",),
             )
-        else:
+        elif include:
+            like = " OR ".join("jira_ticket_id LIKE %s" for _ in include)
             cursor.execute(
-                """
+                f"""
                 SELECT *
                 FROM due_date_tracking
                 WHERE is_completed = FALSE
+                  AND ({like})
                 ORDER BY due_date ASC
-                """
+                """,
+                tuple(f"{key}-%" for key in include),
             )
+        else:
+            excluded = self._excluded_project_keys()
+            if excluded:
+                not_like = " AND ".join("jira_ticket_id NOT LIKE %s" for _ in excluded)
+                cursor.execute(
+                    f"""
+                    SELECT *
+                    FROM due_date_tracking
+                    WHERE is_completed = FALSE
+                      AND {not_like}
+                    ORDER BY due_date ASC
+                    """,
+                    tuple(f"{key}-%" for key in excluded),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM due_date_tracking
+                    WHERE is_completed = FALSE
+                    ORDER BY due_date ASC
+                    """
+                )
         return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def _split_project_keys(raw: str) -> list[str]:
+        import re
+
+        keys: list[str] = []
+        seen: set[str] = set()
+        for part in re.split(r"[\s,]+", (raw or "").strip()):
+            key = part.strip()
+            if key and key.upper() not in seen:
+                seen.add(key.upper())
+                keys.append(key)
+        return keys
+
+    def _excluded_project_keys(self) -> list[str]:
+        """Sandbox project keys (JIRA_EXCLUDED_PROJECT_KEYS) to keep out of the
+        all-projects scan. Empty for project-scoped subclasses."""
+        return self._split_project_keys(getattr(self.settings, "jira_excluded_project_keys", ""))
+
+    def _included_project_keys(self) -> list[str]:
+        """Explicit include-list (WORKFLOW4_PROJECT_KEYS) restricting the
+        production scan to these projects, e.g. ["RFT"]. Blank = no restriction."""
+        return self._split_project_keys(getattr(self.settings, "workflow4_project_keys", ""))
 
     def _jira_ticket_is_done(self, jira_ticket_id: str) -> bool:
         if not jira_ticket_id:

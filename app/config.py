@@ -71,9 +71,13 @@ class Settings:
     jira_qa_due_date_field: str = os.getenv("JIRA_QA_DUE_DATE_FIELD", "customfield_10307")
     jira_live_due_date_field: str = os.getenv("JIRA_LIVE_DUE_DATE_FIELD", "")
     # Comma/space-separated Jira project keys whose Stories the story→subtask
-    # mapper should scan (e.g. "AIGOV,RFT"). Blank = derive Story keys from the
-    # tickets passed in by the caller (the AIGOV WF4 flow's fetched tickets).
+    # mapper should scan (e.g. "AIGOV,RFT"). Blank = all visible spaces minus
+    # JIRA_EXCLUDED_PROJECT_KEYS.
     story_subtask_project_keys: str = os.getenv("STORY_SUBTASK_PROJECT_KEYS", "")
+    # Restrict the PRODUCTION Workflow4 batches (fetch + due-date scan + story
+    # mapping) to these project keys, e.g. "RFT". Blank = all spaces minus
+    # JIRA_EXCLUDED_PROJECT_KEYS. Does not affect the AIGOV test endpoints.
+    workflow4_project_keys: str = os.getenv("WORKFLOW4_PROJECT_KEYS", "")
     # Lowercased Jira status names that select the active phase. Anything not
     # matched here is treated as the Dev phase (the default).
     jira_qa_statuses: str = os.getenv("JIRA_QA_STATUSES", "ready for qa,in qa,qa,qa in progress,in review")

@@ -196,20 +196,21 @@ def _child_row(settings: Settings, child: dict[str, Any]) -> Optional[dict[str, 
     }
 
 
-def map_and_store(settings: Settings, tickets: Any = None) -> int:
+def map_and_store(
+    settings: Settings, project_keys: Optional[list[str]] = None
+) -> int:
     """Map Stories to their children and upsert each into ``story_subtasks``.
 
-    Scope follows ``STORY_SUBTASK_PROJECT_KEYS``: explicit keys (e.g. ``AIGOV``)
-    restrict to those projects; blank means all visible spaces minus
-    ``JIRA_EXCLUDED_PROJECT_KEYS``. (``tickets`` is accepted for call-site
-    compatibility but no longer used — story discovery is always via JQL.)
+    Scope precedence: explicit ``project_keys`` (passed by the WF4 checker, e.g.
+    its WORKFLOW4_PROJECT_KEYS) → ``STORY_SUBTASK_PROJECT_KEYS`` → all visible
+    spaces minus ``JIRA_EXCLUDED_PROJECT_KEYS``. Story discovery is via JQL.
     Returns the number of child rows written."""
-    configured = _split_keys(settings.story_subtask_project_keys)
-    story_keys = _fetch_story_keys(settings, configured or None)
+    scope = project_keys or _split_keys(settings.story_subtask_project_keys)
+    story_keys = _fetch_story_keys(settings, scope or None)
     LOGGER.info(
         "story_subtasks: %d Story(ies) in scope %s",
         len(story_keys),
-        configured or "all-spaces",
+        scope or "all-spaces",
     )
     if not story_keys:
         LOGGER.info("story_subtasks: no Story issues to map")

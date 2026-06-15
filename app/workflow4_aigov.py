@@ -109,9 +109,23 @@ class _Workflow4SummaryMixin:
     summary_build_embeddings: bool = True
 
     def _fetch_tickets(self) -> list[dict[str, Any]]:
-        from app.jira_fetcher import fetch_all_tickets
+        from app.jira_fetcher import fetch_all_tickets, fetch_project_tickets
 
+        include = self._included_project_keys()
+        if include:
+            tickets: list[dict[str, Any]] = []
+            for key in include:
+                tickets.extend(
+                    fetch_project_tickets(key, force_refresh=self.summary_force_refresh)
+                )
+            return tickets
         return fetch_all_tickets(force_refresh=self.summary_force_refresh)
+
+    def _mapping_project_keys(self) -> list[str] | None:
+        """Story-mapping scope for this checker. Production honours
+        WORKFLOW4_PROJECT_KEYS; None lets map_and_store fall back to
+        STORY_SUBTASK_PROJECT_KEYS / all-spaces."""
+        return self._included_project_keys() or None
 
     def _pre_check(self) -> None:
         try:
@@ -132,7 +146,7 @@ class _Workflow4SummaryMixin:
         try:
             from app.story_subtasks import map_and_store
 
-            map_and_store(self.settings)
+            map_and_store(self.settings, project_keys=self._mapping_project_keys())
         except Exception:
             LOGGER.exception("workflow4-summary: story→subtask mapping failed (non-fatal)")
 
@@ -193,6 +207,9 @@ class _AigovFlowMixin(_Workflow4SummaryMixin):
         from app.jira_fetcher import fetch_project_tickets
 
         return fetch_project_tickets(AIGOV_PROJECT_KEY, force_refresh=True)
+
+    def _mapping_project_keys(self) -> list[str] | None:
+        return [AIGOV_PROJECT_KEY]
 
     def _extra_pre_check(self, tickets: list[dict[str, Any]]) -> None:
         try:
