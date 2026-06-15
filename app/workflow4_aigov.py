@@ -188,6 +188,7 @@ class _Workflow4SummaryMixin:
                     "priority": (f.get("priority") or {}).get("name"),
                     "issuetype": (f.get("issuetype") or {}).get("name"),
                     "assignee_name": (f.get("assignee") or {}).get("displayName"),
+                    "assignee_email": (f.get("assignee") or {}).get("emailAddress"),
                 }
             start += len(batch)
             next_token = data.get("nextPageToken")
@@ -634,8 +635,146 @@ class _Workflow4SummaryMixin:
         return text, blocks
 
 
+# ── per-assignee morning digest (09:00) ──────────────────────────────────────
+class _AssigneeReportMixin:
+    """09:00 behaviour: DM each assignee a dashed-table digest of *their own*
+    at-risk tickets, and still send the consolidated report to the Jira Owner.
+    Mixed before `_Workflow4SummaryMixin`, so its `_build_digests` wins."""
+
+    def _build_digests(
+        self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
+    ) -> list[dict[str, Any]]:
+        alerts: list[dict[str, Any]] = []
+        try:
+            alerts.extend(self._assignee_dms())
+        except Exception:
+            LOGGER.exception("%s: per-assignee digests failed", self.name)
+        # Governor copy — the consolidated report still goes to jira_owner.
+        try:
+            governor = self._clean_channel(role_channels.get("jira_owner"))
+            if governor:
+                message, blocks = self._build_payload()
+                if message:
+                    alerts.append(
+                        {"channel_id": governor, "message": message, "blocks": blocks}
+                    )
+        except Exception:
+            LOGGER.exception("%s: governor copy failed", self.name)
+        return alerts
+
+    def _channel_maps(self) -> tuple[dict[str, str], dict[str, str]]:
+        """One read of channelid_table → (email→channel, slack_name→channel)."""
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+
+        by_email: dict[str, str] = {}
+        by_name: dict[str, str] = {}
+        try:
+            with psycopg2.connect(self.settings.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT email_id, slack_user_name, channel_id FROM channelid_table"
+                    )
+                    for row in cur.fetchall():
+                        channel = str(row.get("channel_id") or "").strip()
+                        if not channel:
+                            continue
+                        email = str(row.get("email_id") or "").strip().lower()
+                        name = str(row.get("slack_user_name") or "").strip().lower().lstrip("@")
+                        if email:
+                            by_email[email] = channel
+                        if name:
+                            by_name[name] = channel
+        except Exception:
+            LOGGER.exception("%s: channelid_table lookup failed", self.name)
+        return by_email, by_name
+
+    def _assignee_dms(self) -> list[dict[str, Any]]:
+        cache = getattr(self, "_phase_cache", None) or {}
+        # Group at-risk, dated, non-completed tickets by assignee.
+        groups: dict[str, dict[str, Any]] = {}
+        for key, entry in cache.items():
+            if self._is_completed(entry.get("status")):
+                continue
+            if self._effective_due(entry) is None:
+                continue
+            tl = self._time_left(entry)
+            if tl is None:
+                continue
+            band = self._band(tl["remaining"], tl["pct"])
+            if band is None:
+                continue
+            name = entry.get("assignee_name")
+            email = entry.get("assignee_email")
+            if not name and not email:
+                continue  # unassigned
+            akey = str(email or name).strip().lower()
+            grp = groups.setdefault(akey, {"email": email, "name": name, "rows": []})
+            grp["rows"].append({
+                "key": key,
+                "state": entry.get("status") or "—",
+                "due": tl["due"],
+                "cat": self._cat_label(band),
+                "_sort": (tl["remaining"], tl["pct"]),
+            })
+        if not groups:
+            return []
+
+        by_email, by_name = self._channel_maps()
+        alerts: list[dict[str, Any]] = []
+        for grp in groups.values():
+            channel = None
+            if grp["email"]:
+                channel = by_email.get(str(grp["email"]).strip().lower())
+            if not channel and grp["name"]:
+                channel = by_name.get(str(grp["name"]).strip().lower().lstrip("@"))
+            if not channel:
+                LOGGER.info(
+                    "%s: no channelid_table match for assignee %s <%s> — skipping DM",
+                    self.name, grp["name"], grp["email"],
+                )
+                continue
+            rows = sorted(grp["rows"], key=lambda r: r["_sort"])
+            alerts.append({
+                "channel_id": channel,
+                "message": self._assignee_message(grp["name"], rows),
+                "blocks": None,
+            })
+        return alerts
+
+    def _assignee_message(self, name: Any, rows: list[dict[str, Any]]) -> str:
+        greet = f"Good morning, {name}!" if name else "Good morning!"
+        shown = rows[:_MAX_TABLE_ROWS]
+        table = self._ascii_table(
+            ["Ticket", "State", "Due Date", "Time Left"],
+            [[r["key"], r["state"], str(r["due"]), r["cat"]] for r in shown],
+        )
+        msg = f"*{greet}* You have {len(rows)} ticket(s) needing attention:\n{table}"
+        if len(rows) > _MAX_TABLE_ROWS:
+            msg += f"\n_…and {len(rows) - _MAX_TABLE_ROWS} more_"
+        return msg
+
+    @staticmethod
+    def _ascii_table(headers: list[str], rows: list[list[Any]]) -> str:
+        """Dashed-border monospace table (Slack code block)."""
+        cols = len(headers)
+        cells = [[str(c) for c in r] for r in rows]
+        widths = [len(h) for h in headers]
+        for r in cells:
+            for i in range(cols):
+                widths[i] = max(widths[i], len(r[i]))
+        sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+        line = lambda vals: "| " + " | ".join(  # noqa: E731
+            vals[i].ljust(widths[i]) for i in range(cols)
+        ) + " |"
+        out = [sep, line(headers), sep] + [line(r) for r in cells] + [sep]
+        return "```\n" + "\n".join(out) + "\n```"
+
+
 # ── production (all spaces) ──────────────────────────────────────────────────
-class Workflow4SummaryAssigneeChecker(_Workflow4SummaryMixin, Workflow4AssigneeChecker):
+class Workflow4SummaryAssigneeChecker(
+    _AssigneeReportMixin, _Workflow4SummaryMixin, Workflow4AssigneeChecker
+):
     """Production 09:00 batch — under 75% time left, enriched + summarized."""
 
     name = "workflow4-summary-daily-assignee"
@@ -672,7 +811,9 @@ class _AigovFlowMixin(_Workflow4SummaryMixin):
         return [AIGOV_PROJECT_KEY]
 
 
-class Workflow4AigovAssigneeChecker(_AigovFlowMixin, Workflow4AssigneeChecker):
+class Workflow4AigovAssigneeChecker(
+    _AssigneeReportMixin, _AigovFlowMixin, Workflow4AssigneeChecker
+):
     """AIGOV 09:00 batch — under 75% time left."""
 
     name = "workflow4-aigov-daily-assignee"
