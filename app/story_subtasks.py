@@ -302,6 +302,46 @@ def get_subtasks_for_stories(
     return grouped
 
 
+def get_all_subtasks(
+    settings: Settings, project_keys: Optional[list[str]] = None
+) -> dict[str, list[dict[str, Any]]]:
+    """Return every stored subtask grouped by story_key, optionally scoped to
+    ``project_keys`` (matched against the stored ``project_key`` column)."""
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    try:
+        with psycopg2.connect(settings.database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                _ensure_table(cursor)
+                if project_keys:
+                    cursor.execute(
+                        """
+                        SELECT story_key, subtask_key, issue_type, status,
+                               assignee_name, dev_due_date, qa_due_date, system_due_date
+                        FROM story_subtasks
+                        WHERE project_key = ANY(%s)
+                        ORDER BY story_key, subtask_key
+                        """,
+                        (list(project_keys),),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT story_key, subtask_key, issue_type, status,
+                               assignee_name, dev_due_date, qa_due_date, system_due_date
+                        FROM story_subtasks
+                        ORDER BY story_key, subtask_key
+                        """
+                    )
+                for row in cursor.fetchall():
+                    grouped.setdefault(row["story_key"], []).append(dict(row))
+    except Exception:
+        LOGGER.exception("story_subtasks: get_all_subtasks failed (non-fatal)")
+    return grouped
+
+
 def format_breakdown(grouped: dict[str, list[dict[str, Any]]]) -> str:
     """Render the per-Story subtask breakdown as plain text for the LLM prompt."""
     if not grouped:

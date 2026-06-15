@@ -3,8 +3,9 @@
 Both the production 09:00/15:00 batches and the AIGOV sandbox variants share one
 enrichment pipeline (:class:`_Workflow4SummaryMixin`): before the digest is sent
 they refetch tickets, rebuild dense embeddings (best-effort), map each Story to
-its child issues (assignee + dev/QA due dates), and rewrite the digest through
-the LLM with that subtask breakdown nested under each Story.
+its child issues (assignee + dev/QA due dates), and emit a deterministic tabular
+report to the Jira Owner + TL channels — Stories banded by their own due date
+(Overdue / 75% / 50% / 25% time left), plus a section for independent tasks.
 
   * Production (:class:`Workflow4SummaryAssigneeChecker` / ``…TLChecker``) runs
     across all spaces — story scope follows ``STORY_SUBTASK_PROJECT_KEYS``
@@ -21,7 +22,6 @@ from typing import Any
 
 import requests
 
-from app.llm_client import build_llm_client
 from app.workflow4_due_date import (
     DONE_STATUSES,
     Workflow4AssigneeChecker,
@@ -31,6 +31,17 @@ from app.workflow4_due_date import (
 LOGGER = logging.getLogger(__name__)
 
 AIGOV_PROJECT_KEY = "AIGOV"
+
+# Per-table row cap so a large project can't blow the Slack message size limit.
+_MAX_TABLE_ROWS = 40
+
+# Story time-left bands, rendered in this order (label shown in the message).
+_BAND_ORDER = [
+    ("overdue", "a. Overdue"),
+    ("75", "b. 75% time left"),
+    ("50", "c. 50% time left"),
+    ("25", "d. 25% time left"),
+]
 
 # due_date_tracking.priority is varchar(10) and production stores P0–P4 codes,
 # so map the Jira priority *name* down to a code (empty when unknown).
@@ -54,20 +65,6 @@ def _normalize_priority(raw: Any) -> str:
     if upper in {"P0", "P1", "P2", "P3", "P4"}:
         return upper
     return _PRIORITY_NAME_TO_CODE.get(value.lower(), "")[:10]
-
-
-_SUMMARY_SYSTEM_PROMPT = (
-    "You are the AI Governor's due-date assistant. You are given a pre-formatted "
-    "Slack digest of Jira tickets whose remaining time is running low, optionally "
-    "followed by a 'Subtask breakdown by Story' section listing each Story's child "
-    "issues with assignee and dev/qa due dates. Rewrite it as a concise, "
-    "well-structured Slack message using Slack mrkdwn. Open with a one-line "
-    "situation summary, then keep one line per ticket. When a ticket is a Story "
-    "that has a subtask breakdown, nest its child issues beneath it, calling out "
-    "the assignee and any dev/qa due date that is overdue or at risk. Preserve "
-    "every ticket/subtask key, status, due date and browse URL exactly as given — "
-    "do not invent or drop tickets, dates, statuses, or links."
-)
 
 
 # ── embeddings (best-effort) ─────────────────────────────────────────────────
@@ -143,7 +140,7 @@ class _Workflow4SummaryMixin:
         from app.jira_fetcher import _jira_get
 
         s = self.settings
-        field_ids = ["status", "duedate", "created", "priority"]
+        field_ids = ["status", "duedate", "created", "priority", "issuetype", "assignee"]
         for fid in (
             s.jira_dev_due_date_field,
             s.jira_qa_due_date_field,
@@ -189,6 +186,8 @@ class _Workflow4SummaryMixin:
                     "system_due": self._parse_jira_date(f.get("duedate")),
                     "created": self._parse_jira_date(f.get("created")),
                     "priority": (f.get("priority") or {}).get("name"),
+                    "issuetype": (f.get("issuetype") or {}).get("name"),
+                    "assignee_name": (f.get("assignee") or {}).get("displayName"),
                 }
             start += len(batch)
             next_token = data.get("nextPageToken")
@@ -355,32 +354,173 @@ class _Workflow4SummaryMixin:
             "%s: enrolled/updated %d ticket(s) in due_date_tracking", self.name, enrolled
         )
 
-    def _format_digest(
-        self, title: str, items: list[dict[str, Any]], *, show_assignee: bool
-    ) -> str:
-        template = super()._format_digest(title, items, show_assignee=show_assignee)
-        prompt_input = template + self._subtask_breakdown(items)
+    # ── deterministic tabular digest (Jira Owner + TL) ──────────────────────
+    def _build_digests(
+        self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
+    ) -> list[dict[str, str]]:
+        """Build ONE banded, tabular report and send it to the Jira Owner
+        (jira_owner) and TL (eng_lead) channels. Replaces the per-assignee /
+        per-recipient digests and the LLM rewrite. `qualifying` is ignored —
+        the report is built from the phase cache + story_subtasks mapping."""
         try:
-            client = build_llm_client(self.settings)
-            summary = client.complete(_SUMMARY_SYSTEM_PROMPT, prompt_input)
-            return summary.strip() or template
+            message = self._build_tabular_message()
         except Exception:
-            LOGGER.exception(
-                "workflow4-summary: LLM summary failed; falling back to template digest"
+            LOGGER.exception("workflow4-summary: tabular digest build failed")
+            return []
+        if not message:
+            return []
+        channels: list[str] = []
+        for role in ("jira_owner", "eng_lead"):
+            channel = role_channels.get(role)
+            if channel and channel not in channels:
+                channels.append(channel)
+        return [{"channel_id": channel, "message": message} for channel in channels]
+
+    @staticmethod
+    def _effective_due(entry: dict[str, Any]) -> Any:
+        """The due date that governs a ticket: system `duedate`, else the first
+        non-null phase date."""
+        return (
+            entry.get("system_due")
+            or entry.get("dev_due")
+            or entry.get("qa_due")
+            or entry.get("live_due")
+        )
+
+    def _time_left(self, entry: dict[str, Any]) -> dict[str, Any] | None:
+        """Working-day time-left for a cached ticket, from its own due date.
+        Returns None when the ticket has no due date (undated)."""
+        due = self._effective_due(entry)
+        if due is None:
+            return None
+        today = date.today()
+        start = entry.get("created") or today
+        total = self._count_working_days(start, due)
+        remaining = 0 if today > due else self._count_working_days(today, due)
+        pct = 0.0 if total <= 0 else max(0.0, min(100.0, remaining / total * 100))
+        return {"due": due, "remaining": remaining, "pct": pct}
+
+    @staticmethod
+    def _band(remaining: int, pct: float) -> str | None:
+        """Bucket a ticket into a time-left band, or None if not at risk (>75%)."""
+        if remaining <= 0:
+            return "overdue"
+        if pct <= 25:
+            return "25"
+        if pct <= 50:
+            return "50"
+        if pct <= 75:
+            return "75"
+        return None
+
+    @staticmethod
+    def _subtask_due(row: dict[str, Any]) -> Any:
+        return (
+            row.get("system_due_date")
+            or row.get("dev_due_date")
+            or row.get("qa_due_date")
+        )
+
+    @staticmethod
+    def _format_table(headers: list[str], rows: list[list[Any]]) -> str:
+        """Render an aligned monospace table inside a Slack code block."""
+        str_rows = [["" if c is None else str(c) for c in r] for r in rows]
+        widths = [len(h) for h in headers]
+        for r in str_rows:
+            for i, cell in enumerate(r):
+                widths[i] = max(widths[i], len(cell))
+        line = lambda r: "  ".join(c.ljust(widths[i]) for i, c in enumerate(r))
+        return "```\n" + "\n".join([line(headers)] + [line(r) for r in str_rows]) + "\n```"
+
+    def _build_tabular_message(self) -> str | None:
+        """Compose the banded Story tables + independent-task table. Returns
+        None when nothing is at risk (so no Slack message is sent)."""
+        from app.story_subtasks import get_all_subtasks
+
+        cache = getattr(self, "_phase_cache", None) or {}
+        scope = self._mapping_project_keys()
+        grouped = get_all_subtasks(self.settings, scope)
+
+        bands: dict[str, list[list[Any]]] = {"overdue": [], "75": [], "50": [], "25": []}
+        undated: list[list[Any]] = []
+        subtask_keys: set[str] = set()
+
+        for story_key, rows in grouped.items():
+            for r in rows:
+                subtask_keys.add(r["subtask_key"])
+            entry = cache.get(story_key)
+            if entry is None or entry.get("done"):
+                continue  # Story is Done or out of scope
+            story_rows = [
+                [
+                    story_key,
+                    r["subtask_key"],
+                    r.get("status") or "—",
+                    str(self._subtask_due(r) or "—"),
+                    r.get("assignee_name") or "Unassigned",
+                ]
+                for r in rows
+            ]
+            tl = self._time_left(entry)
+            if tl is None:
+                undated.extend(story_rows)
+                continue
+            band = self._band(tl["remaining"], tl["pct"])
+            if band is not None:
+                bands[band].extend(story_rows)
+
+        # Independent tasks: in scope, not a Story, not a child of any Story.
+        story_keys = set(grouped.keys())
+        independent: list[list[Any]] = []
+        for key, entry in cache.items():
+            if key in story_keys or key in subtask_keys:
+                continue
+            if str(entry.get("issuetype") or "").strip().lower() == "story":
+                continue
+            tl = self._time_left(entry)
+            if tl is None or self._band(tl["remaining"], tl["pct"]) is None:
+                continue
+            independent.append(
+                [key, entry.get("status") or "—", str(tl["due"]), entry.get("assignee_name") or "Unassigned"]
             )
-            return template
 
-    def _subtask_breakdown(self, items: list[dict[str, Any]]) -> str:
-        """Append each digest Story's stored subtask breakdown for the LLM."""
-        try:
-            from app.story_subtasks import format_breakdown, get_subtasks_for_stories
+        total = sum(len(v) for v in bands.values()) + len(undated) + len(independent)
+        if total == 0:
+            return None
 
-            keys = [str(i.get("key") or "") for i in items if i.get("key")]
-            grouped = get_subtasks_for_stories(self.settings, keys)
-            return format_breakdown(grouped)
-        except Exception:
-            LOGGER.exception("workflow4-summary: subtask breakdown failed (non-fatal)")
-            return ""
+        scope_label = ", ".join(scope) if scope else "all spaces"
+        story_headers = ["Story", "Task", "State", "Due", "Assignee"]
+        parts = [
+            f"*Due-Date Compliance — {scope_label} — {date.today():%Y-%m-%d}*",
+            "",
+            "*1. Stories*",
+        ]
+        for band_key, label in _BAND_ORDER:
+            rows = bands[band_key]
+            parts.append(f"\n*{label}* ({len(rows)})")
+            if rows:
+                parts.append(self._format_table(story_headers, rows[:_MAX_TABLE_ROWS]))
+                if len(rows) > _MAX_TABLE_ROWS:
+                    parts.append(f"_…and {len(rows) - _MAX_TABLE_ROWS} more_")
+            else:
+                parts.append("_none_")
+        if undated:
+            parts.append(f"\n*e. No due date on Story* ({len(undated)})")
+            parts.append(self._format_table(story_headers, undated[:_MAX_TABLE_ROWS]))
+            if len(undated) > _MAX_TABLE_ROWS:
+                parts.append(f"_…and {len(undated) - _MAX_TABLE_ROWS} more_")
+
+        parts.append("\n*2. Independent Tasks (not under any Story)*")
+        if independent:
+            parts.append(
+                self._format_table(["Task", "State", "Due", "Assignee"], independent[:_MAX_TABLE_ROWS])
+            )
+            if len(independent) > _MAX_TABLE_ROWS:
+                parts.append(f"_…and {len(independent) - _MAX_TABLE_ROWS} more_")
+        else:
+            parts.append("_none_")
+
+        return "\n".join(parts)
 
 
 # ── production (all spaces) ──────────────────────────────────────────────────
