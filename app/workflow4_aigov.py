@@ -489,14 +489,25 @@ class _Workflow4SummaryMixin:
         return lines
 
     # ── collect + render ─────────────────────────────────────────────────────
-    def _collect(self) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
+    def _collect(
+        self, allow: Any = None
+    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
         """Group at-risk, dated, non-completed Stories by their own time-left
         band; each Story carries its dated, active tasks. Independent tasks are
-        reduced to per-band counts."""
+        reduced to per-band counts.
+
+        `allow`, when given, is a predicate ``allow(cache_entry) -> bool`` that
+        scopes the report to one team: a Story is kept when the Story itself or
+        any of its tasks is allowed, and only allowed tasks are listed under it;
+        independent tasks are counted only when allowed. ``None`` = no filter
+        (the full, all-teams governor report)."""
         from app.story_subtasks import get_all_subtasks
 
         cache = getattr(self, "_phase_cache", None) or {}
         grouped = get_all_subtasks(self.settings, self._mapping_project_keys())
+
+        def _ok(entry: dict[str, Any]) -> bool:
+            return allow is None or allow(entry)
 
         bands: dict[str, list[dict[str, Any]]] = {"overdue": [], "75": [], "50": [], "25": []}
         subtask_keys: set[str] = set()
@@ -526,6 +537,8 @@ class _Workflow4SummaryMixin:
                 tdue = self._effective_due(tentry)
                 if tdue is None:
                     continue  # skip tasks with no due date
+                if not _ok(tentry):
+                    continue  # task belongs to another team
                 ttl = self._time_left(tentry)
                 cat = self._cat_label(self._band(ttl["remaining"], ttl["pct"])) if ttl else "—"
                 tasks.append({
@@ -535,6 +548,11 @@ class _Workflow4SummaryMixin:
                     "cat": cat,
                     "assignee": tentry.get("assignee_name") or "Unassigned",
                 })
+
+            # In team-scoped mode, keep a Story only when it (or one of its
+            # tasks) belongs to the team.
+            if allow is not None and not _ok(entry) and not tasks:
+                continue
 
             bands[band].append({
                 "key": story_key,
@@ -555,6 +573,8 @@ class _Workflow4SummaryMixin:
                 continue
             if self._effective_due(entry) is None:
                 continue  # skip tasks with no due date
+            if not _ok(entry):
+                continue  # belongs to another team
             tl = self._time_left(entry)
             if tl is None:
                 continue
@@ -563,17 +583,23 @@ class _Workflow4SummaryMixin:
                 ind_counts[band] += 1
         return bands, ind_counts
 
-    def _groups(self) -> list[tuple[str, list[str]]] | None:
+    def _groups(
+        self, allow: Any = None, title_prefix: str | None = None
+    ) -> list[tuple[str, list[str]]] | None:
         """Heading + line groups shared by the mrkdwn and Block Kit renderers,
-        or None when nothing is at risk."""
-        bands, ind_counts = self._collect()
+        or None when nothing is at risk. `allow`/`title_prefix` scope the report
+        to one team (see `_collect`)."""
+        bands, ind_counts = self._collect(allow)
         total_ind = sum(ind_counts.values())
         if not any(bands.values()) and total_ind == 0:
             return None
 
         scope_label = ", ".join(self._mapping_project_keys() or []) or self._scope_label()
+        header = f"*Due-Date Compliance — {scope_label} — {date.today():%Y-%m-%d}*"
+        if title_prefix:
+            header = f"*{title_prefix} — {scope_label} — {date.today():%Y-%m-%d}*"
         groups: list[tuple[str, list[str]]] = [
-            (f"*Due-Date Compliance — {scope_label} — {date.today():%Y-%m-%d}*", []),
+            (header, []),
             ("*1. Stories*", []),
         ]
         for band_key, label in _BAND_ORDER:
@@ -582,10 +608,18 @@ class _Workflow4SummaryMixin:
             groups.append((f"*{label}* ({len(stories)})", lines or ["_none_"]))
 
         if total_ind:
-            parts = [
-                self._search_link(self._IND_JQL[bk], f"{self._IND_LABEL[bk]}: {ind_counts[bk]}")
-                for bk, _ in _BAND_ORDER if ind_counts[bk]
-            ]
+            # The JQL filter links span the whole scope, so they only make sense
+            # on the unfiltered governor report; a team report shows plain counts.
+            if allow is None:
+                parts = [
+                    self._search_link(self._IND_JQL[bk], f"{self._IND_LABEL[bk]}: {ind_counts[bk]}")
+                    for bk, _ in _BAND_ORDER if ind_counts[bk]
+                ]
+            else:
+                parts = [
+                    f"{self._IND_LABEL[bk]}: {ind_counts[bk]}"
+                    for bk, _ in _BAND_ORDER if ind_counts[bk]
+                ]
             ind_lines = [" · ".join(parts)]
         else:
             ind_lines = ["_none_"]
@@ -610,10 +644,13 @@ class _Workflow4SummaryMixin:
             out.append(cur)
         return out
 
-    def _build_payload(self) -> tuple[str | None, list[dict[str, Any]] | None]:
+    def _build_payload(
+        self, allow: Any = None, title_prefix: str | None = None
+    ) -> tuple[str | None, list[dict[str, Any]] | None]:
         """Return (mrkdwn text, Block Kit blocks). text is None when nothing is
-        at risk (so no Slack message is sent)."""
-        groups = self._groups()
+        at risk (so no Slack message is sent). `allow`/`title_prefix` scope the
+        report to one team (see `_collect`)."""
+        groups = self._groups(allow, title_prefix)
         if groups is None:
             return None, None
 
@@ -786,8 +823,10 @@ class _TLReportMixin:
         self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
     ) -> list[dict[str, Any]]:
         alerts: list[dict[str, Any]] = []
+        # Per-TL: the SAME hierarchical Story/Task report as the governor's, but
+        # scoped to each TL's own team (tickets assigned to the TL or a member).
         try:
-            alerts.extend(self._tl_dms())
+            alerts.extend(self._tl_reports())
         except Exception:
             LOGGER.exception("%s: per-TL digests failed", self.name)
         # Governor copy — the full, all-teams report still goes to the Jira Owner.
@@ -871,8 +910,19 @@ class _TLReportMixin:
                 identity_to_tl[name] = tl_email
         return identity_to_tl, tl_info
 
-    def _tl_dms(self) -> list[dict[str, Any]]:
-        cache = getattr(self, "_phase_cache", None) or {}
+    @staticmethod
+    def _entry_in_team(entry: dict[str, Any], members: set[str]) -> bool:
+        """True when a phase-cache entry's assignee (by email, else display
+        name) is one of this team's identities."""
+        email = str(entry.get("assignee_email") or "").strip().lower()
+        if email and email in members:
+            return True
+        name = str(entry.get("assignee_name") or "").strip().lower().lstrip("@")
+        return bool(name and name in members)
+
+    def _tl_reports(self) -> list[dict[str, Any]]:
+        """One hierarchical Story/Task report per Team Lead, filtered to that
+        team's tickets — identical format to the governor report."""
         identity_to_tl, tl_info = self._team_maps()
         if not tl_info:
             LOGGER.info(
@@ -881,68 +931,23 @@ class _TLReportMixin:
             )
             return []
 
-        groups: dict[str, list[dict[str, Any]]] = {}
-        unrouted = 0
-        for key, entry in cache.items():
-            if self._is_completed(entry.get("status")):
-                continue
-            if self._effective_due(entry) is None:
-                continue
-            tl = self._time_left(entry)
-            if tl is None:
-                continue
-            band = self._band(tl["remaining"], tl["pct"])
-            if band is None:
-                continue  # not at risk (>75% time left)
-            name = str(entry.get("assignee_name") or "").strip()
-            email = str(entry.get("assignee_email") or "").strip()
-            if not name and not email:
-                continue  # unassigned → only in the governor's consolidated report
-            tl_email = identity_to_tl.get(email.lower()) if email else None
-            if not tl_email and name:
-                tl_email = identity_to_tl.get(name.lower().lstrip("@"))
-            if not tl_email or tl_email not in tl_info:
-                unrouted += 1
-                continue  # assignee not mapped to a TL with a channel
-            groups.setdefault(tl_email, []).append({
-                "key": key,
-                "assignee": name or email,
-                "state": entry.get("status") or "—",
-                "due": tl["due"],
-                "cat": self._cat_label(band),
-                "_sort": (tl["remaining"], tl["pct"]),
-            })
-        if unrouted:
-            LOGGER.info(
-                "%s: %d at-risk ticket(s) had no TL mapping — only in the governor report",
-                self.name, unrouted,
-            )
+        # Invert the identity→TL map into TL→{member identities}.
+        members_by_tl: dict[str, set[str]] = {}
+        for identity, tl_email in identity_to_tl.items():
+            members_by_tl.setdefault(tl_email, set()).add(identity)
 
         alerts: list[dict[str, Any]] = []
-        for tl_email, rows in groups.items():
-            info = tl_info[tl_email]
-            ordered = sorted(rows, key=lambda r: r["_sort"])
-            alerts.append({
-                "channel_id": info["channel"],
-                "message": self._tl_message(info["name"], ordered),
-                "blocks": None,
-            })
+        for tl_email, info in tl_info.items():
+            members = members_by_tl.get(tl_email, set())
+            allow = lambda entry, m=members: self._entry_in_team(entry, m)
+            message, blocks = self._build_payload(
+                allow=allow, title_prefix=f"Team digest for {info['name']}"
+            )
+            if message:
+                alerts.append(
+                    {"channel_id": info["channel"], "message": message, "blocks": blocks}
+                )
         return alerts
-
-    def _tl_message(self, tl_name: Any, rows: list[dict[str, Any]]) -> str:
-        title = (
-            f"*Team digest for {tl_name}* — {len(rows)} at-risk ticket(s)"
-            if tl_name else f"*Team digest* — {len(rows)} at-risk ticket(s)"
-        )
-        shown = rows[:_MAX_TABLE_ROWS]
-        table = _AssigneeReportMixin._ascii_table(
-            ["Ticket", "Assignee", "State", "Due Date", "Time Left"],
-            [[r["key"], r["assignee"], r["state"], str(r["due"]), r["cat"]] for r in shown],
-        )
-        msg = f"{title}:\n{table}"
-        if len(rows) > _MAX_TABLE_ROWS:
-            msg += f"\n_…and {len(rows) - _MAX_TABLE_ROWS} more_"
-        return msg
 
 
 # ── production (all spaces) ──────────────────────────────────────────────────
