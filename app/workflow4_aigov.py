@@ -685,13 +685,11 @@ class _Workflow4SummaryMixin:
             out.append(cur)
         return out
 
-    def _build_payload(
-        self, allow: Any = None, title_prefix: str | None = None, owner: Any = None
+    def _render_payload(
+        self, groups: list[tuple[str, list[str]]] | None
     ) -> tuple[str | None, list[dict[str, Any]] | None]:
-        """Return (mrkdwn text, Block Kit blocks). text is None when nothing is
-        at risk (so no Slack message is sent). `allow`/`owner`/`title_prefix`
-        scope the report to one recipient (see `_collect`)."""
-        groups = self._groups(allow, title_prefix, owner)
+        """Turn heading+line `groups` into (mrkdwn text, Block Kit blocks).
+        Returns (None, None) when there is nothing to send."""
         if groups is None:
             return None, None
 
@@ -712,6 +710,72 @@ class _Workflow4SummaryMixin:
                 blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": chunk}})
         return text, blocks
 
+    def _build_payload(
+        self, allow: Any = None, title_prefix: str | None = None, owner: Any = None
+    ) -> tuple[str | None, list[dict[str, Any]] | None]:
+        """Hierarchical Story/Task report (governor + per-TL). text is None when
+        nothing is at risk. `allow`/`owner`/`title_prefix` scope the report to
+        one recipient (see `_collect`)."""
+        return self._render_payload(self._groups(allow, title_prefix, owner))
+
+    # Per-assignee digest bands (flat, no Story/Task hierarchy).
+    _ASSIGNEE_BANDS = [
+        ("overdue", "1. Overdue tickets"),
+        ("75", "2. Tickets with <75% Time"),
+        ("50", "3. Tickets with <50% Time"),
+        ("25", "4. Tickets with <25% Time"),
+    ]
+
+    def _build_assignee_payload(
+        self, allow: Any, title_prefix: str
+    ) -> tuple[str | None, list[dict[str, Any]] | None]:
+        """Flat per-assignee digest: every at-risk, dated ticket assigned to the
+        person (ANY issue type — Stories and tasks alike, ignoring the Story
+        hierarchy), grouped into four time-left bands. A personal to-do list by
+        urgency, distinct from the Story/Task report TLs/governor get."""
+        cache = getattr(self, "_phase_cache", None) or {}
+        bands: dict[str, list[dict[str, Any]]] = {"overdue": [], "75": [], "50": [], "25": []}
+        for key, entry in cache.items():
+            if self._is_completed(entry.get("status")):
+                continue
+            if not allow(entry):
+                continue
+            due = self._effective_due(entry)
+            if due is None:
+                continue  # undated → no urgency band
+            tl = self._time_left(entry)
+            if tl is None:
+                continue
+            band = self._band(tl["remaining"], tl["pct"])
+            if band is None:
+                continue  # >75% left, not at risk
+            bands[band].append({
+                "key": key,
+                "state": entry.get("status") or "—",
+                "due": due,
+                "_sort": (tl["remaining"], tl["pct"]),
+            })
+        if not any(bands.values()):
+            return None, None
+
+        scope_label = ", ".join(self._mapping_project_keys() or []) or self._scope_label()
+        groups: list[tuple[str, list[str]]] = [
+            (f"*{title_prefix} — {scope_label} — {date.today():%Y-%m-%d}*", []),
+        ]
+        for band_key, label in self._ASSIGNEE_BANDS:
+            items = bands[band_key]
+            if not items:
+                continue  # omit empty bands
+            ordered = sorted(items, key=lambda t: t["_sort"])
+            lines = [
+                f"{self._link(t['key'])} · {t['state']} · due {t['due']}"
+                for t in ordered[:_MAX_TABLE_ROWS]
+            ]
+            if len(ordered) > _MAX_TABLE_ROWS:
+                lines.append(f"_…and {len(ordered) - _MAX_TABLE_ROWS} more_")
+            groups.append((f"*{label}* ({len(items)})", lines))
+        return self._render_payload(groups)
+
     @staticmethod
     def _entry_in_team(entry: dict[str, Any], members: set[str]) -> bool:
         """True when a phase-cache entry's assignee (by email, else display
@@ -726,9 +790,9 @@ class _Workflow4SummaryMixin:
 
 # ── per-assignee morning digest (09:00) ──────────────────────────────────────
 class _AssigneeReportMixin:
-    """09:00 behaviour: DM each assignee the SAME hierarchical Story/Task report
-    as the governor's, scoped to *their own* at-risk tickets, and still send the
-    full consolidated report to the Jira Owner. Mixed before
+    """09:00 behaviour: DM each assignee a flat 4-band to-do digest of *their
+    own* at-risk tickets (Overdue / <75% / <50% / <25% time left), and still
+    send the full hierarchical report to the Jira Owner. Mixed before
     `_Workflow4SummaryMixin`, so its `_build_digests` wins."""
 
     def _build_digests(
@@ -780,9 +844,8 @@ class _AssigneeReportMixin:
         return by_email, by_name
 
     def _assignee_reports(self) -> list[dict[str, Any]]:
-        """One hierarchical Story/Task report per assignee who has at-risk work
-        and a DM channel — identical format to the governor report, filtered to
-        that one person."""
+        """One flat, 4-band to-do digest per assignee who has at-risk work and a
+        DM channel — every at-risk ticket assigned to them, by urgency."""
         cache = getattr(self, "_phase_cache", None) or {}
         by_email, by_name = self._channel_maps()
 
@@ -819,12 +882,9 @@ class _AssigneeReportMixin:
 
         alerts: list[dict[str, Any]] = []
         for channel, person in people.items():
-            # For an individual, scope and ownership are the same person: their
-            # Stories in section 1, their other tasks in section 2.
             allow = lambda entry, m=person["ids"]: self._entry_in_team(entry, m)
-            message, blocks = self._build_payload(
-                allow=allow, owner=allow,
-                title_prefix=f"Due-date digest for {person['name']}",
+            message, blocks = self._build_assignee_payload(
+                allow, title_prefix=f"Due-date digest for {person['name']}"
             )
             if message:
                 alerts.append(
