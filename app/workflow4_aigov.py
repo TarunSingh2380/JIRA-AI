@@ -472,18 +472,18 @@ class _Workflow4SummaryMixin:
     # ── collect + render ─────────────────────────────────────────────────────
     def _collect(
         self, allow: Any = None
-    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
-        """Bucket at-risk, dated, non-completed work into three banded groups,
+    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+        """Bucket at-risk, dated, non-completed work into two banded groups,
         each keyed by time-left band (overdue / 75 / 50 / 25):
-          * `bands`         — Stories THAT HAVE AN ASSIGNEE, each carrying its
-                              dated tasks (banded by the Story's own time-left);
-          * `orphan_bands`  — Stories with NO assignee, same Story+tasks shape;
-          * `ind_bands`     — independent tasks (not under any Story), banded by
-                              each task's own time-left.
+          * `bands`     — Stories THAT HAVE AN ASSIGNEE, each carrying its dated
+                          tasks (banded by the Story's own time-left);
+          * `ind_bands` — tasks not nested under an assigned Story: both truly
+                          independent tasks AND tasks whose parent Story has no
+                          assignee, banded by each task's own time-left.
 
         `allow`, when given, is a predicate ``allow(cache_entry) -> bool`` that
         scopes everything to one team: a Story is kept when the Story itself or
-        one of its tasks is allowed, only allowed tasks are listed, and orphan /
+        one of its tasks is allowed, only allowed tasks are listed, and
         independent items are kept only when allowed. ``None`` = no filter (the
         full, all-teams governor report)."""
         from app.story_subtasks import get_all_subtasks
@@ -507,9 +507,20 @@ class _Workflow4SummaryMixin:
             return {"overdue": [], "75": [], "50": [], "25": []}
 
         bands = _empty_bands()
-        orphan_bands = _empty_bands()
         ind_bands = _empty_bands()
         subtask_keys: set[str] = set()
+
+        def _add_ind(entry: dict[str, Any], key: str, due: Any, prog: dict[str, Any]) -> None:
+            band = self._band(prog["remaining"], prog["pct"])
+            if band is None:
+                return  # not at risk
+            ind_bands[band].append({
+                "key": key,
+                "state": entry.get("status") or "—",
+                "due": due,
+                "assignee": entry.get("assignee_name") or "Unassigned",
+                "_sort": (prog["remaining"], prog["pct"]),
+            })
 
         for story_key, rows in grouped.items():
             for r in rows:
@@ -518,13 +529,8 @@ class _Workflow4SummaryMixin:
             # Skip Done (not in cache) / Completed / Not-a-Bug stories.
             if entry is None or self._is_completed(entry.get("status")):
                 continue
-            due = self._effective_due(entry)
-            if due is None:
-                continue  # skip Stories with no due date
-            tl = self._time_left(entry)
-            band = self._band(tl["remaining"], tl["pct"]) if tl else None
-            if band is None:
-                continue  # Story not at risk (>75% time left)
+
+            unassigned_story = _unassigned(entry)
 
             tasks: list[dict[str, Any]] = []
             for r in rows:
@@ -539,6 +545,13 @@ class _Workflow4SummaryMixin:
                 if not _ok(tentry):
                     continue  # task belongs to another team
                 ttl = self._time_left(tentry)
+                # A task under an UNASSIGNED Story has no Story to nest under, so
+                # it folds into the Independent / Unassigned-Story bucket, banded
+                # by its own time-left.
+                if unassigned_story:
+                    if ttl is not None:
+                        _add_ind(tentry, tk, tdue, ttl)
+                    continue
                 cat = self._cat_label(self._band(ttl["remaining"], ttl["pct"])) if ttl else "—"
                 tasks.append({
                     "key": tk,
@@ -549,27 +562,28 @@ class _Workflow4SummaryMixin:
                     "_sort": (ttl["remaining"], ttl["pct"]) if ttl else (0, 0.0),
                 })
 
-            block = {
+            # An unassigned Story is never listed; only its tasks (above) surface.
+            if unassigned_story:
+                continue
+
+            # Assigned Story needs its own due date + at-risk band to be listed.
+            due = self._effective_due(entry)
+            if due is None:
+                continue  # skip Stories with no due date
+            tl = self._time_left(entry)
+            band = self._band(tl["remaining"], tl["pct"]) if tl else None
+            if band is None:
+                continue  # Story not at risk (>75% time left)
+            # In team mode keep it only when it (or a task) is in the team.
+            if allow is not None and not _ok(entry) and not tasks:
+                continue
+            bands[band].append({
                 "key": story_key,
                 "state": entry.get("status") or "—",
                 "due": due,
                 "assignee": entry.get("assignee_name") or "Unassigned",
                 "tasks": tasks,
-            }
-
-            # Stories with no assignee go to the dedicated section; in team mode
-            # they only matter when one of their tasks belongs to the team.
-            if _unassigned(entry):
-                if allow is not None and not tasks:
-                    continue
-                orphan_bands[band].append(block)
-                continue
-
-            # Assigned Story: in team mode keep it only when it (or a task) is
-            # in the team.
-            if allow is not None and not _ok(entry) and not tasks:
-                continue
-            bands[band].append(block)
+            })
 
         story_keys = set(grouped.keys())
         for key, entry in cache.items():
@@ -587,17 +601,8 @@ class _Workflow4SummaryMixin:
             tl = self._time_left(entry)
             if tl is None:
                 continue
-            band = self._band(tl["remaining"], tl["pct"])
-            if band is None:
-                continue
-            ind_bands[band].append({
-                "key": key,
-                "state": entry.get("status") or "—",
-                "due": due,
-                "assignee": entry.get("assignee_name") or "Unassigned",
-                "_sort": (tl["remaining"], tl["pct"]),
-            })
-        return bands, orphan_bands, ind_bands
+            _add_ind(entry, key, due, tl)
+        return bands, ind_bands
 
     def _render_ind_tasks(self, tasks: list[dict[str, Any]]) -> list[str]:
         """Top-level task lines (no parent Story) for the Independent Tasks
@@ -637,9 +642,8 @@ class _Workflow4SummaryMixin:
         """Heading + line groups shared by the mrkdwn and Block Kit renderers,
         or None when nothing is at risk. Empty bands/sections are omitted.
         `allow`/`title_prefix` scope the report to one team (see `_collect`)."""
-        bands, orphan_bands, ind_bands = self._collect(allow)
-        if not any(bands.values()) and not any(orphan_bands.values()) \
-                and not any(ind_bands.values()):
+        bands, ind_bands = self._collect(allow)
+        if not any(bands.values()) and not any(ind_bands.values()):
             return None
 
         scope_label = ", ".join(self._mapping_project_keys() or []) or self._scope_label()
@@ -649,10 +653,8 @@ class _Workflow4SummaryMixin:
         ]
         groups += self._banded_section("*1. Stories*", bands, self._render_stories)
         groups += self._banded_section(
-            "*2. Tasks Under Unassigned Stories*", orphan_bands, self._render_stories
-        )
-        groups += self._banded_section(
-            "*3. Independent Tasks (not under any Story)*", ind_bands, self._render_ind_tasks
+            "*2. Independent Tasks (Not Under any Story / Unassigned Stories)*",
+            ind_bands, self._render_ind_tasks,
         )
         return groups
 
