@@ -471,21 +471,21 @@ class _Workflow4SummaryMixin:
 
     # ── collect + render ─────────────────────────────────────────────────────
     def _collect(
-        self, allow: Any = None
+        self, allow: Any = None, owner: Any = None
     ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
         """Bucket at-risk, dated, non-completed work into two banded groups,
         each keyed by time-left band (overdue / 75 / 50 / 25):
-          * `bands`     — Stories THAT HAVE AN ASSIGNEE, each carrying its dated
-                          tasks (banded by the Story's own time-left);
-          * `ind_bands` — tasks not nested under an assigned Story: both truly
-                          independent tasks AND tasks whose parent Story has no
-                          assignee, banded by each task's own time-left.
+          * `bands`        — Stories ASSIGNED TO THE RECIPIENT, each carrying its
+                             in-scope dated tasks (banded by the Story's time-left);
+          * `other_bands`  — every other in-scope task: one with no parent Story,
+                             or whose parent Story is assigned to someone else, or
+                             is unassigned — banded by the task's own time-left.
 
-        `allow`, when given, is a predicate ``allow(cache_entry) -> bool`` that
-        scopes everything to one team: a Story is kept when the Story itself or
-        one of its tasks is allowed, only allowed tasks are listed, and
-        independent items are kept only when allowed. ``None`` = no filter (the
-        full, all-teams governor report)."""
+        Two predicates scope the report:
+          * `allow(entry)` — in scope at all (a TL's team, or one assignee).
+            ``None`` = no filter (the all-teams governor report).
+          * `owner(entry)` — assigned to the recipient; decides which Stories go
+            to section 1. ``None`` (governor) treats any assigned Story as owned."""
         from app.story_subtasks import get_all_subtasks
 
         cache = getattr(self, "_phase_cache", None) or {}
@@ -503,18 +503,23 @@ class _Workflow4SummaryMixin:
             return not str(entry.get("assignee_name") or "").strip() and \
                    not str(entry.get("assignee_email") or "").strip()
 
+        def _owned(entry: dict[str, Any]) -> bool:
+            # Section-1 Stories are those assigned to the recipient; with no
+            # recipient (governor) every assigned Story qualifies.
+            return (not _unassigned(entry)) if owner is None else bool(owner(entry))
+
         def _empty_bands() -> dict[str, list[dict[str, Any]]]:
             return {"overdue": [], "75": [], "50": [], "25": []}
 
         bands = _empty_bands()
-        ind_bands = _empty_bands()
+        other_bands = _empty_bands()
         subtask_keys: set[str] = set()
 
-        def _add_ind(entry: dict[str, Any], key: str, due: Any, prog: dict[str, Any]) -> None:
+        def _add_other(entry: dict[str, Any], key: str, due: Any, prog: dict[str, Any]) -> None:
             band = self._band(prog["remaining"], prog["pct"])
             if band is None:
                 return  # not at risk
-            ind_bands[band].append({
+            other_bands[band].append({
                 "key": key,
                 "state": entry.get("status") or "—",
                 "due": due,
@@ -530,7 +535,7 @@ class _Workflow4SummaryMixin:
             if entry is None or self._is_completed(entry.get("status")):
                 continue
 
-            unassigned_story = _unassigned(entry)
+            owned = _owned(entry)
 
             tasks: list[dict[str, Any]] = []
             for r in rows:
@@ -543,14 +548,14 @@ class _Workflow4SummaryMixin:
                 if tdue is None:
                     continue  # skip tasks with no due date
                 if not _ok(tentry):
-                    continue  # task belongs to another team
+                    continue  # out of scope (other team / not this person)
                 ttl = self._time_left(tentry)
-                # A task under an UNASSIGNED Story has no Story to nest under, so
-                # it folds into the Independent / Unassigned-Story bucket, banded
-                # by its own time-left.
-                if unassigned_story:
+                # A task under a Story NOT owned by the recipient (someone else's
+                # or unassigned) has no section-1 home → it's an "other task",
+                # banded by its own time-left.
+                if not owned:
                     if ttl is not None:
-                        _add_ind(tentry, tk, tdue, ttl)
+                        _add_other(tentry, tk, tdue, ttl)
                     continue
                 cat = self._cat_label(self._band(ttl["remaining"], ttl["pct"])) if ttl else "—"
                 tasks.append({
@@ -562,11 +567,11 @@ class _Workflow4SummaryMixin:
                     "_sort": (ttl["remaining"], ttl["pct"]) if ttl else (0, 0.0),
                 })
 
-            # An unassigned Story is never listed; only its tasks (above) surface.
-            if unassigned_story:
+            # Only Stories assigned to the recipient are listed in section 1.
+            if not owned:
                 continue
 
-            # Assigned Story needs its own due date + at-risk band to be listed.
+            # The owned Story needs its own due date + at-risk band to be listed.
             due = self._effective_due(entry)
             if due is None:
                 continue  # skip Stories with no due date
@@ -574,9 +579,6 @@ class _Workflow4SummaryMixin:
             band = self._band(tl["remaining"], tl["pct"]) if tl else None
             if band is None:
                 continue  # Story not at risk (>75% time left)
-            # In team mode keep it only when it (or a task) is in the team.
-            if allow is not None and not _ok(entry) and not tasks:
-                continue
             bands[band].append({
                 "key": story_key,
                 "state": entry.get("status") or "—",
@@ -597,17 +599,17 @@ class _Workflow4SummaryMixin:
             if due is None:
                 continue  # skip tasks with no due date
             if not _ok(entry):
-                continue  # belongs to another team
+                continue  # out of scope
             tl = self._time_left(entry)
             if tl is None:
                 continue
-            _add_ind(entry, key, due, tl)
-        return bands, ind_bands
+            _add_other(entry, key, due, tl)
+        return bands, other_bands
 
-    def _render_ind_tasks(self, tasks: list[dict[str, Any]]) -> list[str]:
-        """Top-level task lines (no parent Story) for the Independent Tasks
-        section, overdue-first. The band heading already states the time left,
-        so the per-row category is omitted."""
+    def _render_other_tasks(self, tasks: list[dict[str, Any]]) -> list[str]:
+        """Top-level task lines (no parent Story) for the Other Tasks section,
+        overdue-first. The band heading already states the time left, so the
+        per-row category is omitted."""
         ordered = sorted(tasks, key=lambda t: t.get("_sort", (0, 0.0)))
         lines = [
             f"{self._link(t['key'])} · {t['state']} · due {t['due']} · {t['assignee']}"
@@ -637,13 +639,14 @@ class _Workflow4SummaryMixin:
         return out
 
     def _groups(
-        self, allow: Any = None, title_prefix: str | None = None
+        self, allow: Any = None, title_prefix: str | None = None, owner: Any = None
     ) -> list[tuple[str, list[str]]] | None:
         """Heading + line groups shared by the mrkdwn and Block Kit renderers,
         or None when nothing is at risk. Empty bands/sections are omitted.
-        `allow`/`title_prefix` scope the report to one team (see `_collect`)."""
-        bands, ind_bands = self._collect(allow)
-        if not any(bands.values()) and not any(ind_bands.values()):
+        `allow`/`owner`/`title_prefix` scope the report to one recipient (see
+        `_collect`)."""
+        bands, other_bands = self._collect(allow, owner)
+        if not any(bands.values()) and not any(other_bands.values()):
             return None
 
         scope_label = ", ".join(self._mapping_project_keys() or []) or self._scope_label()
@@ -653,8 +656,7 @@ class _Workflow4SummaryMixin:
         ]
         groups += self._banded_section("*1. Stories*", bands, self._render_stories)
         groups += self._banded_section(
-            "*2. Independent Tasks (Not Under any Story / Unassigned Stories)*",
-            ind_bands, self._render_ind_tasks,
+            "*2. Other Tasks*", other_bands, self._render_other_tasks
         )
         return groups
 
@@ -675,12 +677,12 @@ class _Workflow4SummaryMixin:
         return out
 
     def _build_payload(
-        self, allow: Any = None, title_prefix: str | None = None
+        self, allow: Any = None, title_prefix: str | None = None, owner: Any = None
     ) -> tuple[str | None, list[dict[str, Any]] | None]:
         """Return (mrkdwn text, Block Kit blocks). text is None when nothing is
-        at risk (so no Slack message is sent). `allow`/`title_prefix` scope the
-        report to one team (see `_collect`)."""
-        groups = self._groups(allow, title_prefix)
+        at risk (so no Slack message is sent). `allow`/`owner`/`title_prefix`
+        scope the report to one recipient (see `_collect`)."""
+        groups = self._groups(allow, title_prefix, owner)
         if groups is None:
             return None, None
 
@@ -808,9 +810,12 @@ class _AssigneeReportMixin:
 
         alerts: list[dict[str, Any]] = []
         for channel, person in people.items():
+            # For an individual, scope and ownership are the same person: their
+            # Stories in section 1, their other tasks in section 2.
             allow = lambda entry, m=person["ids"]: self._entry_in_team(entry, m)
             message, blocks = self._build_payload(
-                allow=allow, title_prefix=f"Due-date digest for {person['name']}"
+                allow=allow, owner=allow,
+                title_prefix=f"Due-date digest for {person['name']}",
             )
             if message:
                 alerts.append(
@@ -940,9 +945,17 @@ class _TLReportMixin:
         alerts: list[dict[str, Any]] = []
         for tl_email, info in tl_info.items():
             members = members_by_tl.get(tl_email, set())
+            # Section 1 = Stories assigned to the TL themselves; section 2 = the
+            # rest of the team's tasks. The TL's own identities are their email
+            # plus their slack name.
+            own_ids = {tl_email}
+            tl_name = str(info.get("name") or "").strip().lower().lstrip("@")
+            if tl_name:
+                own_ids.add(tl_name)
             allow = lambda entry, m=members: self._entry_in_team(entry, m)
+            owner = lambda entry, o=own_ids: self._entry_in_team(entry, o)
             message, blocks = self._build_payload(
-                allow=allow, title_prefix=f"Team digest for {info['name']}"
+                allow=allow, owner=owner, title_prefix=f"Team digest for {info['name']}"
             )
             if message:
                 alerts.append(
