@@ -448,9 +448,10 @@ class _Workflow4SummaryMixin:
         return self._CAT_LABEL.get(band, ">75% left")
 
     def _render_stories(self, stories: list[dict[str, Any]]) -> list[str]:
-        """Render each Story as a header (with its own due date) followed by its
-        dated, active tasks (each tagged with its time-left category), with a
-        horizontal rule between Stories."""
+        """Render each Story as a header (with its own due date) followed by ALL
+        its active tasks — dated tasks tagged with their time-left category,
+        undated tasks marked 'no due date' — with a horizontal rule between
+        Stories."""
         lines: list[str] = []
         for i, s in enumerate(stories[:_MAX_TABLE_ROWS]):
             if i:
@@ -458,13 +459,19 @@ class _Workflow4SummaryMixin:
             lines.append(
                 f"*{self._link(s['key'])}* · {s['state']} · due {s['due']} · {s['assignee']}"
             )
-            for t in s["tasks"]:
-                lines.append(
-                    f"   ↳ {self._link(t['key'])} · {t['state']} · due {t['due']} "
-                    f"· {t['cat']} · {t['assignee']}"
-                )
+            for t in sorted(s["tasks"], key=lambda t: t.get("_sort", (0, 0.0))):
+                if t["due"] is None:
+                    lines.append(
+                        f"   ↳ {self._link(t['key'])} · {t['state']} · "
+                        f"no due date · {t['assignee']}"
+                    )
+                else:
+                    lines.append(
+                        f"   ↳ {self._link(t['key'])} · {t['state']} · due {t['due']} "
+                        f"· {t['cat']} · {t['assignee']}"
+                    )
             if not s["tasks"]:
-                lines.append("   _(no dated tasks)_")
+                lines.append("   _(no subtasks)_")
         if len(stories) > _MAX_TABLE_ROWS:
             lines.append(f"_…and {len(stories) - _MAX_TABLE_ROWS} more stories_")
         return lines
@@ -545,26 +552,28 @@ class _Workflow4SummaryMixin:
                 if tentry is None or self._is_completed(tentry.get("status")):
                     continue
                 tdue = self._effective_due(tentry)
-                if tdue is None:
-                    continue  # skip tasks with no due date
-                if not _ok(tentry):
-                    continue  # out of scope (other team / not this person)
                 ttl = self._time_left(tentry)
+
                 # A task under a Story NOT owned by the recipient (someone else's
-                # or unassigned) has no section-1 home → it's an "other task",
-                # banded by its own time-left.
+                # or unassigned) has no section-1 home → it becomes an "other
+                # task" (in-scope, dated, at-risk only), banded by its own
+                # time-left.
                 if not owned:
-                    if ttl is not None:
+                    if _ok(tentry) and tdue is not None and ttl is not None:
                         _add_other(tentry, tk, tdue, ttl)
                     continue
+
+                # Under a Story the recipient owns, list EVERY active subtask —
+                # any assignee, with or without a due date — so the owner sees
+                # the full breakdown. Undated tasks sort last (carry no time-left).
                 cat = self._cat_label(self._band(ttl["remaining"], ttl["pct"])) if ttl else "—"
                 tasks.append({
                     "key": tk,
                     "state": tentry.get("status") or "—",
-                    "due": tdue,
+                    "due": tdue,  # None → rendered as "no due date"
                     "cat": cat,
                     "assignee": tentry.get("assignee_name") or "Unassigned",
-                    "_sort": (ttl["remaining"], ttl["pct"]) if ttl else (0, 0.0),
+                    "_sort": (ttl["remaining"], ttl["pct"]) if ttl else (10**9, 10**9),
                 })
 
             # Only Stories assigned to the recipient are listed in section 1.
