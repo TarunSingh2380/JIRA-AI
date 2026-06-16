@@ -491,14 +491,18 @@ class _Workflow4SummaryMixin:
     # ── collect + render ─────────────────────────────────────────────────────
     def _collect(
         self, allow: Any = None
-    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
-        """Group at-risk, dated, non-completed Stories by their own time-left
-        band; each Story carries its dated, active tasks. Independent tasks are
-        reduced to per-band counts.
+    ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]], dict[str, int]]:
+        """Bucket at-risk, dated, non-completed work three ways:
+          * `bands`           — Stories THAT HAVE AN ASSIGNEE, by the Story's own
+                                time-left band, each carrying its dated tasks;
+          * `orphan_tasks`    — dated tasks whose parent Story has NO assignee
+                                (the Story itself is not listed);
+          * `ind_counts`      — per-band counts of independent tasks (not under
+                                any Story).
 
         `allow`, when given, is a predicate ``allow(cache_entry) -> bool`` that
-        scopes the report to one team: a Story is kept when the Story itself or
-        any of its tasks is allowed, and only allowed tasks are listed under it;
+        scopes everything to one team: a Story is kept when the Story itself or
+        one of its tasks is allowed, only allowed tasks are listed, and orphan /
         independent tasks are counted only when allowed. ``None`` = no filter
         (the full, all-teams governor report)."""
         from app.story_subtasks import get_all_subtasks
@@ -509,7 +513,12 @@ class _Workflow4SummaryMixin:
         def _ok(entry: dict[str, Any]) -> bool:
             return allow is None or allow(entry)
 
+        def _unassigned(entry: dict[str, Any]) -> bool:
+            return not str(entry.get("assignee_name") or "").strip() and \
+                   not str(entry.get("assignee_email") or "").strip()
+
         bands: dict[str, list[dict[str, Any]]] = {"overdue": [], "75": [], "50": [], "25": []}
+        orphan_tasks: list[dict[str, Any]] = []
         subtask_keys: set[str] = set()
 
         for story_key, rows in grouped.items():
@@ -547,10 +556,17 @@ class _Workflow4SummaryMixin:
                     "due": tdue,
                     "cat": cat,
                     "assignee": tentry.get("assignee_name") or "Unassigned",
+                    "_sort": (ttl["remaining"], ttl["pct"]) if ttl else (0, 0.0),
                 })
 
-            # In team-scoped mode, keep a Story only when it (or one of its
-            # tasks) belongs to the team.
+            # A Story with no assignee is not listed as a Story; its tasks move
+            # to the "Tasks Under Unassigned Stories" section instead.
+            if _unassigned(entry):
+                orphan_tasks.extend(tasks)
+                continue
+
+            # In team-scoped mode, keep an assigned Story only when it (or one
+            # of its tasks) belongs to the team.
             if allow is not None and not _ok(entry) and not tasks:
                 continue
 
@@ -581,35 +597,58 @@ class _Workflow4SummaryMixin:
             band = self._band(tl["remaining"], tl["pct"])
             if band is not None:
                 ind_counts[band] += 1
-        return bands, ind_counts
+        return bands, orphan_tasks, ind_counts
+
+    def _render_tasks(self, tasks: list[dict[str, Any]]) -> list[str]:
+        """Flat list of task lines (no parent Story header), overdue-first."""
+        ordered = sorted(tasks, key=lambda t: t.get("_sort", (0, 0.0)))
+        lines = [
+            f"{self._link(t['key'])} · {t['state']} · due {t['due']} · {t['cat']} · {t['assignee']}"
+            for t in ordered[:_MAX_TABLE_ROWS]
+        ]
+        if len(ordered) > _MAX_TABLE_ROWS:
+            lines.append(f"_…and {len(ordered) - _MAX_TABLE_ROWS} more_")
+        return lines
 
     def _groups(
         self, allow: Any = None, title_prefix: str | None = None
     ) -> list[tuple[str, list[str]]] | None:
         """Heading + line groups shared by the mrkdwn and Block Kit renderers,
-        or None when nothing is at risk. `allow`/`title_prefix` scope the report
-        to one team (see `_collect`)."""
-        bands, ind_counts = self._collect(allow)
+        or None when nothing is at risk. Empty bands/sections are omitted.
+        `allow`/`title_prefix` scope the report to one team (see `_collect`)."""
+        bands, orphan_tasks, ind_counts = self._collect(allow)
+        total_stories = sum(len(v) for v in bands.values())
+        total_orphans = len(orphan_tasks)
         total_ind = sum(ind_counts.values())
-        if not any(bands.values()) and total_ind == 0:
+        if not total_stories and not total_orphans and not total_ind:
             return None
 
         scope_label = ", ".join(self._mapping_project_keys() or []) or self._scope_label()
-        header = f"*Due-Date Compliance — {scope_label} — {date.today():%Y-%m-%d}*"
-        if title_prefix:
-            header = f"*{title_prefix} — {scope_label} — {date.today():%Y-%m-%d}*"
+        label_prefix = title_prefix or "Due-Date Compliance"
         groups: list[tuple[str, list[str]]] = [
-            (header, []),
-            ("*1. Stories*", []),
+            (f"*{label_prefix} — {scope_label} — {date.today():%Y-%m-%d}*", []),
         ]
-        for band_key, label in _BAND_ORDER:
-            stories = bands[band_key]
-            lines = self._render_stories(stories)
-            groups.append((f"*{label}* ({len(stories)})", lines or ["_none_"]))
 
+        # 1. Stories (assigned) — only non-empty bands.
+        if total_stories:
+            groups.append(("*1. Stories*", []))
+            for band_key, label in _BAND_ORDER:
+                stories = bands[band_key]
+                if not stories:
+                    continue
+                groups.append((f"*{label}* ({len(stories)})", self._render_stories(stories)))
+
+        # 2. Tasks under unassigned Stories.
+        if total_orphans:
+            groups.append((
+                f"*2. Tasks Under Unassigned Stories* ({total_orphans})",
+                self._render_tasks(orphan_tasks),
+            ))
+
+        # 3. Independent tasks (not under any Story) — per-band counts. The JQL
+        # filter links span the whole scope, so they only make sense on the
+        # unfiltered governor report; a team report shows plain counts.
         if total_ind:
-            # The JQL filter links span the whole scope, so they only make sense
-            # on the unfiltered governor report; a team report shows plain counts.
             if allow is None:
                 parts = [
                     self._search_link(self._IND_JQL[bk], f"{self._IND_LABEL[bk]}: {ind_counts[bk]}")
@@ -620,12 +659,9 @@ class _Workflow4SummaryMixin:
                     f"{self._IND_LABEL[bk]}: {ind_counts[bk]}"
                     for bk, _ in _BAND_ORDER if ind_counts[bk]
                 ]
-            ind_lines = [" · ".join(parts)]
-        else:
-            ind_lines = ["_none_"]
-        groups.append(
-            (f"*2. Independent Tasks (not under any Story)* ({total_ind})", ind_lines)
-        )
+            groups.append(
+                (f"*3. Independent Tasks (not under any Story)* ({total_ind})", [" · ".join(parts)])
+            )
         return groups
 
     @staticmethod
