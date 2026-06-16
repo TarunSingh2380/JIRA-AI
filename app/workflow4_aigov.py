@@ -489,7 +489,12 @@ class _Workflow4SummaryMixin:
         from app.story_subtasks import get_all_subtasks
 
         cache = getattr(self, "_phase_cache", None) or {}
-        grouped = get_all_subtasks(self.settings, self._mapping_project_keys())
+        # Memoize the Story→subtask map for this run: _collect is called once per
+        # recipient (each TL / assignee) and the mapping is identical every time.
+        grouped = getattr(self, "_grouped_cache", None)
+        if grouped is None:
+            grouped = get_all_subtasks(self.settings, self._mapping_project_keys())
+            self._grouped_cache = grouped
 
         def _ok(entry: dict[str, Any]) -> bool:
             return allow is None or allow(entry)
@@ -694,19 +699,31 @@ class _Workflow4SummaryMixin:
                 blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": chunk}})
         return text, blocks
 
+    @staticmethod
+    def _entry_in_team(entry: dict[str, Any], members: set[str]) -> bool:
+        """True when a phase-cache entry's assignee (by email, else display
+        name) is one of the given identities. Used by both the per-TL and the
+        per-assignee `allow` filters (a single person is a one-member set)."""
+        email = str(entry.get("assignee_email") or "").strip().lower()
+        if email and email in members:
+            return True
+        name = str(entry.get("assignee_name") or "").strip().lower().lstrip("@")
+        return bool(name and name in members)
+
 
 # ── per-assignee morning digest (09:00) ──────────────────────────────────────
 class _AssigneeReportMixin:
-    """09:00 behaviour: DM each assignee a dashed-table digest of *their own*
-    at-risk tickets, and still send the consolidated report to the Jira Owner.
-    Mixed before `_Workflow4SummaryMixin`, so its `_build_digests` wins."""
+    """09:00 behaviour: DM each assignee the SAME hierarchical Story/Task report
+    as the governor's, scoped to *their own* at-risk tickets, and still send the
+    full consolidated report to the Jira Owner. Mixed before
+    `_Workflow4SummaryMixin`, so its `_build_digests` wins."""
 
     def _build_digests(
         self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
     ) -> list[dict[str, Any]]:
         alerts: list[dict[str, Any]] = []
         try:
-            alerts.extend(self._assignee_dms())
+            alerts.extend(self._assignee_reports())
         except Exception:
             LOGGER.exception("%s: per-assignee digests failed", self.name)
         # Governor copy — the consolidated report still goes to jira_owner.
@@ -749,86 +766,55 @@ class _AssigneeReportMixin:
             LOGGER.exception("%s: channelid_table lookup failed", self.name)
         return by_email, by_name
 
-    def _assignee_dms(self) -> list[dict[str, Any]]:
+    def _assignee_reports(self) -> list[dict[str, Any]]:
+        """One hierarchical Story/Task report per assignee who has at-risk work
+        and a DM channel — identical format to the governor report, filtered to
+        that one person."""
         cache = getattr(self, "_phase_cache", None) or {}
-        # Group at-risk, dated, non-completed tickets by assignee.
-        groups: dict[str, dict[str, Any]] = {}
-        for key, entry in cache.items():
+        by_email, by_name = self._channel_maps()
+
+        # Gather distinct assignees with at-risk, dated, active work and resolve
+        # each to a DM channel. `people` is keyed by channel so a person mapped
+        # by both email and name isn't DM'd twice.
+        people: dict[str, dict[str, Any]] = {}
+        for entry in cache.values():
             if self._is_completed(entry.get("status")):
                 continue
             if self._effective_due(entry) is None:
                 continue
             tl = self._time_left(entry)
-            if tl is None:
+            if tl is None or self._band(tl["remaining"], tl["pct"]) is None:
                 continue
-            band = self._band(tl["remaining"], tl["pct"])
-            if band is None:
-                continue
-            name = entry.get("assignee_name")
-            email = entry.get("assignee_email")
+            name = str(entry.get("assignee_name") or "").strip()
+            email = str(entry.get("assignee_email") or "").strip()
             if not name and not email:
-                continue  # unassigned
-            akey = str(email or name).strip().lower()
-            grp = groups.setdefault(akey, {"email": email, "name": name, "rows": []})
-            grp["rows"].append({
-                "key": key,
-                "state": entry.get("status") or "—",
-                "due": tl["due"],
-                "cat": self._cat_label(band),
-                "_sort": (tl["remaining"], tl["pct"]),
-            })
-        if not groups:
-            return []
-
-        by_email, by_name = self._channel_maps()
-        alerts: list[dict[str, Any]] = []
-        for grp in groups.values():
-            channel = None
-            if grp["email"]:
-                channel = by_email.get(str(grp["email"]).strip().lower())
-            if not channel and grp["name"]:
-                channel = by_name.get(str(grp["name"]).strip().lower().lstrip("@"))
+                continue  # unassigned → only in the governor report
+            channel = by_email.get(email.lower()) if email else None
+            if not channel and name:
+                channel = by_name.get(name.lower().lstrip("@"))
             if not channel:
                 LOGGER.info(
                     "%s: no channelid_table match for assignee %s <%s> — skipping DM",
-                    self.name, grp["name"], grp["email"],
+                    self.name, name, email,
                 )
                 continue
-            rows = sorted(grp["rows"], key=lambda r: r["_sort"])
-            alerts.append({
-                "channel_id": channel,
-                "message": self._assignee_message(grp["name"], rows),
-                "blocks": None,
-            })
+            person = people.setdefault(channel, {"name": name or email, "ids": set()})
+            if email:
+                person["ids"].add(email.lower())
+            if name:
+                person["ids"].add(name.lower().lstrip("@"))
+
+        alerts: list[dict[str, Any]] = []
+        for channel, person in people.items():
+            allow = lambda entry, m=person["ids"]: self._entry_in_team(entry, m)
+            message, blocks = self._build_payload(
+                allow=allow, title_prefix=f"Due-date digest for {person['name']}"
+            )
+            if message:
+                alerts.append(
+                    {"channel_id": channel, "message": message, "blocks": blocks}
+                )
         return alerts
-
-    def _assignee_message(self, name: Any, rows: list[dict[str, Any]]) -> str:
-        greet = f"Good morning, {name}!" if name else "Good morning!"
-        shown = rows[:_MAX_TABLE_ROWS]
-        table = self._ascii_table(
-            ["Ticket", "State", "Due Date", "Time Left"],
-            [[r["key"], r["state"], str(r["due"]), r["cat"]] for r in shown],
-        )
-        msg = f"*{greet}* You have {len(rows)} ticket(s) needing attention:\n{table}"
-        if len(rows) > _MAX_TABLE_ROWS:
-            msg += f"\n_…and {len(rows) - _MAX_TABLE_ROWS} more_"
-        return msg
-
-    @staticmethod
-    def _ascii_table(headers: list[str], rows: list[list[Any]]) -> str:
-        """Dashed-border monospace table (Slack code block)."""
-        cols = len(headers)
-        cells = [[str(c) for c in r] for r in rows]
-        widths = [len(h) for h in headers]
-        for r in cells:
-            for i in range(cols):
-                widths[i] = max(widths[i], len(r[i]))
-        sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
-        line = lambda vals: "| " + " | ".join(  # noqa: E731
-            vals[i].ljust(widths[i]) for i in range(cols)
-        ) + " |"
-        out = [sep, line(headers), sep] + [line(r) for r in cells] + [sep]
-        return "```\n" + "\n".join(out) + "\n```"
 
 
 # ── per-team-lead digest (15:00) ─────────────────────────────────────────────
@@ -932,16 +918,6 @@ class _TLReportMixin:
             if name:
                 identity_to_tl[name] = tl_email
         return identity_to_tl, tl_info
-
-    @staticmethod
-    def _entry_in_team(entry: dict[str, Any], members: set[str]) -> bool:
-        """True when a phase-cache entry's assignee (by email, else display
-        name) is one of this team's identities."""
-        email = str(entry.get("assignee_email") or "").strip().lower()
-        if email and email in members:
-            return True
-        name = str(entry.get("assignee_name") or "").strip().lower().lstrip("@")
-        return bool(name and name in members)
 
     def _tl_reports(self) -> list[dict[str, Any]]:
         """One hierarchical Story/Task report per Team Lead, filtered to that
