@@ -600,10 +600,12 @@ class _Workflow4SummaryMixin:
         return bands, orphan_tasks, ind_counts
 
     def _render_tasks(self, tasks: list[dict[str, Any]]) -> list[str]:
-        """Flat list of task lines (no parent Story header), overdue-first."""
+        """Task lines without a parent Story header, overdue-first. Same `↳`
+        indented format as the task rows under a Story (see `_render_stories`)."""
         ordered = sorted(tasks, key=lambda t: t.get("_sort", (0, 0.0)))
         lines = [
-            f"{self._link(t['key'])} · {t['state']} · due {t['due']} · {t['cat']} · {t['assignee']}"
+            f"   ↳ {self._link(t['key'])} · {t['state']} · due {t['due']} "
+            f"· {t['cat']} · {t['assignee']}"
             for t in ordered[:_MAX_TABLE_ROWS]
         ]
         if len(ordered) > _MAX_TABLE_ROWS:
