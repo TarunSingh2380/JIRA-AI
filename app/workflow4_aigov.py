@@ -771,6 +771,180 @@ class _AssigneeReportMixin:
         return "```\n" + "\n".join(out) + "\n```"
 
 
+# ── per-team-lead digest (15:00) ─────────────────────────────────────────────
+class _TLReportMixin:
+    """15:00 behaviour: instead of one consolidated digest to a single channel,
+    send each Team Lead a digest of *only their own team's* at-risk tickets
+    (tickets assigned to the TL or to a member of their team). The full
+    consolidated report still goes to the Jira Owner for oversight.
+
+    Team membership lives in channelid_table: a TL's row has
+    ``is_team_lead = TRUE``; each member's row carries ``team_lead_email``.
+    Mixed before ``_Workflow4SummaryMixin`` so this ``_build_digests`` wins."""
+
+    def _build_digests(
+        self, qualifying: list[dict[str, Any]], role_channels: dict[str, str | None]
+    ) -> list[dict[str, Any]]:
+        alerts: list[dict[str, Any]] = []
+        try:
+            alerts.extend(self._tl_dms())
+        except Exception:
+            LOGGER.exception("%s: per-TL digests failed", self.name)
+        # Governor copy — the full, all-teams report still goes to the Jira Owner.
+        try:
+            governor = self._clean_channel(role_channels.get("jira_owner"))
+            if governor:
+                message, blocks = self._build_payload()
+                if message:
+                    alerts.append(
+                        {"channel_id": governor, "message": message, "blocks": blocks}
+                    )
+        except Exception:
+            LOGGER.exception("%s: governor copy failed", self.name)
+        return alerts
+
+    def _team_maps(self) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+        """One read of channelid_table → (assignee identity → TL email,
+        TL email → {channel, name}). Identity is the lower-cased email_id or
+        slack_user_name; a TL is also its own identity so its tickets route to
+        itself. Self-heals the two team columns so the digest works before the
+        seed SQL is applied."""
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+
+        identity_to_tl: dict[str, str] = {}
+        tl_info: dict[str, dict[str, str]] = {}
+        try:
+            with psycopg2.connect(self.settings.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "ALTER TABLE channelid_table "
+                        "ADD COLUMN IF NOT EXISTS team_lead_email TEXT"
+                    )
+                    cur.execute(
+                        "ALTER TABLE channelid_table "
+                        "ADD COLUMN IF NOT EXISTS is_team_lead BOOLEAN NOT NULL DEFAULT FALSE"
+                    )
+                    conn.commit()
+                    cur.execute(
+                        "SELECT email_id, slack_user_name, channel_id, "
+                        "team_lead_email, is_team_lead FROM channelid_table"
+                    )
+                    rows = cur.fetchall()
+        except Exception:
+            LOGGER.exception("%s: channelid_table team lookup failed", self.name)
+            return identity_to_tl, tl_info
+
+        # Pass 1 — TLs with a usable channel become digest targets.
+        for row in rows:
+            if not row.get("is_team_lead"):
+                continue
+            email = str(row.get("email_id") or "").strip().lower()
+            channel = self._clean_channel(row.get("channel_id"))
+            if not email:
+                continue
+            if not channel:
+                LOGGER.info(
+                    "%s: TL %s has no channel_id — their team's tickets stay unrouted",
+                    self.name, email,
+                )
+                continue
+            tl_info[email] = {
+                "channel": channel,
+                "name": str(row.get("slack_user_name") or email),
+            }
+            identity_to_tl[email] = email  # a TL owns their own tickets
+            name = str(row.get("slack_user_name") or "").strip().lower().lstrip("@")
+            if name:
+                identity_to_tl[name] = email
+
+        # Pass 2 — members point at their TL (only if that TL is a live target).
+        for row in rows:
+            tl_email = str(row.get("team_lead_email") or "").strip().lower()
+            if not tl_email or tl_email not in tl_info:
+                continue
+            email = str(row.get("email_id") or "").strip().lower()
+            name = str(row.get("slack_user_name") or "").strip().lower().lstrip("@")
+            if email:
+                identity_to_tl[email] = tl_email
+            if name:
+                identity_to_tl[name] = tl_email
+        return identity_to_tl, tl_info
+
+    def _tl_dms(self) -> list[dict[str, Any]]:
+        cache = getattr(self, "_phase_cache", None) or {}
+        identity_to_tl, tl_info = self._team_maps()
+        if not tl_info:
+            LOGGER.info(
+                "%s: no team leads configured (is_team_lead) — skipping per-TL digests",
+                self.name,
+            )
+            return []
+
+        groups: dict[str, list[dict[str, Any]]] = {}
+        unrouted = 0
+        for key, entry in cache.items():
+            if self._is_completed(entry.get("status")):
+                continue
+            if self._effective_due(entry) is None:
+                continue
+            tl = self._time_left(entry)
+            if tl is None:
+                continue
+            band = self._band(tl["remaining"], tl["pct"])
+            if band is None:
+                continue  # not at risk (>75% time left)
+            name = str(entry.get("assignee_name") or "").strip()
+            email = str(entry.get("assignee_email") or "").strip()
+            if not name and not email:
+                continue  # unassigned → only in the governor's consolidated report
+            tl_email = identity_to_tl.get(email.lower()) if email else None
+            if not tl_email and name:
+                tl_email = identity_to_tl.get(name.lower().lstrip("@"))
+            if not tl_email or tl_email not in tl_info:
+                unrouted += 1
+                continue  # assignee not mapped to a TL with a channel
+            groups.setdefault(tl_email, []).append({
+                "key": key,
+                "assignee": name or email,
+                "state": entry.get("status") or "—",
+                "due": tl["due"],
+                "cat": self._cat_label(band),
+                "_sort": (tl["remaining"], tl["pct"]),
+            })
+        if unrouted:
+            LOGGER.info(
+                "%s: %d at-risk ticket(s) had no TL mapping — only in the governor report",
+                self.name, unrouted,
+            )
+
+        alerts: list[dict[str, Any]] = []
+        for tl_email, rows in groups.items():
+            info = tl_info[tl_email]
+            ordered = sorted(rows, key=lambda r: r["_sort"])
+            alerts.append({
+                "channel_id": info["channel"],
+                "message": self._tl_message(info["name"], ordered),
+                "blocks": None,
+            })
+        return alerts
+
+    def _tl_message(self, tl_name: Any, rows: list[dict[str, Any]]) -> str:
+        title = (
+            f"*Team digest for {tl_name}* — {len(rows)} at-risk ticket(s)"
+            if tl_name else f"*Team digest* — {len(rows)} at-risk ticket(s)"
+        )
+        shown = rows[:_MAX_TABLE_ROWS]
+        table = _AssigneeReportMixin._ascii_table(
+            ["Ticket", "Assignee", "State", "Due Date", "Time Left"],
+            [[r["key"], r["assignee"], r["state"], str(r["due"]), r["cat"]] for r in shown],
+        )
+        msg = f"{title}:\n{table}"
+        if len(rows) > _MAX_TABLE_ROWS:
+            msg += f"\n_…and {len(rows) - _MAX_TABLE_ROWS} more_"
+        return msg
+
+
 # ── production (all spaces) ──────────────────────────────────────────────────
 class Workflow4SummaryAssigneeChecker(
     _AssigneeReportMixin, _Workflow4SummaryMixin, Workflow4AssigneeChecker
@@ -780,8 +954,10 @@ class Workflow4SummaryAssigneeChecker(
     name = "workflow4-summary-daily-assignee"
 
 
-class Workflow4SummaryTLChecker(_Workflow4SummaryMixin, Workflow4TLChecker):
-    """Production 15:00 batch — 50% or less time left, enriched + summarized."""
+class Workflow4SummaryTLChecker(_TLReportMixin, _Workflow4SummaryMixin, Workflow4TLChecker):
+    """Production 15:00 batch — enriched + summarized. Each Team Lead gets a
+    digest of only their own team's at-risk tickets; the Jira Owner still gets
+    the full consolidated report."""
 
     name = "workflow4-summary-tl"
 
