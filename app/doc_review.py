@@ -21,6 +21,7 @@ Requires the `content_hash` column + `(jira_ticket_id, doc_url)` unique key from
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -37,6 +38,18 @@ JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
 JIRA_TIMEOUT = 30
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
+# ── Google service account (read org-restricted PRD/TechDoc Google Docs) ──────
+# Docs shared only to the organisation are invisible to the public export URL.
+# A service account with domain-wide delegation that *impersonates* an org user
+# can read exactly what that user can — so the org-domain sharing boundary itself
+# enforces "only visible to our organization email". Leave unset to keep the
+# old public-export-only behaviour.
+#   GOOGLE_SA_CREDENTIALS_JSON  path to the SA key file, or the JSON inline.
+#   GOOGLE_IMPERSONATE_USER     org mailbox the SA acts as, e.g. docbot@acme.com.
+GOOGLE_SA_CREDENTIALS_JSON = os.environ.get("GOOGLE_SA_CREDENTIALS_JSON", "")
+GOOGLE_IMPERSONATE_USER = os.environ.get("GOOGLE_IMPERSONATE_USER", "")
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
 COMMENT_MARKER = "AI-GOVERNOR-DOCREVIEW-V1"
 
 LINK_PATTERN = re.compile(
@@ -44,6 +57,19 @@ LINK_PATTERN = re.compile(
     r"\s*[:\-]\s*(?P<url>https?://\S+)",
     re.IGNORECASE,
 )
+
+# Keyword used to recognise a PRD/TechDoc link when it is rendered as hyperlinked
+# text (anchor text or the text immediately preceding the link), e.g. the word
+# "TechDoc" linking to a URL rather than a raw "TechDoc: https://…" string.
+LABEL_HINT = re.compile(
+    r"(PRD|Tech\s*Doc|Technical\s*Design(?:\s*Doc)?|Design\s*Doc)",
+    re.IGNORECASE,
+)
+
+
+def _normalise_label(raw_label: str) -> str:
+    raw = raw_label.lower().replace(" ", "")
+    return "PRD" if raw.startswith("prd") else "TechDoc"
 
 REVIEW_SYSTEM_PROMPT = (
     "You are a senior engineering reviewer at a fintech company. You are given the "
@@ -79,18 +105,75 @@ class CommentPostResult:
 # Link extraction
 # ─────────────────────────────────────────────────────────────────────────────
 def extract_doc_links(description: Any) -> list[DocLink]:
-    text = _description_to_text(description)
+    """Collect PRD/TechDoc links in either form, deduplicated by URL:
+
+      * raw link    — "PRD: https://…" / "TechDoc - https://…" in plain text;
+      * hyperlinked  — the word "TechDoc" (or "PRD:" before it) linking to a URL,
+                      stored in Jira ADF as a `link` mark with an ``href``.
+    """
     links: list[DocLink] = []
     seen: set[str] = set()
-    for m in LINK_PATTERN.finditer(text):
-        url = m.group("url").rstrip(").,;>]")
-        if url in seen:
-            continue
+
+    def add(label: str, url: str) -> None:
+        url = url.rstrip(").,;>]")
+        if not url or url in seen:
+            return
         seen.add(url)
-        raw = m.group("label").lower().replace(" ", "")
-        label = "PRD" if raw.startswith("prd") else "TechDoc"
         links.append(DocLink(label=label, url=url))
+
+    # 1. Hyperlinked text — read link marks out of the ADF tree.
+    for label, url in _adf_hyperlinks(description):
+        add(label, url)
+
+    # 2. Raw links — regex over the flattened text.
+    for m in LINK_PATTERN.finditer(_description_to_text(description)):
+        add(_normalise_label(m.group("label")), m.group("url"))
+
     return links
+
+
+def _adf_hyperlinks(description: Any) -> list[tuple[str, str]]:
+    """Walk an ADF description and return ``(label, href)`` for each link whose
+    anchor text — or the text token immediately before it — names a PRD/TechDoc.
+
+    Unlabelled hyperlinks (e.g. a bare "click here" link with no PRD/TechDoc cue
+    nearby) are intentionally ignored: there is no reliable signal they point to a
+    reviewable document.
+    """
+    if not isinstance(description, (dict, list)):
+        return []
+
+    # Flatten to ordered (text, href) inline tokens so the label-proximity rule
+    # is independent of how deeply the link is nested.
+    tokens: list[tuple[str, str]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "text":
+                href = ""
+                for mark in node.get("marks", []) or []:
+                    if mark.get("type") == "link":
+                        href = (mark.get("attrs") or {}).get("href", "") or href
+                tokens.append((node.get("text", ""), href))
+            for child in node.get("content", []) or []:
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    walk(description)
+
+    results: list[tuple[str, str]] = []
+    prev_text = ""
+    for text, href in tokens:
+        if href:
+            source = text if LABEL_HINT.search(text) else prev_text
+            m = LABEL_HINT.search(source)
+            if m:
+                results.append((_normalise_label(m.group(1)), href))
+        if text.strip():
+            prev_text = text
+    return results
 
 
 def _description_to_text(description: Any) -> str:
@@ -121,14 +204,97 @@ def _description_to_text(description: Any) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Document fetch + hashing
 # ─────────────────────────────────────────────────────────────────────────────
-def _normalise_gdoc(url: str) -> str:
+def _gdoc_id(url: str) -> str:
     m = re.search(r"docs\.google\.com/document/d/([A-Za-z0-9_-]+)", url)
-    if m:
-        return f"https://docs.google.com/document/d/{m.group(1)}/export?format=txt"
+    return m.group(1) if m else ""
+
+
+def _normalise_gdoc(url: str) -> str:
+    doc_id = _gdoc_id(url)
+    if doc_id:
+        return f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
     return url
 
 
+# Lazy Drive client singleton. ``_drive_unavailable`` latches once we know the
+# service account is unconfigured / the libs are missing, so we don't retry the
+# (failing) import on every link.
+_drive_service: Any = None
+_drive_unavailable = False
+_FALLBACK = "__fallback__"  # sentinel: API path opted out, use public export
+
+
+def _drive():
+    global _drive_service, _drive_unavailable
+    if _drive_service is not None or _drive_unavailable:
+        return _drive_service
+    if not GOOGLE_SA_CREDENTIALS_JSON or not GOOGLE_IMPERSONATE_USER:
+        _drive_unavailable = True
+        return None
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        log.warning(
+            "google-api-python-client/google-auth not installed; "
+            "org-restricted Google Docs cannot be read"
+        )
+        _drive_unavailable = True
+        return None
+    try:
+        if os.path.isfile(GOOGLE_SA_CREDENTIALS_JSON):
+            creds = service_account.Credentials.from_service_account_file(
+                GOOGLE_SA_CREDENTIALS_JSON, scopes=GOOGLE_SCOPES
+            )
+        else:
+            creds = service_account.Credentials.from_service_account_info(
+                json.loads(GOOGLE_SA_CREDENTIALS_JSON), scopes=GOOGLE_SCOPES
+            )
+        creds = creds.with_subject(GOOGLE_IMPERSONATE_USER)
+        _drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    except Exception:  # noqa: BLE001 - never block a review on Google setup
+        log.exception("failed to initialise Google Drive client; using public export")
+        _drive_unavailable = True
+    return _drive_service
+
+
+def _fetch_gdoc_via_api(doc_id: str, limit_chars: int) -> tuple[str, str]:
+    """Read a Google Doc as text/plain via the Drive API (impersonated SA).
+
+    Returns ``(text, "")`` on success, ``(text, _FALLBACK)`` to defer to the
+    public-export path, or ``(text, error)`` for a real access failure.
+    """
+    service = _drive()
+    if service is None:
+        return "", _FALLBACK
+    try:
+        data = service.files().export(fileId=doc_id, mimeType="text/plain").execute()
+    except Exception as exc:  # noqa: BLE001 - googleapiclient HttpError + transport
+        status = getattr(getattr(exc, "resp", None), "status", None)
+        if status in (401, 403):
+            return "", (
+                f"document is not shared with the review account "
+                f"({GOOGLE_IMPERSONATE_USER})"
+            )
+        if status == 404:
+            return "", "document not found or not accessible to the review account"
+        log.warning("Drive export failed for %s: %s", doc_id, exc)
+        return "", _FALLBACK
+    text = data.decode("utf-8", "replace") if isinstance(data, (bytes, bytearray)) else str(data)
+    text = text.strip()[:limit_chars]
+    if not re.search(r"[A-Za-z0-9]", text):
+        return "", "document is empty or has no reviewable text"
+    return text, ""
+
+
 def fetch_doc_text(url: str, limit_chars: int = 60_000) -> tuple[str, str]:
+    # Prefer the authenticated Drive API for Google Docs so org-restricted docs
+    # are readable; fall back to the public export only when the API opts out.
+    doc_id = _gdoc_id(url)
+    if doc_id:
+        text, err = _fetch_gdoc_via_api(doc_id, limit_chars)
+        if err != _FALLBACK:
+            return text, err
     fetch_url = _normalise_gdoc(url)
     try:
         resp = requests.get(fetch_url, timeout=JIRA_TIMEOUT, allow_redirects=True)
@@ -328,12 +494,12 @@ class DocReviewer:
         for link in links:
             if link.error:
                 blocks.append(
-                    f"h4. {link.label} review — [link|{link.url}]\n"
+                    f"h4. {link.label} review — [{link.label}|{link.url}]\n"
                     f"{{panel:bgColor=#FFEBE6}}Could not review automatically: {link.error}.{{panel}}"
                 )
             else:
                 tag = " _(updated)_" if link.reviewed_now else " _(unchanged)_"
-                blocks.append(f"h4. {link.label} review{tag} — [link|{link.url}]\n{link.review}")
+                blocks.append(f"h4. {link.label} review{tag} — [{link.label}|{link.url}]\n{link.review}")
 
         comment_body = (
             f"h3. 📝 AI Governor — Document Review ({len(links)})\n"

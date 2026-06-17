@@ -910,13 +910,15 @@ class _TLReportMixin:
         alerts: list[dict[str, Any]] = []
         # Per-TL: the SAME hierarchical Story/Task report as the governor's, but
         # scoped to each TL's own team (tickets assigned to the TL or a member).
+        tl_alerts: list[dict[str, Any]] = []
         try:
-            alerts.extend(self._tl_reports())
+            tl_alerts = self._tl_reports()
+            alerts.extend(tl_alerts)
         except Exception:
             LOGGER.exception("%s: per-TL digests failed", self.name)
+        governor = self._clean_channel(role_channels.get("jira_owner"))
         # Governor copy — the full, all-teams report still goes to the Jira Owner.
         try:
-            governor = self._clean_channel(role_channels.get("jira_owner"))
             if governor:
                 message, blocks = self._build_payload()
                 if message:
@@ -925,6 +927,19 @@ class _TLReportMixin:
                     )
         except Exception:
             LOGGER.exception("%s: governor copy failed", self.name)
+        # Per-TL copy to the Jira Owner — forward each TL's own digest to the
+        # owner as its own message, so the owner receives one message per mapped
+        # TL (each already titled "Team digest for <TL>"). This is in addition to
+        # the consolidated report above.
+        if governor:
+            for tl_alert in tl_alerts:
+                alerts.append(
+                    {
+                        "channel_id": governor,
+                        "message": tl_alert["message"],
+                        "blocks": tl_alert["blocks"],
+                    }
+                )
         return alerts
 
     def _team_maps(self) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
