@@ -86,7 +86,7 @@ class Settings:
     ).lower() in {"1", "true", "yes", "on"}
     # Lowercased Jira status names that select the active phase. Anything not
     # matched here is treated as the Dev phase (the default).
-    jira_qa_statuses: str = os.getenv("JIRA_QA_STATUSES", "ready for qa,in qa,qa,qa in progress,in review")
+    jira_qa_statuses: str = os.getenv("JIRA_QA_STATUSES", "ready for qa,ready to qa,in qa,qa,qa in progress,in review")
     jira_live_statuses: str = os.getenv(
         "JIRA_LIVE_STATUSES",
         "ready for deployment,ready for release,in deployment,deploying,staging,uat",
