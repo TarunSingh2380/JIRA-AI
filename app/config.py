@@ -86,10 +86,13 @@ class Settings:
     ).lower() in {"1", "true", "yes", "on"}
     # Lowercased Jira status names that select the active phase. Anything not
     # matched here is treated as the Dev phase (the default).
-    jira_qa_statuses: str = os.getenv("JIRA_QA_STATUSES", "ready for qa,ready to qa,in qa,qa,qa in progress,in review")
+    jira_qa_statuses: str = os.getenv(
+        "JIRA_QA_STATUSES",
+        "ready for qa,ready to qa,in qa,in qa (staging),ready for preprod,in qa (preprod),qa in progress,in review",
+    )
     jira_live_statuses: str = os.getenv(
         "JIRA_LIVE_STATUSES",
-        "ready for deployment,ready for release,in deployment,deploying,staging,uat",
+        "release ready,ready for deployment,ready for release,in deployment,deploying,5% deployed,100% deployed",
     )
     repograph_base_url: str = os.getenv("REPOGRAPH_BASE_URL", "http://127.0.0.1:8088").rstrip("/")
     repo_tree_base_url: str = os.getenv(
