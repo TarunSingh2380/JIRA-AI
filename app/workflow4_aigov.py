@@ -843,11 +843,44 @@ class _AssigneeReportMixin:
             LOGGER.exception("%s: channelid_table lookup failed", self.name)
         return by_email, by_name
 
+    def _team_lead_identities(self) -> set[str]:
+        """Lower-cased emails + slack names of users flagged ``is_team_lead``.
+        The 09:00 per-assignee digest skips them: a TL's own at-risk tickets are
+        already covered by their 15:00 team digest, so we don't DM them twice."""
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+
+        ids: set[str] = set()
+        try:
+            with psycopg2.connect(self.settings.database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "ALTER TABLE channelid_table "
+                        "ADD COLUMN IF NOT EXISTS is_team_lead BOOLEAN NOT NULL DEFAULT FALSE"
+                    )
+                    conn.commit()
+                    cur.execute(
+                        "SELECT email_id, slack_user_name FROM channelid_table "
+                        "WHERE is_team_lead = TRUE"
+                    )
+                    for row in cur.fetchall():
+                        email = str(row.get("email_id") or "").strip().lower()
+                        name = str(row.get("slack_user_name") or "").strip().lower().lstrip("@")
+                        if email:
+                            ids.add(email)
+                        if name:
+                            ids.add(name)
+        except Exception:
+            LOGGER.exception("%s: team-lead lookup failed", self.name)
+        return ids
+
     def _assignee_reports(self) -> list[dict[str, Any]]:
         """One flat, 4-band to-do digest per assignee who has at-risk work and a
-        DM channel — every at-risk ticket assigned to them, by urgency."""
+        DM channel — every at-risk ticket assigned to them, by urgency. Team
+        leads are skipped here; they receive their work in the 15:00 team digest."""
         cache = getattr(self, "_phase_cache", None) or {}
         by_email, by_name = self._channel_maps()
+        tl_ids = self._team_lead_identities()
 
         # Gather distinct assignees with at-risk, dated, active work and resolve
         # each to a DM channel. `people` is keyed by channel so a person mapped
@@ -865,6 +898,15 @@ class _AssigneeReportMixin:
             email = str(entry.get("assignee_email") or "").strip()
             if not name and not email:
                 continue  # unassigned → only in the governor report
+            # Skip team leads at 09:00 — covered by their 15:00 team digest.
+            if (email and email.lower() in tl_ids) or (
+                name and name.lower().lstrip("@") in tl_ids
+            ):
+                LOGGER.info(
+                    "%s: skipping 09:00 digest for team lead %s <%s> — covered at 15:00",
+                    self.name, name, email,
+                )
+                continue
             channel = by_email.get(email.lower()) if email else None
             if not channel and name:
                 channel = by_name.get(name.lower().lstrip("@"))
