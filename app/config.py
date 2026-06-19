@@ -103,6 +103,13 @@ class Settings:
     external_request_timeout_seconds: int = int(os.getenv("EXTERNAL_REQUEST_TIMEOUT_SECONDS", "15"))
     n8n_graph_webhook_url: str = os.getenv("N8N_GRAPH_WEBHOOK_URL", "")
     n8n_api_key: str = os.getenv("N8N_API_KEY", "")
+    # Base URL of the running n8n instance (no trailing /api). Used by the
+    # workflow-monitoring tab to read live workflow + execution status.
+    n8n_base_url: str = os.getenv("N8N_BASE_URL", "").rstrip("/")
+    # How many recent executions to page through when aggregating per-workflow
+    # run/error counts (n8n has no count endpoint, so we sample a window).
+    n8n_monitor_execution_window: int = int(os.getenv("N8N_MONITOR_EXECUTION_WINDOW", "250"))
+    n8n_monitor_timeout_seconds: int = int(os.getenv("N8N_MONITOR_TIMEOUT_SECONDS", "20"))
     repository_search_root: str = os.getenv("REPOSITORY_SEARCH_ROOT", "/home/ubuntu")
     repository_host_root: str = os.getenv("REPOSITORY_HOST_ROOT", os.getenv("REPOSITORY_SEARCH_ROOT", "/home/ubuntu"))
     excluded_repository_names: str = os.getenv("EXCLUDED_REPOSITORY_NAMES", "JIRA-AI,forge_fitness")

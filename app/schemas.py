@@ -338,3 +338,39 @@ class SimilarTicketsResponse(BaseModel):
     total_found: int
     search_method: str = Field(..., description="'hybrid_rrf', 'semantic', 'keyword_fallback', or 'none'")
     tickets: list[SimilarTicketResult]
+
+
+# ─── n8n workflow monitoring ─────────────────────────────────────────────────
+
+
+class N8nWorkflowRow(BaseModel):
+    id: str
+    name: str
+    active: bool = Field(..., description="True if the workflow is live/published in n8n.")
+    tags: list[str] = []
+    created_at: str | None = None
+    updated_at: str | None = None
+    executions: int = Field(0, description="Runs seen within the sampled execution window.")
+    success: int = 0
+    errors: int = 0
+    other: int = Field(0, description="Waiting/running/canceled/other outcomes in the window.")
+    last_status: str | None = None
+    last_run_at: str | None = None
+
+
+class N8nMonitorTotals(BaseModel):
+    workflows: int = 0
+    active: int = 0
+    inactive: int = 0
+    executions: int = 0
+    errors: int = 0
+    success: int = 0
+
+
+class N8nMonitorResponse(BaseModel):
+    configured: bool = Field(..., description="False when N8N_BASE_URL / N8N_API_KEY are unset.")
+    base_url: str | None = None
+    execution_window: int = Field(..., description="Max recent executions sampled for counts.")
+    executions_sampled: int = 0
+    workflows: list[N8nWorkflowRow] = []
+    totals: N8nMonitorTotals = N8nMonitorTotals()

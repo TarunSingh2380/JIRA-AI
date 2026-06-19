@@ -39,6 +39,7 @@ from app.graph_job import job_store
 from app.graph_job_runner import run_graph_job
 from app.jira_client import JiraClient
 from app.jira_ticket_insights import scan_jira_ticket_cache
+from app.n8n_monitor import N8nMonitor, N8nMonitorError
 from app.json_utils import parse_model_json, review_status, review_text
 from app.llm_client import build_llm_client
 from app.prompt_store import PromptStore
@@ -67,6 +68,7 @@ from app.schemas import (
     GraphJobResponse,
     JiraReviewWorkflowRequest,
     JiraReviewWorkflowResponse,
+    N8nMonitorResponse,
     PromptListResponse,
     SlackReplyRequest,
     SlackReplyResponse,
@@ -979,6 +981,21 @@ def graph_admin_fetch_logs(
     except Exception as exc:
         log.error("Failed to query jira_fetch_log: %s", exc)
         return {"logs": [], "error": str(exc)}
+
+
+@app.get("/graph-admin/n8n/workflows", response_model=N8nMonitorResponse)
+def graph_admin_n8n_workflows(
+    _user: CurrentUser = Depends(require_tab("workflows")),
+) -> N8nMonitorResponse:
+    """Live n8n workflow monitor: published flag + recent run/error counts."""
+    log.debug("GET /graph-admin/n8n/workflows")
+    monitor = N8nMonitor(settings)
+    try:
+        data = monitor.overview()
+    except N8nMonitorError as exc:
+        log.warning("n8n monitor unavailable: %s", exc)
+        raise HTTPException(status_code=502, detail=str(exc))
+    return N8nMonitorResponse(**data)
 
 
 @app.get("/graph-admin/jira-ticket-insights")

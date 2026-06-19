@@ -12,6 +12,7 @@ import Insights from "../tabs/Insights.jsx";
 import Logs from "../tabs/Logs.jsx";
 import TestCases from "../tabs/TestCases.jsx";
 import SimilarTickets from "../tabs/SimilarTickets.jsx";
+import Workflows from "../tabs/Workflows.jsx";
 
 // Tab registry — order matches the original UI. "docs" is intentionally absent:
 // the Documentation portal is a separate route, not a tab here.
@@ -22,6 +23,7 @@ const TABS = [
   { key: "logs", label: "Logs", Component: Logs },
   { key: "testcases", label: "Test Cases", Component: TestCases },
   { key: "similar", label: "Similar Tickets", Component: SimilarTickets },
+  { key: "workflows", label: "Workflows", Component: Workflows },
 ];
 
 const DEFAULT_OPTIONS = {
