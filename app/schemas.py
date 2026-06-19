@@ -122,6 +122,7 @@ class TestCaseDocRequest(BaseModel):
 class TestCaseDocResponse(BaseModel):
     issueKey: str
     attached: bool = False
+    skipped: bool = False
     attachmentId: str | None = None
     filename: str | None = None
     commentPosted: bool = False
