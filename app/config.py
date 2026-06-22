@@ -88,6 +88,10 @@ class Settings:
     rft_estimate_flag_threshold_pct: int = int(os.getenv("RFT_ESTIMATE_FLAG_THRESHOLD_PCT", "25"))
     # Cap LLM analyses per run (uncached tickets) to bound cost/runtime.
     rft_estimate_max_analyze: int = int(os.getenv("RFT_ESTIMATE_MAX_ANALYZE", "60"))
+    # Skip tickets whose Original Estimate is <= this many working hours — they
+    # are too small for estimate-drift analysis. Default 8h (= 1 working day),
+    # so only tickets estimated at more than a day are analyzed/reported.
+    rft_estimate_min_hours: float = float(os.getenv("RFT_ESTIMATE_MIN_HOURS", "8"))
     jira_base_url: str = os.getenv("JIRA_BASE_URL", "").rstrip("/")
     jira_email: str = os.getenv("JIRA_EMAIL", "")
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")

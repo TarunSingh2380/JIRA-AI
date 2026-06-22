@@ -80,6 +80,9 @@ def _fetch_estimated_tickets(settings: Settings) -> list[dict[str, Any]]:
         clauses.append(sprint_clause)
     jql = " AND ".join(clauses) + " ORDER BY created DESC"
 
+    # Skip tickets at or below the minimum estimate (too small to analyze).
+    min_seconds = int(round(max(0.0, settings.rft_estimate_min_hours) * 3600))
+
     tickets: list[dict[str, Any]] = []
     start = 0
     next_page_token: str | None = None
@@ -102,7 +105,7 @@ def _fetch_estimated_tickets(settings: Settings) -> list[dict[str, Any]]:
                 or fields.get("timeoriginalestimate")
                 or 0
             )
-            if not seconds:
+            if not seconds or int(seconds) <= min_seconds:
                 continue
             assignee = fields.get("assignee") or {}
             parent = fields.get("parent") or {}
