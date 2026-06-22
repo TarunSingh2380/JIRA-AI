@@ -191,22 +191,24 @@ def build_utilization_report(settings: Settings) -> dict[str, Any]:
 
 
 def _test_cases_section(conn) -> dict[str, Any]:
+    # NOTE: test cases are AI-*generated* artifacts. There is no pass/fail
+    # execution tracking — `test_cases.status` is always inserted as 'pending'
+    # and never updated. The "tests passed" signal is the developer moving the
+    # ticket out of QA (QA -> Ready for Deployment), which lives in the
+    # transitions section, not here. So we report generation volume only.
     if not _table_exists(conn, "test_cases"):
         return {"available": False}
     totals = _one(
         conn,
         "SELECT COUNT(*) AS total, COUNT(DISTINCT jira_ticket_id) AS tickets FROM test_cases",
     )
-    by_status = _rows(
-        conn,
-        "SELECT COALESCE(NULLIF(status,''),'(none)') AS status, COUNT(*) AS count "
-        "FROM test_cases GROUP BY 1 ORDER BY count DESC",
-    )
+    total = _int(totals.get("total"))
+    tickets = _int(totals.get("tickets"))
     return {
         "available": True,
-        "total_test_cases": _int(totals.get("total")),
-        "tickets_covered": _int(totals.get("tickets")),
-        "by_status": [{"status": r["status"], "count": _int(r["count"])} for r in by_status],
+        "total_test_cases": total,
+        "tickets_covered": tickets,
+        "avg_per_ticket": round(total / tickets, 1) if tickets else 0,
     }
 
 

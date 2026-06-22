@@ -62,6 +62,7 @@ export default function Utilization() {
           <div className="stats-grid">
             <Stat value={tc.total_test_cases} label="Test Cases Built" />
             <Stat value={tc.tickets_covered} label="Tickets w/ Test Cases" />
+            <Stat value={tc.avg_per_ticket} label="Avg Cases / Ticket" />
             <Stat value={dr.docs_reviewed} label="PRD/BRD Docs Reviewed" />
             <Stat value={dr.total_reviews} label="Doc Review Runs" />
             <Stat value={tr.total} label="State Transitions" />
@@ -70,12 +71,22 @@ export default function Utilization() {
             <Stat value={conv.threads} label="Slack Q&A Threads" />
           </div>
 
-          <Breakdown
-            title="Test cases by status"
-            rows={tc.by_status}
-            cols={[["status", "Status"], ["count", "Count"]]}
-            empty={tc.available === false ? "No test_cases table found." : "No test cases yet."}
-          />
+          <div
+            style={{
+              marginTop: 18,
+              fontSize: 12.5,
+              color: "var(--muted)",
+              background: "var(--card)",
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              padding: "10px 14px",
+            }}
+          >
+            Test cases are AI-<strong>generated</strong> artifacts — there is no automated
+            pass/fail tracking. QA sign-off is the developer moving the ticket out of QA
+            (e.g. <em>QA → Ready for Deployment</em>), which appears under{" "}
+            <strong>State transitions</strong> below.
+          </div>
 
           <Breakdown
             title="Document reviews by type (PRD / TechDoc / BRD)"
