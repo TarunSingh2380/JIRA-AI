@@ -68,7 +68,11 @@ export default function AdminDashboard() {
       const list = data.repositories || [];
       setRepos(list);
       setExcluded(data.excluded_repositories || []);
-      if (!keepSelection) setSelected(new Set(list.map((r) => r.name)));
+      // Default selection skips stale repos (activity score 0) so only the
+      // actively-developed ones are picked up on load.
+      if (!keepSelection) {
+        setSelected(new Set(list.filter((r) => (r.activity_score ?? 0) > 0).map((r) => r.name)));
+      }
       return data.repository_count;
     },
     [],
