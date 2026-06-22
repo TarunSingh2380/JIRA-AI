@@ -155,7 +155,7 @@ def _flag(predicted_seconds: float, original_seconds: float, threshold_pct: int)
     if delta_pct > threshold_pct:
         return "UNDER", delta_pct      # original estimate too low — needs more time
     if delta_pct < -threshold_pct:
-        return "OVER", delta_pct       # original estimate too high
+        return "PLUS", delta_pct       # original estimate too high (padded)
     return "OK", delta_pct
 
 
@@ -253,7 +253,7 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
         ticket["reason"] = pred["reason"]
         ticket["explanation"] = pred["explanation"]
         analyzed += 1
-        if flag in ("UNDER", "OVER"):
+        if flag in ("UNDER", "PLUS"):
             flagged += 1
 
         if settings.database_url and not (cached and cached.get("content_hash") == h):

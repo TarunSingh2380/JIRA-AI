@@ -329,28 +329,42 @@ def _render_item(label: str, t: dict[str, Any] | None, indent: str) -> str:
     return f"{indent}{label}: [{' · '.join(seg)}]{tail}"
 
 
+def _child_label(t: dict[str, Any]) -> str:
+    label = f"↳ *{t['key']}*"
+    if t.get("summary"):
+        label += f" — {t['summary'][:60]}"
+    return label
+
+
 def _render_report_lines(
     groups: list[dict[str, Any]], other: list[dict[str, Any]]
 ) -> list[str]:
+    # Hide tickets within tolerance ('OK'); keep UNDER / PLUS / n/a. A Story is
+    # kept as a header (for context) when it has visible children even if its
+    # own line is OK; an all-OK group is dropped entirely.
     lines: list[str] = []
     for g in groups:
+        story = g.get("ticket")
+        story_visible = bool(story) and story.get("flag") != "OK"
+        visible_children = [c for c in g["children"] if c.get("flag") != "OK"]
+        if not story_visible and not visible_children:
+            continue
+
         title = f"*{g['key']}*"
         if g.get("summary"):
             title += f" — {g['summary'][:70]}"
-        lines.append(_render_item(title, g.get("ticket"), ""))
-        for child in g["children"]:
-            clabel = f"↳ *{child['key']}*"
-            if child.get("summary"):
-                clabel += f" — {child['summary'][:60]}"
-            lines.append(_render_item(clabel, child, "   "))
+        # Show the Story's own analysis only when it is itself flagged; otherwise
+        # render a plain header so it just groups its flagged children.
+        lines.append(_render_item(title, story if story_visible else None, ""))
+        for child in visible_children:
+            lines.append(_render_item(_child_label(child), child, "   "))
         lines.append("")  # spacer between stories
-    if other:
+
+    visible_other = [t for t in other if t.get("flag") != "OK"]
+    if visible_other:
         lines.append("*Other tasks (Not In Any Story)*")
-        for t in other:
-            clabel = f"↳ *{t['key']}*"
-            if t.get("summary"):
-                clabel += f" — {t['summary'][:60]}"
-            lines.append(_render_item(clabel, t, "   "))
+        for t in visible_other:
+            lines.append(_render_item(_child_label(t), t, "   "))
     return lines
 
 
@@ -389,24 +403,38 @@ def _build_analysis_alerts(
     scope = _scope_label(settings)
 
     groups, other = _resolve_groups(settings, tickets)
-    parts = _chunk_lines(_render_report_lines(groups, other))
+    report_lines = _render_report_lines(groups, other)
+
+    base_headline = (
+        f":bar_chart: *{project} Estimate Analysis ({scope})* — "
+        f"{len(tickets)} ticket{'s' if len(tickets) != 1 else ''} · "
+        f"*{stats.get('flagged', 0)} flagged*"
+    )
+
+    # Everything within tolerance — nothing flagged to show.
+    if not report_lines:
+        message = (
+            f"{base_headline}\n\n_All analyzed tickets are within the estimate "
+            "tolerance — nothing to flag._"
+        )
+        if not stats.get("llm", True):
+            message += "\n_⚠ LLM unavailable this run — predictions skipped._"
+        return [{"channel_id": channel_id, "message": message}]
+
+    parts = _chunk_lines(report_lines)
     total = len(parts)
 
     alerts: list[dict[str, Any]] = []
     for idx, part in enumerate(parts, 1):
         suffix = f"  (part {idx}/{total})" if total > 1 else ""
-        headline = (
-            f":bar_chart: *{project} Estimate Analysis ({scope})* — "
-            f"{len(tickets)} ticket{'s' if len(tickets) != 1 else ''} · "
-            f"*{stats.get('flagged', 0)} flagged*{suffix}"
-        )
         body = "\n".join(part).rstrip()
-        message = f"{headline}\n\n{body}"
+        message = f"{base_headline}{suffix}\n\n{body}"
         if idx == 1:
             message += (
-                "\n\n_Format: [UNDER/OVER/OK · Δ% · low/med-conf reason] explanation. "
-                "UNDER = the Original Estimate looks too low, OVER = too high. "
-                "Predicted for an average experienced developer._"
+                "\n\n_Format: [UNDER/PLUS · Δ% · low/med-conf reason] explanation. "
+                "UNDER = the Original Estimate looks too low, PLUS = too high. "
+                "Within-tolerance tickets are hidden. Predicted for an average "
+                "experienced developer._"
             )
             if not stats.get("llm", True):
                 message += "\n_⚠ LLM unavailable this run — predictions skipped._"
