@@ -70,6 +70,15 @@ class Settings:
     rft_estimate_project_key: str = os.getenv("RFT_ESTIMATE_PROJECT_KEY", "RFT")
     # Max ticket rows listed in the Slack message before collapsing to a count.
     rft_estimate_max_rows: int = int(os.getenv("RFT_ESTIMATE_MAX_ROWS", "40"))
+    # Restrict the report to the active sprint. Default ON: adds
+    # `sprint in openSprints()` to the JQL. Set to false to scan the whole
+    # project regardless of sprint.
+    rft_estimate_current_sprint_only: bool = os.getenv(
+        "RFT_ESTIMATE_CURRENT_SPRINT_ONLY", "true"
+    ).lower() in {"1", "true", "yes", "on"}
+    # Pin to one specific sprint id (e.g. "284") instead of openSprints().
+    # Blank = use openSprints() when current_sprint_only is on.
+    rft_estimate_sprint_id: str = os.getenv("RFT_ESTIMATE_SPRINT_ID", "")
     jira_base_url: str = os.getenv("JIRA_BASE_URL", "").rstrip("/")
     jira_email: str = os.getenv("JIRA_EMAIL", "")
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")

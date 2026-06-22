@@ -38,6 +38,7 @@ export default function Workflows() {
 
   return (
     <div>
+      <SprintFilter />
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
         <span style={{ fontSize: 13, color: "var(--muted)" }}>
           Live n8n workflow status &amp; execution health
@@ -135,6 +136,118 @@ function Stat({ value, label }) {
     <div className="stat-card">
       <div className="stat-value">{value}</div>
       <div className="stat-label">{label}</div>
+    </div>
+  );
+}
+
+// Runtime control for the WF7 RFT-estimate report: which sprint to scope to.
+// Persisted server-side (app_settings) so changes take effect without redeploy.
+function SprintFilter() {
+  const [options, setOptions] = useState([]);
+  const [value, setValue] = useState("open");
+  const [scope, setScope] = useState("");
+  const [project, setProject] = useState("RFT");
+  const [loadErr, setLoadErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState("");
+
+  async function load() {
+    setLoadErr("");
+    try {
+      const [cur, list] = await Promise.all([
+        apiFetch("/graph-admin/rft-estimate/settings"),
+        apiFetch("/graph-admin/rft-estimate/sprints"),
+      ]);
+      setValue(cur.value || "open");
+      setScope(cur.scope_label || "");
+      setProject(cur.project_key || list.project_key || "RFT");
+      setOptions(list.options || []);
+      if (list.error) setLoadErr(`Could not list sprints from Jira: ${list.error}`);
+    } catch (err) {
+      setLoadErr(err.message);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    setSaved("");
+    try {
+      const res = await apiFetch("/graph-admin/rft-estimate/settings", {
+        method: "PUT",
+        body: { value },
+      });
+      setScope(res.scope_label || "");
+      setSaved("Saved");
+      setTimeout(() => setSaved(""), 2500);
+    } catch (err) {
+      setSaved(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // If the stored value is a sprint id no longer in the active/future list
+  // (e.g. completed), keep it selectable so the admin can see what's set.
+  const hasValue = options.some((o) => String(o.value) === String(value));
+  const selectOptions = hasValue
+    ? options
+    : [...options, { value, label: `Sprint ${value} (not in active list)` }];
+
+  return (
+    <div
+      style={{
+        background: "var(--card)",
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        padding: "14px 16px",
+        marginBottom: 18,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>
+          {project} Estimate Report (WF7) — Sprint
+        </div>
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          style={{ width: "auto", minWidth: 280, padding: "6px 10px", fontSize: 13 }}
+        >
+          {selectOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <button
+          style={{ width: "auto", minHeight: "unset", padding: "6px 16px", fontSize: 13 }}
+          onClick={save}
+          disabled={saving}
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button
+          className="secondary"
+          style={{ width: "auto", minHeight: "unset", padding: "6px 12px", fontSize: 13 }}
+          onClick={load}
+        >
+          Reload
+        </button>
+        {saved && (
+          <span style={{ fontSize: 12, color: saved.startsWith("Error") ? "var(--danger)" : "var(--ok)" }}>
+            {saved}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
+        Scopes the daily estimate digest. Current scope: <strong>{scope || "—"}</strong>.
+        “Current sprint” auto-tracks the active sprint; pick a specific sprint to pin it.
+      </div>
+      {loadErr && <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 6 }}>{loadErr}</div>}
     </div>
   );
 }

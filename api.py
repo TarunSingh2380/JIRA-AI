@@ -94,6 +94,7 @@ from app.schemas import (
     TestCaseDocResponse,
     TransitionRecordRequest,
     TransitionRecordResponse,
+    RftSprintSettingRequest,
 )
 from app.similar_ticket_finder import SimilarTicketFinder
 from app.slack_client import SlackClient
@@ -116,7 +117,13 @@ from app.workflow4_aigov import (
     Workflow4SummaryTLChecker,
 )
 from app.workflow_governor_notify import GovernorNotifier
-from app.rft_estimates import build_rft_estimate_report
+from app.rft_estimates import (
+    SPRINT_SETTING_KEY,
+    build_rft_estimate_report,
+    get_sprint_setting,
+    list_rft_sprints,
+)
+from app.app_settings import ensure_app_settings_schema, set_setting
 from app.utilization import (
     build_utilization_report,
     ensure_status_history_schema,
@@ -145,6 +152,10 @@ async def lifespan(_app: FastAPI):
         ensure_status_history_schema(settings)
     except Exception:  # noqa: BLE001
         log.exception("Status-history schema initialization failed")
+    try:
+        ensure_app_settings_schema(settings)
+    except Exception:  # noqa: BLE001
+        log.exception("App-settings schema initialization failed")
     try:
         yield
     finally:
@@ -376,6 +387,40 @@ def workflow_rft_estimates() -> AlertBatchResponse:
     except Exception as exc:
         log.exception("/workflow/rft-estimates failed")
         raise HTTPException(status_code=500, detail=f"rft-estimates failed: {exc}") from exc
+
+
+# WF7 admin controls — read/update the sprint filter + list available sprints.
+@app.get("/graph-admin/rft-estimate/settings")
+def graph_admin_rft_estimate_settings(
+    _user: CurrentUser = Depends(require_tab("workflows")),
+) -> dict[str, Any]:
+    return get_sprint_setting(settings)
+
+
+@app.put("/graph-admin/rft-estimate/settings")
+def graph_admin_set_rft_estimate_settings(
+    request: RftSprintSettingRequest,
+    _user: CurrentUser = Depends(require_tab("workflows")),
+) -> dict[str, Any]:
+    value = (request.value or "").strip()
+    if value not in ("open", "all") and not value.isdigit():
+        raise HTTPException(
+            status_code=400,
+            detail="value must be 'open', 'all', or a numeric sprint id",
+        )
+    try:
+        set_setting(settings, SPRINT_SETTING_KEY, value)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    log.info("RFT estimate sprint filter set to %s", value)
+    return get_sprint_setting(settings)
+
+
+@app.get("/graph-admin/rft-estimate/sprints")
+def graph_admin_rft_estimate_sprints(
+    _user: CurrentUser = Depends(require_tab("workflows")),
+) -> dict[str, Any]:
+    return list_rft_sprints(settings)
 
 
 # Status-transition log — the n8n "Status Transition Logger" workflow posts each

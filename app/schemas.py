@@ -97,6 +97,14 @@ class AlertBatchResponse(BaseModel):
     alerts_sent: int = 0
 
 
+# ── WF7 RFT estimate report — admin sprint selection ─────────────────────────
+class RftSprintSettingRequest(BaseModel):
+    value: str = Field(
+        ...,
+        description="'open' (current sprint), a numeric sprint id, or 'all' (no filter).",
+    )
+
+
 # ── Status-transition log (utilization analytics) ───────────────────────────
 class TransitionRecordRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)

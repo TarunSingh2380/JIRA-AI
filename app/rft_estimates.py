@@ -19,10 +19,27 @@ from typing import Any
 
 from app.config import Settings
 from app import jira_fetcher
+from app.app_settings import get_setting
 
 LOGGER = logging.getLogger(__name__)
 
 _FIELDS = "summary,status,issuetype,assignee,priority,timetracking,timeoriginalestimate"
+
+# Admin-editable setting key. Value semantics:
+#   "open"  → sprint in openSprints()  (current/active sprint)
+#   "<id>"  → sprint = <id>            (a specific sprint, e.g. "284")
+#   "all"   → no sprint filter         (whole project)
+SPRINT_SETTING_KEY = "rft_estimate_sprint"
+
+
+def resolve_sprint_value(settings: Settings) -> str:
+    """Effective sprint selection: DB setting wins, else env config."""
+    stored = get_setting(settings, SPRINT_SETTING_KEY)
+    if stored is not None and stored.strip():
+        return stored.strip()
+    if (settings.rft_estimate_sprint_id or "").strip():
+        return settings.rft_estimate_sprint_id.strip()
+    return "open" if settings.rft_estimate_current_sprint_only else "all"
 
 
 def _fmt_estimate(seconds: int, pretty: str) -> str:
@@ -42,9 +59,26 @@ def _fmt_estimate(seconds: int, pretty: str) -> str:
     return " ".join(parts) or f"{seconds}s"
 
 
+def _sprint_clause(settings: Settings) -> str:
+    """JQL fragment restricting to the selected sprint, or '' for no restriction."""
+    value = resolve_sprint_value(settings)
+    if value in ("all", "none", ""):
+        return ""
+    if value == "open":
+        return "sprint in openSprints()"
+    if value.isdigit():
+        return f"sprint = {value}"
+    # Unknown value — be safe and don't filter.
+    return ""
+
+
 def _fetch_estimated_tickets(settings: Settings) -> list[dict[str, Any]]:
     project = (settings.rft_estimate_project_key or "RFT").strip()
-    jql = f'project = "{project}" AND statusCategory != Done ORDER BY created DESC'
+    clauses = [f'project = "{project}"', "statusCategory != Done"]
+    sprint_clause = _sprint_clause(settings)
+    if sprint_clause:
+        clauses.append(sprint_clause)
+    jql = " AND ".join(clauses) + " ORDER BY created DESC"
 
     tickets: list[dict[str, Any]] = []
     start = 0
@@ -107,15 +141,25 @@ def _link(settings: Settings, key: str) -> str:
     return f"<{base}/browse/{key}|{key}>" if base else key
 
 
+def _scope_label(settings: Settings) -> str:
+    value = resolve_sprint_value(settings)
+    if value == "open":
+        return "open, current sprint"
+    if value.isdigit():
+        return f"open, sprint {value}"
+    return "open"
+
+
 def _build_message(settings: Settings, tickets: list[dict[str, Any]]) -> str:
     project = (settings.rft_estimate_project_key or "RFT").strip()
+    scope = _scope_label(settings)
     if not tickets:
-        return f":bar_chart: *{project} tickets with an Original Estimate (open)* — none found."
+        return f":bar_chart: *{project} tickets with an Original Estimate ({scope})* — none found."
 
     cap = max(1, settings.rft_estimate_max_rows)
     shown = tickets[:cap]
     lines = [
-        f":bar_chart: *{project} tickets with an Original Estimate (open)* — "
+        f":bar_chart: *{project} tickets with an Original Estimate ({scope})* — "
         f"{len(tickets)} ticket{'s' if len(tickets) != 1 else ''}",
     ]
     for t in shown:
@@ -144,3 +188,94 @@ def build_rft_estimate_report(settings: Settings) -> dict[str, Any]:
         "alerts_sent": 1,
         "ticket_count": len(tickets),
     }
+
+
+# ── admin: current sprint selection + available sprints ──────────────────────
+def get_sprint_setting(settings: Settings) -> dict[str, Any]:
+    """Current sprint selection for the admin UI."""
+    value = resolve_sprint_value(settings)
+    return {
+        "value": value,
+        "scope_label": _scope_label(settings),
+        "jql_clause": _sprint_clause(settings),
+        "project_key": (settings.rft_estimate_project_key or "RFT").strip(),
+    }
+
+
+def list_rft_sprints(settings: Settings) -> dict[str, Any]:
+    """Active + future sprints across the project's boards (Jira Agile API).
+
+    Always returns the synthetic 'current' and 'all' choices; the concrete
+    sprint list degrades to empty (with an error note) if the Agile API or
+    boards are unavailable, so the dropdown still offers manual id entry.
+    """
+    project = (settings.rft_estimate_project_key or "RFT").strip()
+    options: list[dict[str, Any]] = [
+        {"value": "open", "label": "Current sprint (active / open)"},
+    ]
+    error: str | None = None
+    if not all([settings.jira_base_url, settings.jira_email, settings.jira_api_token]):
+        error = "Jira is not configured"
+    else:
+        try:
+            seen: set[str] = set()
+            for board in _fetch_boards(project):
+                board_id = board.get("id")
+                board_name = board.get("name", "")
+                if board_id is None:
+                    continue
+                for sprint in _fetch_board_sprints(board_id):
+                    sid = str(sprint.get("id"))
+                    if sid in seen:
+                        continue
+                    seen.add(sid)
+                    state = sprint.get("state", "")
+                    options.append(
+                        {
+                            "value": sid,
+                            "label": f"{sprint.get('name', sid)} · {state} · {board_name}",
+                            "state": state,
+                        }
+                    )
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("list_rft_sprints failed: %s", exc)
+            error = str(exc)
+
+    options.append({"value": "all", "label": "All sprints (no filter)"})
+    return {"project_key": project, "options": options, "error": error}
+
+
+def _fetch_boards(project: str) -> list[dict[str, Any]]:
+    boards: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        data = jira_fetcher._jira_get(
+            "/rest/agile/1.0/board",
+            {"projectKeyOrId": project, "maxResults": 50, "startAt": start},
+        )
+        values = data.get("values", []) or []
+        boards.extend(values)
+        if data.get("isLast", True) or not values:
+            break
+        start += len(values)
+    return boards
+
+
+def _fetch_board_sprints(board_id: Any) -> list[dict[str, Any]]:
+    sprints: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        try:
+            data = jira_fetcher._jira_get(
+                f"/rest/agile/1.0/board/{board_id}/sprint",
+                {"state": "active,future", "maxResults": 50, "startAt": start},
+            )
+        except Exception as exc:  # noqa: BLE001 - some boards (kanban) have no sprints
+            LOGGER.debug("board %s sprint fetch skipped: %s", board_id, exc)
+            break
+        values = data.get("values", []) or []
+        sprints.extend(values)
+        if data.get("isLast", True) or not values:
+            break
+        start += len(values)
+    return sprints
