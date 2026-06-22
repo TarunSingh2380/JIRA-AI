@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import math
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +61,67 @@ def _repository_info(*, scan_path: Path, host_path: Path) -> dict[str, Any]:
         "branch": branch or "",
         "current_commit": current_commit or "",
         "pull_command": f"git -C {host_path} pull --ff-only",
+        **_git_activity(scan_path),
+    }
+
+
+# Window (days) over which commit frequency is measured for the activity score.
+_ACTIVITY_WINDOW_DAYS = 90
+# Recency decay half-life (days): a repo whose last commit is this old keeps half
+# of the recency portion of its score.
+_RECENCY_HALFLIFE_DAYS = 30
+# Commits within the window that earn the full frequency portion of the score.
+_FREQUENCY_SATURATION = 25
+
+
+def _git_activity(path: Path) -> dict[str, Any]:
+    """Compute a 0-100 activity score plus the raw signals behind it.
+
+    The score blends recency (how long since the last commit, decayed
+    exponentially) and frequency (commit volume over a recent window) so that a
+    repo someone touched once long ago scores low while one under steady
+    development scores high.
+    """
+    now = time.time()
+
+    last_raw = _git(path, "log", "-1", "--format=%ct")
+    last_ts = int(last_raw) if last_raw and last_raw.isdigit() else None
+
+    # One log call covers the whole window; we derive 30/90-day counts and the
+    # distinct-author count from it instead of issuing several git invocations.
+    since = f"{_ACTIVITY_WINDOW_DAYS} days ago"
+    log_raw = _git(path, "log", f"--since={since}", "--format=%ct|%ae") or ""
+    commits_90d = 0
+    commits_30d = 0
+    authors: set[str] = set()
+    cutoff_30d = now - 30 * 86400
+    for line in log_raw.splitlines():
+        ts_str, _, author = line.partition("|")
+        if not ts_str.isdigit():
+            continue
+        commits_90d += 1
+        if int(ts_str) >= cutoff_30d:
+            commits_30d += 1
+        if author:
+            authors.add(author)
+
+    if last_ts is None:
+        days_since_last = None
+        recency = 0.0
+    else:
+        days_since_last = max(0.0, (now - last_ts) / 86400)
+        recency = 60.0 * math.pow(0.5, days_since_last / _RECENCY_HALFLIFE_DAYS)
+
+    frequency = 40.0 * min(1.0, commits_90d / _FREQUENCY_SATURATION)
+    score = int(round(recency + frequency))
+
+    return {
+        "activity_score": score,
+        "last_commit_ts": last_ts,
+        "last_commit_days": round(days_since_last, 1) if days_since_last is not None else None,
+        "commits_30d": commits_30d,
+        "commits_90d": commits_90d,
+        "authors_90d": len(authors),
     }
 
 

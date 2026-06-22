@@ -1,10 +1,35 @@
 import { useState } from "react";
 import { apiDownload, apiFetch } from "../api";
 
+// Activity score → label + badge style. Mirrors the recency/frequency blend
+// computed on the backend (see app/repository_discovery.py).
+function activityTier(score) {
+  if (score == null) return { cls: "idle", label: "Unknown" };
+  if (score >= 60) return { cls: "ok", label: "Active" };
+  if (score >= 30) return { cls: "warn", label: "Moderate" };
+  if (score >= 1) return { cls: "err", label: "Low" };
+  return { cls: "idle", label: "Stale" };
+}
+
+function activityHint(r) {
+  const parts = [];
+  if (r.last_commit_days != null) parts.push(`last commit ${r.last_commit_days}d ago`);
+  if (r.commits_90d != null) parts.push(`${r.commits_90d} commits / 90d`);
+  if (r.commits_30d != null) parts.push(`${r.commits_30d} / 30d`);
+  if (r.authors_90d != null) parts.push(`${r.authors_90d} authors / 90d`);
+  return parts.join(" · ");
+}
+
 export default function Repositories({ repos, excluded, selected, setSelected, embeddingModel, setStatus }) {
   const [downloading, setDownloading] = useState(false);
   const [repomixing, setRepomixing] = useState(false);
   const allSelected = repos.length > 0 && selected.size === repos.length;
+
+  // Rank most-active first so stale repos sink to the bottom; ties break by name.
+  const rankedRepos = [...repos].sort((a, b) => {
+    const diff = (b.activity_score ?? -1) - (a.activity_score ?? -1);
+    return diff !== 0 ? diff : a.name.localeCompare(b.name);
+  });
 
   function toggleRepo(name, checked) {
     setSelected((prev) => {
@@ -93,34 +118,54 @@ export default function Repositories({ repos, excluded, selected, setSelected, e
       <table>
         <thead>
           <tr>
-            <th style={{ width: "6%" }}>Use</th>
-            <th style={{ width: "20%" }}>Repository</th>
+            <th style={{ width: "5%" }}>Use</th>
+            <th style={{ width: "5%" }}>Rank</th>
+            <th style={{ width: "18%" }}>Repository</th>
+            <th style={{ width: "16%" }}>Activity</th>
             <th>Local clone path</th>
-            <th style={{ width: "16%" }}>Branch</th>
-            <th style={{ width: "18%" }}>Commit</th>
+            <th style={{ width: "12%" }}>Branch</th>
+            <th style={{ width: "14%" }}>Commit</th>
           </tr>
         </thead>
         <tbody>
-          {repos.map((r) => (
-            <tr key={r.name}>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={selected.has(r.name)}
-                  onChange={(e) => toggleRepo(r.name, e.target.checked)}
-                />
-              </td>
-              <td>{r.name}</td>
-              <td>{r.path}</td>
-              <td>{r.branch || "-"}</td>
-              <td>{(r.current_commit || "-").slice(0, 12)}</td>
-            </tr>
-          ))}
+          {rankedRepos.map((r, i) => {
+            const tier = activityTier(r.activity_score);
+            return (
+              <tr key={r.name}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(r.name)}
+                    onChange={(e) => toggleRepo(r.name, e.target.checked)}
+                  />
+                </td>
+                <td className="meta">{i + 1}</td>
+                <td>{r.name}</td>
+                <td>
+                  <div className="activity-cell" title={activityHint(r)}>
+                    <span className={`badge ${tier.cls}`}>
+                      {r.activity_score == null ? "—" : r.activity_score}
+                    </span>
+                    <span className="activity-sub">
+                      {tier.label}
+                      {r.last_commit_days != null ? ` · ${Math.round(r.last_commit_days)}d ago` : ""}
+                    </span>
+                  </div>
+                </td>
+                <td>{r.path}</td>
+                <td>{r.branch || "-"}</td>
+                <td>{(r.current_commit || "-").slice(0, 12)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
       <p className="meta">
         Using existing local clones. Excluded: {excluded?.length ? excluded.join(", ") : "none"}
+        <br />
+        Activity score (0–100) blends commit recency with commit volume over the last 90 days —
+        higher means actively developed, 0 means stale.
       </p>
     </div>
   );
