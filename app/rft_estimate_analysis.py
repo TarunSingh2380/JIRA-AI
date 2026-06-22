@@ -23,16 +23,23 @@ from app.llm_client import build_llm_client
 
 LOGGER = logging.getLogger(__name__)
 
+# Bump when the prompt / output shape changes so cached rows regenerate.
+_PROMPT_VERSION = "v2"
+
 _SYSTEM_PROMPT = (
     "You are a senior engineering estimator. Estimate how long a single average "
     "experienced developer (mid-to-senior, familiar with the stack but not this "
     "exact ticket) would realistically need to fully deliver the work: "
     "implementation, self-test, code review fixes. Use the ticket details and any "
     "codebase context provided. Account for complexity, unknowns, integration and "
-    "testing — not just the happy-path coding time. Respond with STRICT JSON only:\n"
+    "testing — not just the happy-path coding time. You are also given the team's "
+    "current Original Estimate; compare your realistic estimate against it. "
+    "Respond with STRICT JSON only:\n"
     '{"predicted_hours": <number, working hours>, '
     '"confidence": "low|medium|high", '
-    '"rationale": "<= 20 words, the main driver of the estimate"}'
+    '"reason": "<= 12 words: the main driver, or why confidence is not high", '
+    '"explanation": "1-2 complete sentences explaining why your estimate is '
+    'higher/lower than (or matches) the current Original Estimate"}'
 )
 
 
@@ -61,11 +68,14 @@ def ensure_predictions_schema(settings: Settings) -> None:
             )
             """
         )
+        # Self-healing columns added after the initial release.
+        conn.execute("ALTER TABLE rft_estimate_predictions ADD COLUMN IF NOT EXISTS reason TEXT")
+        conn.execute("ALTER TABLE rft_estimate_predictions ADD COLUMN IF NOT EXISTS explanation TEXT")
         conn.commit()
 
 
 def _content_hash(ticket: dict[str, Any]) -> str:
-    raw = "|".join(
+    raw = _PROMPT_VERSION + "|" + "|".join(
         str(ticket.get(k, ""))
         for k in ("summary", "description", "issue_type", "estimate_seconds")
     )
@@ -94,14 +104,15 @@ def _store(settings: Settings, key: str, h: str, ticket: dict[str, Any], pred: d
                 """
                 INSERT INTO rft_estimate_predictions
                     (jira_ticket_id, content_hash, original_seconds,
-                     predicted_hours, confidence, rationale, flag, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                     predicted_hours, confidence, reason, explanation, flag, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 ON CONFLICT (jira_ticket_id) DO UPDATE SET
                     content_hash     = EXCLUDED.content_hash,
                     original_seconds = EXCLUDED.original_seconds,
                     predicted_hours  = EXCLUDED.predicted_hours,
                     confidence       = EXCLUDED.confidence,
-                    rationale        = EXCLUDED.rationale,
+                    reason           = EXCLUDED.reason,
+                    explanation      = EXCLUDED.explanation,
                     flag             = EXCLUDED.flag,
                     updated_at       = NOW()
                 """,
@@ -111,7 +122,8 @@ def _store(settings: Settings, key: str, h: str, ticket: dict[str, Any], pred: d
                     ticket.get("estimate_seconds"),
                     pred.get("predicted_hours"),
                     pred.get("confidence"),
-                    pred.get("rationale"),
+                    pred.get("reason"),
+                    pred.get("explanation"),
                     pred.get("flag"),
                 ),
             )
@@ -172,7 +184,8 @@ def _predict_one(settings, llm, ticket: dict[str, Any]) -> Optional[dict[str, An
     return {
         "predicted_hours": round(hours, 2),
         "confidence": str(parsed.get("confidence", "")).lower()[:10],
-        "rationale": str(parsed.get("rationale", ""))[:200],
+        "reason": str(parsed.get("reason", ""))[:140],
+        "explanation": str(parsed.get("explanation", ""))[:400],
     }
 
 
@@ -213,7 +226,8 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
             pred = {
                 "predicted_hours": float(cached["predicted_hours"]),
                 "confidence": cached.get("confidence") or "",
-                "rationale": cached.get("rationale") or "",
+                "reason": cached.get("reason") or "",
+                "explanation": cached.get("explanation") or "",
             }
         elif llm_ok and budget > 0:
             pred = _predict_one(settings, llm, ticket)
@@ -225,7 +239,8 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
             ticket["delta_pct"] = None
             ticket["flag"] = "n/a"
             ticket["confidence"] = ""
-            ticket["rationale"] = ""
+            ticket["reason"] = ""
+            ticket["explanation"] = ""
             continue
 
         predicted_seconds = pred["predicted_hours"] * 3600.0
@@ -235,7 +250,8 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
         ticket["delta_pct"] = round(delta_pct)
         ticket["flag"] = flag
         ticket["confidence"] = pred["confidence"]
-        ticket["rationale"] = pred["rationale"]
+        ticket["reason"] = pred["reason"]
+        ticket["explanation"] = pred["explanation"]
         analyzed += 1
         if flag in ("UNDER", "OVER"):
             flagged += 1

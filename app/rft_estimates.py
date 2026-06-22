@@ -23,7 +23,7 @@ from app.app_settings import get_setting
 
 LOGGER = logging.getLogger(__name__)
 
-_FIELDS = "summary,status,issuetype,assignee,priority,timetracking,timeoriginalestimate"
+_FIELDS = "summary,status,issuetype,assignee,priority,parent,timetracking,timeoriginalestimate"
 
 # Admin-editable setting key. Value semantics:
 #   "open"  → sprint in openSprints()  (current/active sprint)
@@ -105,6 +105,7 @@ def _fetch_estimated_tickets(settings: Settings) -> list[dict[str, Any]]:
             if not seconds:
                 continue
             assignee = fields.get("assignee") or {}
+            parent = fields.get("parent") or {}
             tickets.append(
                 {
                     "key": issue.get("key", ""),
@@ -112,6 +113,7 @@ def _fetch_estimated_tickets(settings: Settings) -> list[dict[str, Any]]:
                     "status": (fields.get("status") or {}).get("name", ""),
                     "issue_type": (fields.get("issuetype") or {}).get("name", ""),
                     "assignee": assignee.get("displayName") or "Unassigned",
+                    "parent_key": parent.get("key") or "",
                     "estimate_seconds": int(seconds),
                     "estimate": _fmt_estimate(
                         int(seconds), (tracking.get("originalEstimate") or "").strip()
@@ -206,9 +208,8 @@ def build_rft_estimate_report(settings: Settings) -> dict[str, Any]:
     }
 
 
-# ── dashed-table analysis report (multi-part, chunked under Slack limit) ──────
+# ── hierarchical Story → Task analysis report (multi-part, chunked) ──────────
 _CHAR_BUDGET = 2800
-_ANALYSIS_HEADERS = ["Ticket", "Type", "Orig", "Pred", "Δ%", "Flag"]
 
 
 def _fmt_delta(pct: Any) -> str:
@@ -217,31 +218,157 @@ def _fmt_delta(pct: Any) -> str:
     return f"+{pct}%" if pct >= 0 else f"{pct}%"
 
 
-def _analysis_rows(tickets: list[dict[str, Any]]) -> list[list[str]]:
-    rows: list[list[str]] = []
+def _is_story(t: dict[str, Any] | None) -> bool:
+    return bool(t) and (t.get("issue_type") or "").lower() == "story"
+
+
+def _fetch_parent_meta(settings: Settings, keys: list[str]) -> dict[str, dict[str, Any]]:
+    """Batch lookup of summary + issue type for parent keys not in the set."""
+    meta: dict[str, dict[str, Any]] = {}
+    chunk = 80
+    for i in range(0, len(keys), chunk):
+        batch = keys[i : i + chunk]
+        jql = "key in (" + ",".join(batch) + ")"
+        try:
+            data = jira_fetcher._jira_get(
+                "/rest/api/3/search/jql",
+                {"jql": jql, "maxResults": chunk, "fields": "summary,issuetype"},
+            )
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.debug("parent meta fetch failed: %s", exc)
+            continue
+        for issue in data.get("issues", []) or []:
+            fields = issue.get("fields", {}) or {}
+            meta[issue.get("key", "")] = {
+                "summary": (fields.get("summary") or "").strip(),
+                "issue_type": (fields.get("issuetype") or {}).get("name", ""),
+            }
+    return meta
+
+
+def _resolve_groups(
+    settings: Settings, tickets: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Group analyzed tickets under their parent Story.
+
+    Returns (story_groups, other_tasks). A group = {key, summary, ticket (the
+    Story's own analyzed row or None), children:[...]}. Parent Stories not in
+    the set are fetched (summary + type) so they can still head a group.
+    """
+    by_key = {t["key"]: t for t in tickets}
+    missing = sorted(
+        {t["parent_key"] for t in tickets if t.get("parent_key") and t["parent_key"] not in by_key}
+    )
+    parent_meta = _fetch_parent_meta(settings, missing) if missing else {}
+
+    def is_story_key(key: str) -> bool:
+        if key in by_key:
+            return _is_story(by_key[key])
+        meta = parent_meta.get(key)
+        return bool(meta and (meta.get("issue_type") or "").lower() == "story")
+
+    def summary_of(key: str) -> str:
+        if key in by_key:
+            return by_key[key].get("summary", "")
+        return (parent_meta.get(key) or {}).get("summary", "")
+
+    groups: dict[str, dict[str, Any]] = {}
+
+    def ensure_group(key: str) -> dict[str, Any]:
+        if key not in groups:
+            groups[key] = {
+                "key": key,
+                "summary": summary_of(key),
+                "ticket": by_key.get(key),
+                "children": [],
+            }
+        return groups[key]
+
+    other: list[dict[str, Any]] = []
     for t in tickets:
-        rows.append(
-            [
-                t.get("key", ""),
-                (t.get("issue_type") or "")[:6],
-                t.get("estimate") or "—",
-                t.get("predicted") or "—",
-                _fmt_delta(t.get("delta_pct")),
-                t.get("flag") or "n/a",
-            ]
-        )
-    return rows
+        if _is_story(t):
+            ensure_group(t["key"])
+            continue
+        pkey = t.get("parent_key")
+        if pkey and is_story_key(pkey):
+            ensure_group(pkey)["children"].append(t)
+        else:
+            other.append(t)
+
+    def _est(t: dict[str, Any] | None) -> int:
+        return int(t["estimate_seconds"]) if t else 0
+
+    ordered = sorted(
+        groups.values(),
+        key=lambda g: (_est(g["ticket"]), len(g["children"])),
+        reverse=True,
+    )
+    for g in ordered:
+        g["children"].sort(key=lambda c: _est(c), reverse=True)
+    other.sort(key=lambda t: _est(t), reverse=True)
+    return ordered, other
 
 
-def _chunk_rows(row_lines: list[str], fixed_overhead: int) -> list[list[str]]:
+def _render_item(label: str, t: dict[str, Any] | None, indent: str) -> str:
+    """'<label>: [FLAG · Δ% · low/med reason] explanation' (or header if no analysis)."""
+    flag = (t or {}).get("flag")
+    if t is None or not flag or flag == "n/a":
+        base = f"{indent}{label}"
+        if t is not None and flag == "n/a":
+            return f"{base}: _not analyzed yet_"
+        return f"{base}:"
+    seg = [flag, _fmt_delta(t.get("delta_pct"))]
+    conf = (t.get("confidence") or "").lower()
+    if conf in ("low", "medium") and t.get("reason"):
+        seg.append(f"{conf} conf: {t['reason']}")
+    explanation = (t.get("explanation") or "").strip()
+    tail = f" {explanation}" if explanation else ""
+    return f"{indent}{label}: [{' · '.join(seg)}]{tail}"
+
+
+def _render_report_lines(
+    groups: list[dict[str, Any]], other: list[dict[str, Any]]
+) -> list[str]:
+    lines: list[str] = []
+    for g in groups:
+        title = f"*{g['key']}*"
+        if g.get("summary"):
+            title += f" — {g['summary'][:70]}"
+        lines.append(_render_item(title, g.get("ticket"), ""))
+        for child in g["children"]:
+            clabel = f"↳ *{child['key']}*"
+            if child.get("summary"):
+                clabel += f" — {child['summary'][:60]}"
+            lines.append(_render_item(clabel, child, "   "))
+        lines.append("")  # spacer between stories
+    if other:
+        lines.append("*Other tasks (Not In Any Story)*")
+        for t in other:
+            clabel = f"↳ *{t['key']}*"
+            if t.get("summary"):
+                clabel += f" — {t['summary'][:60]}"
+            lines.append(_render_item(clabel, t, "   "))
+    return lines
+
+
+def _chunk_lines(lines: list[str]) -> list[list[str]]:
+    """Split rendered lines into Slack-sized parts, repeating the section header
+    as '(cont.)' context when a split lands mid-section."""
     parts: list[list[str]] = []
     cur: list[str] = []
-    cur_len = fixed_overhead
-    for line in row_lines:
+    cur_len = 0
+    header: str | None = None  # most recent non-indented bold header line
+    for line in lines:
+        if line and not line.startswith(" ") and line.startswith("*"):
+            header = line.split("  _(cont.)_")[0]
         if cur and cur_len + len(line) + 1 > _CHAR_BUDGET:
             parts.append(cur)
             cur = []
-            cur_len = fixed_overhead
+            cur_len = 0
+            if line.startswith(" ") and header:  # mid-section child after a split
+                ctx = f"{header}  _(cont.)_"
+                cur.append(ctx)
+                cur_len += len(ctx) + 1
         cur.append(line)
         cur_len += len(line) + 1
     if cur:
@@ -258,73 +385,30 @@ def _build_analysis_alerts(
     project = (settings.rft_estimate_project_key or "RFT").strip()
     scope = _scope_label(settings)
 
-    rows = _analysis_rows(tickets)
-    widths = [len(h) for h in _ANALYSIS_HEADERS]
-    for r in rows:
-        for i, cell in enumerate(r):
-            widths[i] = max(widths[i], len(str(cell)))
-
-    def fmt(cells: list[str]) -> str:
-        return " | ".join(str(c).ljust(widths[i]) for i, c in enumerate(cells))
-
-    header_line = fmt(_ANALYSIS_HEADERS)
-    divider = "-+-".join("-" * w for w in widths)
-    row_lines = [fmt(r) for r in rows]
-
-    overhead = len(header_line) + len(divider) + 80  # code fences + headline
-    parts = _chunk_rows(row_lines, overhead)
+    groups, other = _resolve_groups(settings, tickets)
+    parts = _chunk_lines(_render_report_lines(groups, other))
     total = len(parts)
 
     alerts: list[dict[str, Any]] = []
-    for idx, part_rows in enumerate(parts, 1):
+    for idx, part in enumerate(parts, 1):
         suffix = f"  (part {idx}/{total})" if total > 1 else ""
         headline = (
             f":bar_chart: *{project} Estimate Analysis ({scope})* — "
             f"{len(tickets)} ticket{'s' if len(tickets) != 1 else ''} · "
             f"*{stats.get('flagged', 0)} flagged*{suffix}"
         )
-        table = "```\n" + "\n".join([header_line, divider, *part_rows]) + "\n```"
-        message = f"{headline}\n{table}"
+        body = "\n".join(part).rstrip()
+        message = f"{headline}\n\n{body}"
         if idx == 1:
             message += (
-                "\n_UNDER = original estimate looks too low · OVER = too high · "
-                "OK = within tolerance · n/a = not analyzed (predicted for an "
-                "average experienced developer)._"
+                "\n\n_Format: [UNDER/OVER/OK · Δ% · low/med-conf reason] explanation. "
+                "UNDER = the Original Estimate looks too low, OVER = too high. "
+                "Predicted for an average experienced developer._"
             )
             if not stats.get("llm", True):
                 message += "\n_⚠ LLM unavailable this run — predictions skipped._"
         alerts.append({"channel_id": channel_id, "message": message})
 
-    alerts.extend(_flagged_rationale_alerts(channel_id, tickets))
-    return alerts
-
-
-def _flagged_rationale_alerts(
-    channel_id: str, tickets: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    flagged = [t for t in tickets if t.get("flag") in ("UNDER", "OVER")]
-    if not flagged:
-        return []
-    flagged.sort(key=lambda t: abs(t.get("delta_pct") or 0), reverse=True)
-    lines = [
-        f"• *{t['key']}* — {t['flag']} ({_fmt_delta(t.get('delta_pct'))}, "
-        f"conf {t.get('confidence') or '?'}): {t.get('rationale') or '—'}"
-        for t in flagged
-    ]
-
-    headline = ":mag: *Flagged tickets — estimate analysis*"
-    alerts: list[dict[str, Any]] = []
-    cur: list[str] = []
-    cur_len = len(headline)
-    for line in lines:
-        if cur and cur_len + len(line) + 1 > _CHAR_BUDGET:
-            alerts.append({"channel_id": channel_id, "message": headline + "\n" + "\n".join(cur)})
-            cur = []
-            cur_len = len(headline)
-        cur.append(line)
-        cur_len += len(line) + 1
-    if cur:
-        alerts.append({"channel_id": channel_id, "message": headline + "\n" + "\n".join(cur)})
     return alerts
 
 
