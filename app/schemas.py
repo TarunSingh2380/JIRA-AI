@@ -97,6 +97,26 @@ class AlertBatchResponse(BaseModel):
     alerts_sent: int = 0
 
 
+# ── Status-transition log (utilization analytics) ───────────────────────────
+class TransitionRecordRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    issueKey: str
+    toStatus: str = Field(..., alias="toStatus")
+    fromStatus: str = ""
+    projectKey: str = ""
+    issueType: str = ""
+    assignee: str = ""
+    changedAt: str = ""
+
+
+class TransitionRecordResponse(BaseModel):
+    recorded: bool = False
+    ticket: str | None = None
+    to_status: str | None = None
+    reason: str | None = None
+
+
 # ── MoM-3 document review ────────────────────────────────────────────────────
 class DocReviewRequest(BaseModel):
     issueKey: str

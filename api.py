@@ -92,6 +92,8 @@ from app.schemas import (
     DocReviewResponse,
     TestCaseDocRequest,
     TestCaseDocResponse,
+    TransitionRecordRequest,
+    TransitionRecordResponse,
 )
 from app.similar_ticket_finder import SimilarTicketFinder
 from app.slack_client import SlackClient
@@ -114,6 +116,11 @@ from app.workflow4_aigov import (
     Workflow4SummaryTLChecker,
 )
 from app.workflow_governor_notify import GovernorNotifier
+from app.utilization import (
+    build_utilization_report,
+    ensure_status_history_schema,
+    record_status_change,
+)
 from app.doc_review import DocReviewer
 from app.testcase_document import build_and_attach
 
@@ -133,6 +140,10 @@ async def lifespan(_app: FastAPI):
         ensure_doc_usage_schema()
     except Exception:  # noqa: BLE001
         log.exception("Document usage schema initialization failed")
+    try:
+        ensure_status_history_schema(settings)
+    except Exception:  # noqa: BLE001
+        log.exception("Status-history schema initialization failed")
     try:
         yield
     finally:
@@ -349,6 +360,46 @@ def workflow_governor_notify() -> AlertBatchResponse:
     except Exception as exc:
         log.exception("/workflow/governor-notify failed")
         raise HTTPException(status_code=500, detail=f"governor-notify failed: {exc}") from exc
+
+
+# Status-transition log — the n8n "Status Transition Logger" workflow posts each
+# Jira status change here so utilization analytics can count ticket movement.
+@app.post("/workflow/record-transition", response_model=TransitionRecordResponse)
+def workflow_record_transition(request: TransitionRecordRequest) -> TransitionRecordResponse:
+    log.info(
+        "POST /workflow/record-transition issue=%s %s -> %s",
+        request.issueKey,
+        request.fromStatus or "?",
+        request.toStatus,
+    )
+    try:
+        result = record_status_change(
+            settings,
+            issue_key=request.issueKey,
+            to_status=request.toStatus,
+            from_status=request.fromStatus,
+            project_key=request.projectKey,
+            issue_type=request.issueType,
+            assignee=request.assignee,
+            changed_at=request.changedAt,
+        )
+        return TransitionRecordResponse(**result)
+    except Exception as exc:
+        log.exception("/workflow/record-transition failed")
+        raise HTTPException(status_code=500, detail=f"record-transition failed: {exc}") from exc
+
+
+# Utilization analytics — aggregated counts across every AI Governor data source.
+@app.get("/graph-admin/utilization")
+def graph_admin_utilization(
+    _user: CurrentUser = Depends(require_tab("utilization")),
+) -> dict[str, Any]:
+    log.debug("GET /graph-admin/utilization")
+    try:
+        return build_utilization_report(settings)
+    except Exception as exc:
+        log.exception("/graph-admin/utilization failed")
+        raise HTTPException(status_code=500, detail=f"utilization failed: {exc}") from exc
 
 
 # MoM 3 — review PRD / Tech-design docs linked on a ticket; comment the review.
