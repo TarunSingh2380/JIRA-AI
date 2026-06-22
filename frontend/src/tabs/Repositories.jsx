@@ -20,9 +20,10 @@ function activityHint(r) {
   return parts.join(" · ");
 }
 
-export default function Repositories({ repos, excluded, selected, setSelected, embeddingModel, setStatus }) {
+export default function Repositories({ repos, excluded, selected, setSelected, reloadRepos, embeddingModel, setStatus }) {
   const [downloading, setDownloading] = useState(false);
   const [repomixing, setRepomixing] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
   const allSelected = repos.length > 0 && selected.size === repos.length;
 
   // Rank most-active first so stale repos sink to the bottom; ties break by name.
@@ -70,6 +71,21 @@ export default function Repositories({ repos, excluded, selected, setSelected, e
     }
   }
 
+  async function recalcActivity() {
+    setRecalculating(true);
+    setStatus({ msg: "Recalculating activity scores...", cls: "running" });
+    try {
+      // Re-fetching the repository list recomputes git activity server-side;
+      // keep the user's current selection intact.
+      const count = await reloadRepos({ keepSelection: true });
+      setStatus({ msg: `Activity scores recalculated for ${count} repositories`, cls: "ok" });
+    } catch (err) {
+      setStatus({ msg: `Recalculation failed: ${err.message}`, cls: "error" });
+    } finally {
+      setRecalculating(false);
+    }
+  }
+
   async function updateRepomix() {
     if (selected.size === 0) {
       setStatus({ msg: "Select at least one repository to update RepoMix data", cls: "error" });
@@ -107,6 +123,9 @@ export default function Repositories({ repos, excluded, selected, setSelected, e
           <input type="checkbox" checked={allSelected} onChange={(e) => toggleAll(e.target.checked)} />
           Select all repositories
         </label>
+        <button className="secondary" disabled={recalculating} onClick={recalcActivity}>
+          {recalculating ? "Recalculating…" : "Recalculate Activity Score"}
+        </button>
         <button className="secondary" disabled={downloading} onClick={downloadCodeAnalysis}>
           Download Code Analysis
         </button>

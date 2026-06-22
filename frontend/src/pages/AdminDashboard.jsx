@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth.jsx";
 import { apiFetch } from "../api";
@@ -60,19 +60,28 @@ export default function AdminDashboard() {
     if (!activeTab && visibleTabs[0]) setActiveTab(visibleTabs[0].key);
   }, [visibleTabs, activeTab]);
 
+  // Load repositories and their freshly-computed activity scores. On mount we
+  // select all repos; on a manual recalc we preserve the current selection.
+  const loadRepositories = useCallback(
+    async ({ keepSelection = false } = {}) => {
+      const data = await apiFetch("/graph-admin/repositories");
+      const list = data.repositories || [];
+      setRepos(list);
+      setExcluded(data.excluded_repositories || []);
+      if (!keepSelection) setSelected(new Set(list.map((r) => r.name)));
+      return data.repository_count;
+    },
+    [],
+  );
+
   // Load repositories on mount (only if the role can use the repos tab).
   useEffect(() => {
     if (!canRepos) return;
     let active = true;
     (async () => {
       try {
-        const data = await apiFetch("/graph-admin/repositories");
-        if (!active) return;
-        const list = data.repositories || [];
-        setRepos(list);
-        setExcluded(data.excluded_repositories || []);
-        setSelected(new Set(list.map((r) => r.name)));
-        setStatus({ msg: `${data.repository_count} repositories ready`, cls: "ok" });
+        const count = await loadRepositories();
+        if (active) setStatus({ msg: `${count} repositories ready`, cls: "ok" });
       } catch (err) {
         if (active) setStatus({ msg: `Repository load failed: ${err.message}`, cls: "error" });
       }
@@ -80,7 +89,7 @@ export default function AdminDashboard() {
     return () => {
       active = false;
     };
-  }, [canRepos]);
+  }, [canRepos, loadRepositories]);
 
   useEffect(() => () => pollRef.current && clearInterval(pollRef.current), []);
 
@@ -192,6 +201,7 @@ export default function AdminDashboard() {
                   excluded={excluded}
                   selected={selected}
                   setSelected={setSelected}
+                  reloadRepos={loadRepositories}
                   embeddingModel={options.embeddingModel}
                   setStatus={setStatus}
                 />
