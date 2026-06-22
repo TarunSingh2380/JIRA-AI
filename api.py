@@ -113,6 +113,7 @@ from app.workflow4_aigov import (
     Workflow4SummaryAssigneeChecker,
     Workflow4SummaryTLChecker,
 )
+from app.workflow_governor_notify import GovernorNotifier
 from app.doc_review import DocReviewer
 from app.testcase_document import build_and_attach
 
@@ -336,6 +337,18 @@ def workflow4_aigov_tl() -> AlertBatchResponse:
     except Exception as exc:
         log.exception("/workflow4/aigov/tl failed")
         raise HTTPException(status_code=500, detail=f"aigov workflow4/tl failed: {exc}") from exc
+
+
+# AI Governor scheduled notification — cron-triggered n8n workflow posts the
+# returned message to GOVERNOR_NOTIFY_CHANNEL_ID (default C0BD06WSN72).
+@app.post("/workflow/governor-notify", response_model=AlertBatchResponse)
+def workflow_governor_notify() -> AlertBatchResponse:
+    log.info("POST /workflow/governor-notify")
+    try:
+        return AlertBatchResponse(**GovernorNotifier(settings=settings).notify())
+    except Exception as exc:
+        log.exception("/workflow/governor-notify failed")
+        raise HTTPException(status_code=500, detail=f"governor-notify failed: {exc}") from exc
 
 
 # MoM 3 — review PRD / Tech-design docs linked on a ticket; comment the review.

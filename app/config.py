@@ -54,6 +54,17 @@ class Settings:
     db_password: str = os.getenv("DB_PASSWORD", "")
     slack_bot_token: str = os.getenv("SLACK_BOT_TOKEN", "")
     slack_default_channel_id: str = os.getenv("SLACK_DEFAULT_CHANNEL_ID", "")
+
+    # AI Governor scheduled notification (Workflow: governor-notify). The n8n
+    # cron workflow calls POST /workflow/governor-notify and posts the returned
+    # message to this channel. Override the text via env; `{date}` in the message
+    # is replaced with the current date.
+    governor_notify_channel_id: str = os.getenv("GOVERNOR_NOTIFY_CHANNEL_ID", "C0BD06WSN72")
+    governor_notify_message: str = os.getenv(
+        "GOVERNOR_NOTIFY_MESSAGE",
+        ":robot_face: *AI Governor daily check-in* — {date}\n"
+        "All systems nominal. Reply in thread to flag anything for review.",
+    )
     jira_base_url: str = os.getenv("JIRA_BASE_URL", "").rstrip("/")
     jira_email: str = os.getenv("JIRA_EMAIL", "")
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")
