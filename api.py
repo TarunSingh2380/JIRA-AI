@@ -157,6 +157,12 @@ async def lifespan(_app: FastAPI):
     except Exception:  # noqa: BLE001
         log.exception("App-settings schema initialization failed")
     try:
+        from app.rft_estimate_analysis import ensure_predictions_schema
+
+        ensure_predictions_schema(settings)
+    except Exception:  # noqa: BLE001
+        log.exception("RFT estimate predictions schema initialization failed")
+    try:
         yield
     finally:
         shutdown_repo_tree()

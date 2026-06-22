@@ -182,12 +182,150 @@ def build_rft_estimate_report(settings: Settings) -> dict[str, Any]:
 
     tickets = _fetch_estimated_tickets(settings)
     LOGGER.info("rft-estimates: %d open tickets with an original estimate", len(tickets))
-    message = _build_message(settings, tickets)
+
+    if not tickets:
+        return {
+            "alerts": [{"channel_id": channel_id, "message": _build_message(settings, [])}],
+            "alerts_sent": 1,
+            "ticket_count": 0,
+        }
+
+    if settings.rft_estimate_analyze:
+        from app.rft_estimate_analysis import analyze_tickets
+
+        stats = analyze_tickets(settings, tickets)
+        LOGGER.info("rft-estimates: analyzed=%(analyzed)s flagged=%(flagged)s llm=%(llm)s", stats)
+        alerts = _build_analysis_alerts(settings, channel_id, tickets, stats)
+    else:
+        alerts = [{"channel_id": channel_id, "message": _build_message(settings, tickets)}]
+
     return {
-        "alerts": [{"channel_id": channel_id, "message": message}],
-        "alerts_sent": 1,
+        "alerts": alerts,
+        "alerts_sent": len(alerts),
         "ticket_count": len(tickets),
     }
+
+
+# ── dashed-table analysis report (multi-part, chunked under Slack limit) ──────
+_CHAR_BUDGET = 2800
+_ANALYSIS_HEADERS = ["Ticket", "Type", "Orig", "Pred", "Δ%", "Flag"]
+
+
+def _fmt_delta(pct: Any) -> str:
+    if pct is None:
+        return "—"
+    return f"+{pct}%" if pct >= 0 else f"{pct}%"
+
+
+def _analysis_rows(tickets: list[dict[str, Any]]) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for t in tickets:
+        rows.append(
+            [
+                t.get("key", ""),
+                (t.get("issue_type") or "")[:6],
+                t.get("estimate") or "—",
+                t.get("predicted") or "—",
+                _fmt_delta(t.get("delta_pct")),
+                t.get("flag") or "n/a",
+            ]
+        )
+    return rows
+
+
+def _chunk_rows(row_lines: list[str], fixed_overhead: int) -> list[list[str]]:
+    parts: list[list[str]] = []
+    cur: list[str] = []
+    cur_len = fixed_overhead
+    for line in row_lines:
+        if cur and cur_len + len(line) + 1 > _CHAR_BUDGET:
+            parts.append(cur)
+            cur = []
+            cur_len = fixed_overhead
+        cur.append(line)
+        cur_len += len(line) + 1
+    if cur:
+        parts.append(cur)
+    return parts or [[]]
+
+
+def _build_analysis_alerts(
+    settings: Settings,
+    channel_id: str,
+    tickets: list[dict[str, Any]],
+    stats: dict[str, Any],
+) -> list[dict[str, Any]]:
+    project = (settings.rft_estimate_project_key or "RFT").strip()
+    scope = _scope_label(settings)
+
+    rows = _analysis_rows(tickets)
+    widths = [len(h) for h in _ANALYSIS_HEADERS]
+    for r in rows:
+        for i, cell in enumerate(r):
+            widths[i] = max(widths[i], len(str(cell)))
+
+    def fmt(cells: list[str]) -> str:
+        return " | ".join(str(c).ljust(widths[i]) for i, c in enumerate(cells))
+
+    header_line = fmt(_ANALYSIS_HEADERS)
+    divider = "-+-".join("-" * w for w in widths)
+    row_lines = [fmt(r) for r in rows]
+
+    overhead = len(header_line) + len(divider) + 80  # code fences + headline
+    parts = _chunk_rows(row_lines, overhead)
+    total = len(parts)
+
+    alerts: list[dict[str, Any]] = []
+    for idx, part_rows in enumerate(parts, 1):
+        suffix = f"  (part {idx}/{total})" if total > 1 else ""
+        headline = (
+            f":bar_chart: *{project} Estimate Analysis ({scope})* — "
+            f"{len(tickets)} ticket{'s' if len(tickets) != 1 else ''} · "
+            f"*{stats.get('flagged', 0)} flagged*{suffix}"
+        )
+        table = "```\n" + "\n".join([header_line, divider, *part_rows]) + "\n```"
+        message = f"{headline}\n{table}"
+        if idx == 1:
+            message += (
+                "\n_UNDER = original estimate looks too low · OVER = too high · "
+                "OK = within tolerance · n/a = not analyzed (predicted for an "
+                "average experienced developer)._"
+            )
+            if not stats.get("llm", True):
+                message += "\n_⚠ LLM unavailable this run — predictions skipped._"
+        alerts.append({"channel_id": channel_id, "message": message})
+
+    alerts.extend(_flagged_rationale_alerts(channel_id, tickets))
+    return alerts
+
+
+def _flagged_rationale_alerts(
+    channel_id: str, tickets: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    flagged = [t for t in tickets if t.get("flag") in ("UNDER", "OVER")]
+    if not flagged:
+        return []
+    flagged.sort(key=lambda t: abs(t.get("delta_pct") or 0), reverse=True)
+    lines = [
+        f"• *{t['key']}* — {t['flag']} ({_fmt_delta(t.get('delta_pct'))}, "
+        f"conf {t.get('confidence') or '?'}): {t.get('rationale') or '—'}"
+        for t in flagged
+    ]
+
+    headline = ":mag: *Flagged tickets — estimate analysis*"
+    alerts: list[dict[str, Any]] = []
+    cur: list[str] = []
+    cur_len = len(headline)
+    for line in lines:
+        if cur and cur_len + len(line) + 1 > _CHAR_BUDGET:
+            alerts.append({"channel_id": channel_id, "message": headline + "\n" + "\n".join(cur)})
+            cur = []
+            cur_len = len(headline)
+        cur.append(line)
+        cur_len += len(line) + 1
+    if cur:
+        alerts.append({"channel_id": channel_id, "message": headline + "\n" + "\n".join(cur)})
+    return alerts
 
 
 # ── admin: current sprint selection + available sprints ──────────────────────

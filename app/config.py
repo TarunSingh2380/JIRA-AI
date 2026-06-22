@@ -79,6 +79,15 @@ class Settings:
     # Pin to one specific sprint id (e.g. "284") instead of openSprints().
     # Blank = use openSprints() when current_sprint_only is on.
     rft_estimate_sprint_id: str = os.getenv("RFT_ESTIMATE_SPRINT_ID", "")
+    # LLM-backed estimate analysis: predict the realistic effort (for an average
+    # experienced developer) per ticket and flag drift vs the Original Estimate.
+    rft_estimate_analyze: bool = os.getenv(
+        "RFT_ESTIMATE_ANALYZE", "true"
+    ).lower() in {"1", "true", "yes", "on"}
+    # Flag a ticket when predicted vs original deviates by more than this percent.
+    rft_estimate_flag_threshold_pct: int = int(os.getenv("RFT_ESTIMATE_FLAG_THRESHOLD_PCT", "25"))
+    # Cap LLM analyses per run (uncached tickets) to bound cost/runtime.
+    rft_estimate_max_analyze: int = int(os.getenv("RFT_ESTIMATE_MAX_ANALYZE", "60"))
     jira_base_url: str = os.getenv("JIRA_BASE_URL", "").rstrip("/")
     jira_email: str = os.getenv("JIRA_EMAIL", "")
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")
