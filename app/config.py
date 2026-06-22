@@ -65,6 +65,11 @@ class Settings:
         ":robot_face: *AI Governor daily check-in* — {date}\n"
         "All systems nominal. Reply in thread to flag anything for review.",
     )
+    # RFT estimate report (WF7): the Jira project to scan for tickets that have
+    # an Original Estimate filled. Posts to GOVERNOR_NOTIFY_CHANNEL_ID.
+    rft_estimate_project_key: str = os.getenv("RFT_ESTIMATE_PROJECT_KEY", "RFT")
+    # Max ticket rows listed in the Slack message before collapsing to a count.
+    rft_estimate_max_rows: int = int(os.getenv("RFT_ESTIMATE_MAX_ROWS", "40"))
     jira_base_url: str = os.getenv("JIRA_BASE_URL", "").rstrip("/")
     jira_email: str = os.getenv("JIRA_EMAIL", "")
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")

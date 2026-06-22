@@ -116,6 +116,7 @@ from app.workflow4_aigov import (
     Workflow4SummaryTLChecker,
 )
 from app.workflow_governor_notify import GovernorNotifier
+from app.rft_estimates import build_rft_estimate_report
 from app.utilization import (
     build_utilization_report,
     ensure_status_history_schema,
@@ -360,6 +361,21 @@ def workflow_governor_notify() -> AlertBatchResponse:
     except Exception as exc:
         log.exception("/workflow/governor-notify failed")
         raise HTTPException(status_code=500, detail=f"governor-notify failed: {exc}") from exc
+
+
+# WF7 — list open RFT tickets that have an Original Estimate filled and post the
+# digest to GOVERNOR_NOTIFY_CHANNEL_ID.
+@app.post("/workflow/rft-estimates", response_model=AlertBatchResponse)
+def workflow_rft_estimates() -> AlertBatchResponse:
+    log.info("POST /workflow/rft-estimates")
+    try:
+        return AlertBatchResponse(**build_rft_estimate_report(settings))
+    except RuntimeError as exc:
+        log.exception("/workflow/rft-estimates runtime failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/workflow/rft-estimates failed")
+        raise HTTPException(status_code=500, detail=f"rft-estimates failed: {exc}") from exc
 
 
 # Status-transition log — the n8n "Status Transition Logger" workflow posts each
