@@ -44,13 +44,13 @@ log = logging.getLogger(__name__)
 # Capability keys. The first six are dashboard tabs; "docs" gates the standalone
 # Documentation portal; "users" gates the User Management page (no full admin
 # rights needed). "*" in a role grants every capability.
-ALL_TABS = ["repos", "jira", "insights", "logs", "testcases", "similar", "workflows", "utilization", "docs", "users"]
+ALL_TABS = ["repos", "jira", "insights", "logs", "testcases", "similar", "workflows", "utilization", "neo4j", "docs", "users"]
 
 # Per-tab custom roles. Edit this map (or override with the AUTH_ROLE_TABS env
 # var as JSON) to change which role can reach which capability.
 DEFAULT_ROLE_TABS: dict[str, list[str]] = {
     "admin": ["*"],
-    "developer": ["repos", "logs", "jira", "testcases", "similar", "docs"],
+    "developer": ["repos", "logs", "jira", "testcases", "similar", "neo4j", "docs"],
     "qa": ["jira", "insights", "testcases", "similar", "utilization", "docs"],
     "viewer": ["jira", "insights", "logs", "utilization"],
     # Single-purpose roles: land on (and only see) one area.

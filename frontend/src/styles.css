@@ -530,3 +530,26 @@ pre {
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* ── Neo4j Graph tab ─────────────────────────────────────────────── */
+.neo4j-tab { display: flex; flex-direction: column; gap: 18px; }
+.neo4j-tab .card {
+  border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px;
+  background: var(--card); box-shadow: var(--shadow-sm);
+}
+.neo4j-tab .card h3 { margin: 0 0 6px; }
+.neo4j-tab .card h4 { margin: 16px 0 6px; font-size: 13px; color: var(--ink-soft); }
+.stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin: 12px 0 4px;
+}
+.analytics-cols {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px; margin-top: 8px;
+}
+.analytics-block table { width: 100%; }
+.analytics-block table td { padding: 4px 8px; }
+.job-log { list-style: none; margin: 8px 0 0; padding: 0; max-height: 160px; overflow: auto; }
+.job-log li { padding: 2px 0; font-family: var(--mono, monospace); font-size: 12px; }
+.job-log .log-warning { color: #b45309; }
+.job-log .log-error { color: #dc2626; }

@@ -255,6 +255,27 @@ class GraphJobResponse(BaseModel):
     completed_at: str | None = None
 
 
+class Neo4jBuildRequest(BaseModel):
+    repositories: List[str] = Field(
+        default_factory=list,
+        description="Active repo names to (re)build. Empty = all active repos.",
+    )
+    wipe_mode: str = Field(
+        default="managed",
+        description="'managed' (clear code/git labels, keep Jira), 'all' (clear whole DB), or 'none'.",
+    )
+    include_code: bool = Field(
+        default=True,
+        description="Parse source with tree-sitter for the Class/Function/CALLS layer.",
+    )
+
+
+class Neo4jBuildResponse(BaseModel):
+    job_id: str
+    status: str
+    repository_count: int
+
+
 class RepomixReindexRequest(BaseModel):
     repositories: List[str] = Field(
         default_factory=list,

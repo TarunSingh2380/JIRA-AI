@@ -157,6 +157,17 @@ class Settings:
     graph_job_build_embeddings: bool = os.getenv("GRAPH_JOB_BUILD_EMBEDDINGS", "true").lower() in {"1", "true", "yes", "on"}
     graph_job_repo_concurrency: int = int(os.getenv("GRAPH_JOB_REPO_CONCURRENCY", "4"))
 
+    # Neo4j code knowledge graph (built from active repos by app/neo4j_graph).
+    neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://13.207.36.226:7687")
+    neo4j_user: str = os.getenv("NEO4J_USER", os.getenv("NEO4J_USERNAME", "neo4j"))
+    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "")
+    neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
+    # A repo is ingested into the graph when its activity score >= this (0 == stale).
+    neo4j_activity_min_score: int = int(os.getenv("NEO4J_ACTIVITY_MIN_SCORE", "1"))
+    neo4j_max_commits_per_repo: int = int(os.getenv("NEO4J_MAX_COMMITS_PER_REPO", "3000"))
+    neo4j_max_file_bytes: int = int(os.getenv("NEO4J_MAX_FILE_BYTES", "1500000"))
+    neo4j_write_batch_size: int = int(os.getenv("NEO4J_WRITE_BATCH_SIZE", "1000"))
+
     # Qdrant (vector store for embeddings)
     qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")

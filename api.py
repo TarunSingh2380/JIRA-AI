@@ -37,6 +37,10 @@ from app.exceptions import LLMConfigurationError, PromptNotFoundError
 from app.graph_context import GraphContextClient
 from app.graph_job import job_store
 from app.graph_job_runner import run_graph_job
+from app.neo4j_job_runner import run_neo4j_graph_job
+from app.neo4j_graph.analytics import graph_analytics
+from app.neo4j_graph.builder import select_active_repositories
+from app.neo4j_graph.config import GraphBuildConfig
 from app.jira_client import JiraClient
 from app.jira_ticket_insights import scan_jira_ticket_cache
 from app.n8n_monitor import N8nMonitor, N8nMonitorError
@@ -63,6 +67,8 @@ from app.schemas import (
     RepoDocEmailRequest,
     RepomixReindexRequest,
     RepomixReindexResponse,
+    Neo4jBuildRequest,
+    Neo4jBuildResponse,
     GraphAdminTriggerRequest,
     GraphAdminTriggerResponse,
     GraphJobResponse,
@@ -646,6 +652,74 @@ def get_graph_job(
     job = job_store.get(job_id)
     if job is None:
         log.warning("Job %s not found", job_id)
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return GraphJobResponse(**job.to_dict())
+
+
+# ─── Neo4j code-graph admin ────────────────────────────────────────────────
+
+@app.get("/graph-admin/neo4j/active-repositories")
+def neo4j_active_repositories(
+    _user: CurrentUser = Depends(require_tab("neo4j")),
+) -> dict[str, Any]:
+    """Active (non-stale) repositories eligible for the Neo4j graph build."""
+    cfg = GraphBuildConfig.from_settings()
+    repos = select_active_repositories(cfg)
+    return {
+        "repository_count": len(repos),
+        "activity_min_score": cfg.activity_min_score,
+        "repositories": repos,
+    }
+
+
+@app.get("/graph-admin/neo4j/analytics")
+def neo4j_graph_analytics(
+    _user: CurrentUser = Depends(require_tab("neo4j")),
+) -> dict[str, Any]:
+    """Current node/relationship counts and per-repo / per-language breakdowns."""
+    log.debug("GET /graph-admin/neo4j/analytics")
+    return graph_analytics(GraphBuildConfig.from_settings())
+
+
+@app.post("/graph-admin/neo4j/build", response_model=Neo4jBuildResponse)
+def neo4j_build(
+    request: Neo4jBuildRequest,
+    background_tasks: BackgroundTasks,
+    _user: CurrentUser = Depends(require_tab("neo4j")),
+) -> Neo4jBuildResponse:
+    """Build/update the Neo4j code graph for active repos in the background."""
+    if request.wipe_mode not in ("managed", "all", "none"):
+        raise HTTPException(status_code=400, detail="wipe_mode must be managed|all|none")
+    if not settings.neo4j_password:
+        raise HTTPException(status_code=503, detail="NEO4J_PASSWORD is not configured on the server")
+
+    cfg = GraphBuildConfig.from_settings()
+    active = select_active_repositories(cfg, request.repositories or None)
+    if not active:
+        raise HTTPException(status_code=400, detail="No active repositories matched the request")
+
+    job = job_store.create(action="neo4j_build")
+    log.info("Enqueuing Neo4j graph job %s (repos=%d wipe=%s code=%s)",
+             job.job_id, len(active), request.wipe_mode, request.include_code)
+    background_tasks.add_task(
+        run_neo4j_graph_job,
+        job,
+        selected_repositories=request.repositories or None,
+        wipe_mode=request.wipe_mode,
+        include_code=request.include_code,
+    )
+    return Neo4jBuildResponse(
+        job_id=job.job_id, status=job.status, repository_count=len(active)
+    )
+
+
+@app.get("/graph-admin/neo4j/jobs/{job_id}", response_model=GraphJobResponse)
+def neo4j_get_job(
+    job_id: str,
+    _user: CurrentUser = Depends(require_tab("neo4j")),
+) -> GraphJobResponse:
+    job = job_store.get(job_id)
+    if job is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     return GraphJobResponse(**job.to_dict())
 
