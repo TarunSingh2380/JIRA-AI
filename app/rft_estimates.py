@@ -178,9 +178,9 @@ def _build_message(settings: Settings, tickets: list[dict[str, Any]]) -> str:
 
 
 def build_rft_estimate_report(settings: Settings) -> dict[str, Any]:
-    channel_id = (settings.governor_notify_channel_id or "").strip()
+    channel_id = (settings.rft_estimate_channel_id or settings.governor_notify_channel_id or "").strip()
     if not channel_id:
-        LOGGER.warning("rft-estimates: GOVERNOR_NOTIFY_CHANNEL_ID not set; no alert produced")
+        LOGGER.warning("rft-estimates: no Slack channel configured (RFT_ESTIMATE_CHANNEL_ID / GOVERNOR_NOTIFY_CHANNEL_ID); no alert produced")
         return {"alerts": [], "alerts_sent": 0}
     if not all([settings.jira_base_url, settings.jira_email, settings.jira_api_token]):
         raise RuntimeError("JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN are required")

@@ -24,7 +24,9 @@ from app.llm_client import build_llm_client
 LOGGER = logging.getLogger(__name__)
 
 # Bump when the prompt / output shape changes so cached rows regenerate.
-_PROMPT_VERSION = "v2"
+# v3: estimates are now grounded in the Neo4j code graph (complexity/churn/
+# blast-radius of related code), so all cached predictions must regenerate.
+_PROMPT_VERSION = "v3"
 
 _SYSTEM_PROMPT = (
     "You are a senior engineering estimator. Estimate how long a single average "

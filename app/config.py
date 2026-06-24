@@ -92,6 +92,13 @@ class Settings:
     # are too small for estimate-drift analysis. Default 8h (= 1 working day),
     # so only tickets estimated at more than a day are analyzed/reported.
     rft_estimate_min_hours: float = float(os.getenv("RFT_ESTIMATE_MIN_HOURS", "8"))
+    # WF7 Slack target. Defaults to GOVERNOR_NOTIFY_CHANNEL_ID so existing setups
+    # are unchanged; set RFT_ESTIMATE_CHANNEL_ID to route WF7 somewhere else
+    # (e.g. a test channel) without affecting the governor-notify flow.
+    rft_estimate_channel_id: str = os.getenv(
+        "RFT_ESTIMATE_CHANNEL_ID",
+        os.getenv("GOVERNOR_NOTIFY_CHANNEL_ID", "C0BD06WSN72"),
+    )
     # WF7: ground estimates in the Neo4j code graph (complexity/coupling/churn of
     # the code relevant to each ticket). Falls back to repograph if unavailable.
     rft_estimate_use_graph: bool = os.getenv(
