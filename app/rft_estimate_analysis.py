@@ -132,8 +132,18 @@ def _store(settings: Settings, key: str, h: str, ticket: dict[str, Any], pred: d
         LOGGER.debug("prediction cache write skipped for %s: %s", key, exc)
 
 
-def _codebase_context(settings: Settings, ticket: dict[str, Any]) -> str:
-    """Best-effort codebase context from repograph; '' if unavailable."""
+def _codebase_context(settings: Settings, ticket: dict[str, Any], graph_reader=None) -> str:
+    """Best-effort codebase context: Neo4j code graph first, repograph fallback."""
+    # 1) Neo4j knowledge graph — complexity/coupling/churn of related code.
+    if graph_reader is not None:
+        try:
+            text = graph_reader.text_for(ticket)
+            if text:
+                return text[:2500]
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.debug("neo4j context failed for %s: %s", ticket.get("key"), exc)
+
+    # 2) Fallback: repograph HTTP service.
     try:
         from app.graph_context import GraphContextClient
 
@@ -159,8 +169,8 @@ def _flag(predicted_seconds: float, original_seconds: float, threshold_pct: int)
     return "OK", delta_pct
 
 
-def _predict_one(settings, llm, ticket: dict[str, Any]) -> Optional[dict[str, Any]]:
-    context = _codebase_context(settings, ticket)
+def _predict_one(settings, llm, ticket: dict[str, Any], graph_reader=None) -> Optional[dict[str, Any]]:
+    context = _codebase_context(settings, ticket, graph_reader)
     user = json.dumps(
         {
             "ticket": {
@@ -212,52 +222,68 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
         llm = None
         llm_ok = False
 
+    # Open one pooled Neo4j reader for the whole batch (None if disabled/unreachable).
+    graph_reader = None
+    if settings.rft_estimate_use_graph:
+        try:
+            from app.neo4j_graph.ticket_context import open_reader
+
+            graph_reader = open_reader()
+            if graph_reader:
+                LOGGER.info("rft analysis: grounding estimates in the Neo4j code graph")
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.debug("rft analysis: neo4j reader unavailable: %s", exc)
+
     analyzed = 0
     flagged = 0
     budget = settings.rft_estimate_max_analyze
 
-    for ticket in tickets:
-        key = ticket["key"]
-        h = _content_hash(ticket)
-        pred: Optional[dict[str, Any]] = None
+    try:
+        for ticket in tickets:
+            key = ticket["key"]
+            h = _content_hash(ticket)
+            pred: Optional[dict[str, Any]] = None
 
-        cached = cache.get(key)
-        if cached and cached.get("content_hash") == h and cached.get("predicted_hours") is not None:
-            pred = {
-                "predicted_hours": float(cached["predicted_hours"]),
-                "confidence": cached.get("confidence") or "",
-                "reason": cached.get("reason") or "",
-                "explanation": cached.get("explanation") or "",
-            }
-        elif llm_ok and budget > 0:
-            pred = _predict_one(settings, llm, ticket)
-            budget -= 1
+            cached = cache.get(key)
+            if cached and cached.get("content_hash") == h and cached.get("predicted_hours") is not None:
+                pred = {
+                    "predicted_hours": float(cached["predicted_hours"]),
+                    "confidence": cached.get("confidence") or "",
+                    "reason": cached.get("reason") or "",
+                    "explanation": cached.get("explanation") or "",
+                }
+            elif llm_ok and budget > 0:
+                pred = _predict_one(settings, llm, ticket, graph_reader)
+                budget -= 1
 
-        if pred is None:
-            ticket["predicted_hours"] = None
-            ticket["predicted"] = "—"
-            ticket["delta_pct"] = None
-            ticket["flag"] = "n/a"
-            ticket["confidence"] = ""
-            ticket["reason"] = ""
-            ticket["explanation"] = ""
-            continue
+            if pred is None:
+                ticket["predicted_hours"] = None
+                ticket["predicted"] = "—"
+                ticket["delta_pct"] = None
+                ticket["flag"] = "n/a"
+                ticket["confidence"] = ""
+                ticket["reason"] = ""
+                ticket["explanation"] = ""
+                continue
 
-        predicted_seconds = pred["predicted_hours"] * 3600.0
-        flag, delta_pct = _flag(predicted_seconds, float(ticket["estimate_seconds"]), threshold)
-        ticket["predicted_hours"] = pred["predicted_hours"]
-        ticket["predicted"] = _fmt_hours(pred["predicted_hours"])
-        ticket["delta_pct"] = round(delta_pct)
-        ticket["flag"] = flag
-        ticket["confidence"] = pred["confidence"]
-        ticket["reason"] = pred["reason"]
-        ticket["explanation"] = pred["explanation"]
-        analyzed += 1
-        if flag in ("UNDER", "PLUS"):
-            flagged += 1
+            predicted_seconds = pred["predicted_hours"] * 3600.0
+            flag, delta_pct = _flag(predicted_seconds, float(ticket["estimate_seconds"]), threshold)
+            ticket["predicted_hours"] = pred["predicted_hours"]
+            ticket["predicted"] = _fmt_hours(pred["predicted_hours"])
+            ticket["delta_pct"] = round(delta_pct)
+            ticket["flag"] = flag
+            ticket["confidence"] = pred["confidence"]
+            ticket["reason"] = pred["reason"]
+            ticket["explanation"] = pred["explanation"]
+            analyzed += 1
+            if flag in ("UNDER", "PLUS"):
+                flagged += 1
 
-        if settings.database_url and not (cached and cached.get("content_hash") == h):
-            _store(settings, key, h, ticket, {**pred, "flag": flag})
+            if settings.database_url and not (cached and cached.get("content_hash") == h):
+                _store(settings, key, h, ticket, {**pred, "flag": flag})
+    finally:
+        if graph_reader is not None:
+            graph_reader.close()
 
     return {"analyzed": analyzed, "flagged": flagged, "llm": llm_ok}
 

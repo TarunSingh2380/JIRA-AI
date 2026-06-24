@@ -92,6 +92,11 @@ class Settings:
     # are too small for estimate-drift analysis. Default 8h (= 1 working day),
     # so only tickets estimated at more than a day are analyzed/reported.
     rft_estimate_min_hours: float = float(os.getenv("RFT_ESTIMATE_MIN_HOURS", "8"))
+    # WF7: ground estimates in the Neo4j code graph (complexity/coupling/churn of
+    # the code relevant to each ticket). Falls back to repograph if unavailable.
+    rft_estimate_use_graph: bool = os.getenv(
+        "RFT_ESTIMATE_USE_GRAPH", "true"
+    ).lower() in {"1", "true", "yes", "on"}
     jira_base_url: str = os.getenv("JIRA_BASE_URL", "").rstrip("/")
     jira_email: str = os.getenv("JIRA_EMAIL", "")
     jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")
