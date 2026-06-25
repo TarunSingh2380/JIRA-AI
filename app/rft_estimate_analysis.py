@@ -26,18 +26,17 @@ LOGGER = logging.getLogger(__name__)
 # Bump when the prompt / output shape changes so cached rows regenerate.
 # v3: estimates grounded in the Neo4j code graph.
 # v4: baseline persona changed to a median (50th-percentile) FAANG engineer.
-_PROMPT_VERSION = "v4"
+# v5: configurable team persona + history-calibration blend.
+_PROMPT_VERSION = "v5"
 
-_SYSTEM_PROMPT = (
+_SYSTEM_PROMPT_TEMPLATE = (
     "You are a senior engineering estimator. Estimate how long a single "
-    "median (50th-percentile) software engineer at a top-tier tech company "
-    "(FAANG-level: strong fundamentals and fast, but seeing this specific "
-    "codebase/ticket for the first time) would realistically need to fully "
-    "deliver the work: implementation, self-test, code review fixes. Use the "
-    "ticket details and any codebase context provided. Account for complexity, "
-    "unknowns, integration and testing — not just the happy-path coding time. "
-    "You are also given the team's current Original Estimate (the developer's own "
-    "estimate); compare your realistic FAANG-median estimate against it. "
+    "__PERSONA__ would realistically need to fully deliver the work: "
+    "implementation, self-test, code review fixes. Use the ticket details and "
+    "any codebase context provided. Account for complexity, unknowns, "
+    "integration and testing — not just the happy-path coding time. You are also "
+    "given the team's current Original Estimate (the developer's own estimate); "
+    "compare your realistic estimate against it. "
     "Respond with STRICT JSON only:\n"
     '{"predicted_hours": <number, working hours>, '
     '"confidence": "low|medium|high", '
@@ -45,6 +44,10 @@ _SYSTEM_PROMPT = (
     '"explanation": "1-2 complete sentences explaining why your estimate is '
     'higher/lower than (or matches) the current Original Estimate"}'
 )
+
+
+def _system_prompt(settings: Settings) -> str:
+    return _SYSTEM_PROMPT_TEMPLATE.replace("__PERSONA__", settings.rft_estimate_benchmark_persona)
 
 
 def _connect(settings: Settings):
@@ -78,8 +81,9 @@ def ensure_predictions_schema(settings: Settings) -> None:
         conn.commit()
 
 
-def _content_hash(ticket: dict[str, Any]) -> str:
-    raw = _PROMPT_VERSION + "|" + "|".join(
+def _content_hash(ticket: dict[str, Any], persona: str = "") -> str:
+    # Persona is part of the prompt, so changing it must regenerate cached rows.
+    raw = _PROMPT_VERSION + "|" + persona + "|" + "|".join(
         str(ticket.get(k, ""))
         for k in ("summary", "description", "issue_type", "estimate_seconds")
     )
@@ -189,7 +193,7 @@ def _predict_one(settings, llm, ticket: dict[str, Any], graph_reader=None) -> Op
         ensure_ascii=False,
     )
     try:
-        raw = llm.complete(_SYSTEM_PROMPT, user, max_tokens=400)
+        raw = llm.complete(_system_prompt(settings), user, max_tokens=400)
         parsed = parse_model_json(raw)
         hours = float(parsed.get("predicted_hours"))
     except Exception as exc:  # noqa: BLE001
@@ -238,6 +242,14 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
         except Exception as exc:  # noqa: BLE001
             LOGGER.debug("rft analysis: neo4j reader unavailable: %s", exc)
 
+    # Learn the team's estimate→actual overrun from closed tickets once per run.
+    from app.rft_calibration import calibrated_hours, team_overrun_factor
+
+    calibration = team_overrun_factor(settings)
+    cal_factor = calibration["factor"]
+    cal_weight = settings.rft_estimate_history_weight if calibration["available"] else 0.0
+
+    persona = settings.rft_estimate_benchmark_persona
     analyzed = 0
     flagged = 0
     budget = settings.rft_estimate_max_analyze
@@ -245,7 +257,7 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
     try:
         for ticket in tickets:
             key = ticket["key"]
-            h = _content_hash(ticket)
+            h = _content_hash(ticket, persona)
             pred: Optional[dict[str, Any]] = None
 
             cached = cache.get(key)
@@ -270,10 +282,18 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
                 ticket["explanation"] = ""
                 continue
 
-            predicted_seconds = pred["predicted_hours"] * 3600.0
+            # `pred["predicted_hours"]` is the raw LLM estimate (cached as-is).
+            # Calibrate it to the team's real pace at report time so the factor
+            # can update without invalidating the per-ticket LLM cache.
+            raw_hours = pred["predicted_hours"]
+            should_have_hours = calibrated_hours(
+                raw_hours, int(ticket["estimate_seconds"]), cal_factor, cal_weight
+            )
+            predicted_seconds = should_have_hours * 3600.0
             flag, delta_pct = _flag(predicted_seconds, float(ticket["estimate_seconds"]), threshold)
-            ticket["predicted_hours"] = pred["predicted_hours"]
-            ticket["predicted"] = _fmt_hours(pred["predicted_hours"])
+            ticket["raw_predicted_hours"] = raw_hours
+            ticket["predicted_hours"] = should_have_hours
+            ticket["predicted"] = _fmt_hours(should_have_hours)
             ticket["delta_pct"] = round(delta_pct)
             ticket["flag"] = flag
             ticket["confidence"] = pred["confidence"]
@@ -289,7 +309,13 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
         if graph_reader is not None:
             graph_reader.close()
 
-    return {"analyzed": analyzed, "flagged": flagged, "llm": llm_ok}
+    return {
+        "analyzed": analyzed,
+        "flagged": flagged,
+        "llm": llm_ok,
+        "calibration": calibration,
+        "persona": persona,
+    }
 
 
 def _fmt_hours(hours: float) -> str:

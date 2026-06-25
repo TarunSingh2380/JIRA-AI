@@ -324,7 +324,7 @@ def _render_item(label: str, t: dict[str, Any] | None, indent: str) -> str:
     predicted = t.get("predicted")
     if predicted and predicted != "—":
         est = t.get("estimate") or _fmt_estimate(int(t.get("estimate_seconds", 0)), "")
-        seg.append(f"FAANG {predicted} vs est {est}")
+        seg.append(f"should {predicted} vs est {est}")
     conf = (t.get("confidence") or "").lower()
     if conf in ("low", "medium") and t.get("reason"):
         seg.append(f"{conf} conf: {t['reason']}")
@@ -443,9 +443,9 @@ def _fmt_hours_only(seconds: int) -> str:
 def _build_summary_matrix(tickets: list[dict[str, Any]]) -> str:
     """Over/Under × drift-magnitude matrix over all analyzed tickets.
 
-    Over  = developer over-estimated (FAANG-median prediction < Original Estimate)
-    Under = developer under-estimated (prediction > Original Estimate)
-    Each cell: count (Σ Original Estimate → Σ predicted FAANG-median time).
+    Over  = developer over-estimated (should-have time < Original Estimate)
+    Under = developer under-estimated (should-have time > Original Estimate)
+    Each cell: count (Σ Original Estimate → Σ should-have time).
     """
     over = [_Cell() for _ in _DRIFT_BUCKETS]
     under = [_Cell() for _ in _DRIFT_BUCKETS]
@@ -499,9 +499,27 @@ def _build_summary_matrix(tickets: list[dict[str, Any]]) -> str:
     return (
         "\n\n*Estimate drift summary* "
         "(Over = developer over-estimated, Under = under-estimated; "
-        "% = how far the FAANG-median prediction is from the Original Estimate). "
-        "Each cell: count (total Original Estimate → total predicted FAANG time):\n"
+        "% = how far the should-have time is from the Original Estimate). "
+        "Each cell: count (total Original Estimate → total should-have time):\n"
         f"```\n{table}\n```"
+    )
+
+
+def _calibration_note(stats: dict[str, Any]) -> str:
+    """One-line note on how the should-have time was calibrated to the team."""
+    cal = stats.get("calibration") or {}
+    if not cal.get("available"):
+        return (
+            "\n_Calibration: not enough closed-ticket history yet — using the "
+            "model estimate as-is._"
+        )
+    pct = cal.get("median_pct", 0)
+    direction = "over" if pct >= 0 else "under"
+    return (
+        f"\n_Calibrated to this team: closed tickets historically run "
+        f"{abs(pct)}% {direction} their estimate (factor ×{cal.get('factor')}, "
+        f"n={cal.get('samples')}, last {cal.get('lookback_days')}d), blended into "
+        f"the should-have time._"
     )
 
 
@@ -548,9 +566,10 @@ def _build_analysis_alerts(
             message += (
                 "\n\n_Format: [UNDER/PLUS · Δ% · low/med-conf reason] explanation. "
                 "UNDER = the Original Estimate looks too low, PLUS = too high. "
-                "Within-tolerance tickets are hidden. Predicted = time a median "
-                "(50th-percentile) FAANG engineer would need._"
+                "Within-tolerance tickets are hidden. Predicted = realistic "
+                "'should-have' time for an average developer on this team._"
             )
+            message += _calibration_note(stats)
             if not stats.get("llm", True):
                 message += "\n_⚠ LLM unavailable this run — predictions skipped._"
         # Drift summary matrix appended at the very end (last message).

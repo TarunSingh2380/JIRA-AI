@@ -92,6 +92,23 @@ class Settings:
     # are too small for estimate-drift analysis. Default 8h (= 1 working day),
     # so only tickets estimated at more than a day are analyzed/reported.
     rft_estimate_min_hours: float = float(os.getenv("RFT_ESTIMATE_MIN_HOURS", "8"))
+    # WF7 benchmark persona — the developer the LLM estimates for. Default is an
+    # average developer on THIS team (not a FAANG dev), so the "should-have" time
+    # reflects realistic delivery for the people who actually do the work.
+    rft_estimate_benchmark_persona: str = os.getenv(
+        "RFT_ESTIMATE_BENCHMARK_PERSONA",
+        "an average developer on this team — competent and familiar with the "
+        "stack, but not necessarily fast or senior, and new to this specific "
+        "ticket",
+    )
+    # History calibration: blend the LLM estimate with (Original Estimate ×
+    # the team's historical actual/estimate ratio) so the benchmark is grounded
+    # in how this team really performs. 0 = LLM only, 1 = history only.
+    rft_estimate_history_weight: float = float(os.getenv("RFT_ESTIMATE_HISTORY_WEIGHT", "0.5"))
+    rft_estimate_history_lookback_days: int = int(os.getenv("RFT_ESTIMATE_HISTORY_LOOKBACK_DAYS", "180"))
+    rft_estimate_history_min_samples: int = int(os.getenv("RFT_ESTIMATE_HISTORY_MIN_SAMPLES", "8"))
+    rft_estimate_factor_min: float = float(os.getenv("RFT_ESTIMATE_FACTOR_MIN", "0.5"))
+    rft_estimate_factor_max: float = float(os.getenv("RFT_ESTIMATE_FACTOR_MAX", "3.0"))
     # WF7 Slack target. Defaults to GOVERNOR_NOTIFY_CHANNEL_ID so existing setups
     # are unchanged; set RFT_ESTIMATE_CHANNEL_ID to route WF7 somewhere else
     # (e.g. a test channel) without affecting the governor-notify flow.
