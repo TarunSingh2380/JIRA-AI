@@ -194,22 +194,35 @@ export default function Neo4jGraph({ setStatus }) {
           </div>
         ) : (
           <>
+            {analytics.trends?.available && analytics.trends.baseline_at && (
+              <p className="meta" style={{ marginTop: 0 }}>
+                Trend ▲/▼ shown vs the previous snapshot ({new Date(analytics.trends.baseline_at).toLocaleString()}).
+              </p>
+            )}
+
             <div className="stat-grid">
-              <StatCard label="Total nodes" value={numberFmt(analytics.node_total)} />
-              <StatCard label="Total relationships" value={numberFmt(analytics.relationship_total)} />
-              <StatCard label="Repositories" value={numberFmt(analytics.repositories?.length)} />
+              <StatCard label="Total nodes" value={numberFmt(analytics.node_total)}
+                delta={analytics.trends?.totals?.node_total} />
+              <StatCard label="Total relationships" value={numberFmt(analytics.relationship_total)}
+                delta={analytics.trends?.totals?.relationship_total} />
+              <StatCard label="Repositories" value={numberFmt(analytics.repositories?.length)}
+                delta={analytics.trends?.totals?.repository_count} />
               <StatCard
                 label="Functions"
                 value={numberFmt(
                   analytics.nodes_by_label?.find((l) => l.label === "Function")?.count,
                 )}
+                delta={analytics.trends?.totals?.functions}
               />
             </div>
 
             <div className="analytics-cols">
-              <LabelTable title="Nodes by label" rows={analytics.nodes_by_label} keyName="label" />
-              <LabelTable title="Relationships by type" rows={analytics.relationships_by_type} keyName="type" />
-              <LabelTable title="Top languages (by file)" rows={analytics.languages} keyName="ext" valueName="files" />
+              <LabelTable title="Nodes by label" rows={analytics.nodes_by_label} keyName="label"
+                deltas={analytics.trends?.by_label} />
+              <LabelTable title="Relationships by type" rows={analytics.relationships_by_type} keyName="type"
+                deltas={analytics.trends?.by_rel} />
+              <LabelTable title="Top languages (by file)" rows={analytics.languages} keyName="ext" valueName="files"
+                deltas={analytics.trends?.by_language} />
             </div>
 
             <div className="analytics-cols">
@@ -289,16 +302,29 @@ export default function Neo4jGraph({ setStatus }) {
   );
 }
 
-function StatCard({ label, value }) {
+// ▲N (up, green) / ▼N (down, red) / nothing for 0 or unknown.
+function Trend({ delta }) {
+  if (delta == null || delta === 0) return null;
+  const up = delta > 0;
+  return (
+    <span className={`trend ${up ? "up" : "down"}`} title={`${up ? "+" : ""}${delta} vs previous snapshot`}>
+      {up ? "▲" : "▼"} {numberFmt(Math.abs(delta))}
+    </span>
+  );
+}
+
+function StatCard({ label, value, delta }) {
   return (
     <div className="stat-card">
-      <div className="stat-value">{value}</div>
+      <div className="stat-value">
+        {value} <Trend delta={delta} />
+      </div>
       <div className="stat-label">{label}</div>
     </div>
   );
 }
 
-function LabelTable({ title, rows, keyName, valueName = "count" }) {
+function LabelTable({ title, rows, keyName, valueName = "count", deltas }) {
   return (
     <div className="analytics-block">
       <h4>{title}</h4>
@@ -308,6 +334,9 @@ function LabelTable({ title, rows, keyName, valueName = "count" }) {
             <tr key={r[keyName]}>
               <td>{r[keyName]}</td>
               <td style={{ textAlign: "right" }}>{numberFmt(r[valueName])}</td>
+              <td style={{ textAlign: "right", width: 64 }}>
+                <Trend delta={deltas?.[r[keyName]]} />
+              </td>
             </tr>
           ))}
         </tbody>

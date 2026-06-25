@@ -676,9 +676,13 @@ def neo4j_active_repositories(
 def neo4j_graph_analytics(
     _user: CurrentUser = Depends(require_tab("neo4j")),
 ) -> dict[str, Any]:
-    """Current node/relationship counts and per-repo / per-language breakdowns."""
+    """Current node/relationship counts and per-repo / per-language breakdowns,
+    plus per-metric trends (delta vs the previous snapshot)."""
     log.debug("GET /graph-admin/neo4j/analytics")
-    return graph_analytics(GraphBuildConfig.from_settings())
+    from app.neo4j_graph.snapshots import attach_trends
+
+    analytics = graph_analytics(GraphBuildConfig.from_settings())
+    return attach_trends(settings, analytics)
 
 
 @app.post("/graph-admin/neo4j/build", response_model=Neo4jBuildResponse)

@@ -57,6 +57,17 @@ async def run_neo4j_graph_job(
             job.totals[key] = value
         job.totals["repositories"] = result.get("repositories", job.totals.get("repositories", 0))
         job.progress["repositories_done"] = result.get("repositories", 0)
+
+        # Record a snapshot so the analytics dashboard can show build-over-build trends.
+        try:
+            from app.config import settings
+            from app.neo4j_graph.analytics import graph_analytics
+            from app.neo4j_graph.snapshots import save_snapshot
+
+            save_snapshot(settings, graph_analytics(cfg))
+        except Exception as snap_exc:  # noqa: BLE001
+            log.debug("post-build snapshot skipped: %s", snap_exc)
+
         job.mark_done()
         log.info("Neo4j graph job %s completed: %s", job.job_id, result.get("counts"))
     except Exception as exc:  # noqa: BLE001

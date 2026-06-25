@@ -553,3 +553,9 @@ pre {
 .job-log li { padding: 2px 0; font-family: var(--mono, monospace); font-size: 12px; }
 .job-log .log-warning { color: #b45309; }
 .job-log .log-error { color: #dc2626; }
+
+/* Trend arrows in Neo4j analytics */
+.trend { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.trend.up { color: #16a34a; }
+.trend.down { color: #dc2626; }
+.stat-value .trend { font-size: 13px; vertical-align: middle; }
