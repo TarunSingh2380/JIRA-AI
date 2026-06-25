@@ -68,6 +68,7 @@ def pull_all_repositories(emit: ProgressFn) -> dict[str, Any]:
           "message": f"Pulling latest code for {len(repos)} repositories…"})
     pulled = failed = 0
     sample_errors: list[str] = []
+    first_full_error = ""
     for repo in repos:
         ok, out = _git_pull(repo)
         if ok:
@@ -76,14 +77,21 @@ def pull_all_repositories(emit: ProgressFn) -> dict[str, Any]:
             failed += 1
             err = _meaningful_error(out)
             log.warning("git pull failed for %s: %s", repo.get("name"), err)
+            if not first_full_error and out:
+                # Emit the full raw stderr of the first failure so the real ssh
+                # cause (not just git's generic 'Could not read…') is visible.
+                first_full_error = out[:500]
             if len(sample_errors) < 3:
                 sample_errors.append(f"{repo.get('name')}: {err[:160]}")
     msg = f"git pull done: {pulled} ok, {failed} failed"
     if sample_errors:
         msg += " — e.g. " + " | ".join(sample_errors)
     emit({"phase": "pull", "level": "warning" if failed else "info", "message": msg})
+    if first_full_error:
+        emit({"phase": "pull", "level": "warning",
+              "message": "First pull error (raw):\n" + first_full_error})
     return {"pulled": pulled, "failed": failed, "total": len(repos),
-            "sample_errors": sample_errors}
+            "sample_errors": sample_errors, "first_full_error": first_full_error}
 
 
 def select_active_repositories(
