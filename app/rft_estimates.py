@@ -148,8 +148,10 @@ def _sprint_funnel_counts(settings: Settings) -> dict[str, Any] | None:
     `eligible` = tickets with Original Estimate strictly greater than the 1-day
     minimum (the set the analyzer considers).
     """
+    # Scope to the SAME population the report analyzes (open tickets in the
+    # sprint) so the funnel chains: total → with estimate → > 1 day → flagged.
     project = (settings.rft_estimate_project_key or "RFT").strip()
-    clauses = [f'project = "{project}"']
+    clauses = [f'project = "{project}"', "statusCategory != Done"]
     sprint_clause = _sprint_clause(settings)
     if sprint_clause:
         clauses.append(sprint_clause)
@@ -568,17 +570,20 @@ def _build_summary_matrix(tickets: list[dict[str, Any]]) -> str:
 
 
 def _funnel_block(stats: dict[str, Any], tickets: list[dict[str, Any]]) -> str:
-    """Estimation funnel: sprint total → with estimate → > 1 day → flagged."""
+    """Estimation funnel (open tickets): total → with estimate → > 1 day →
+    analyzed → flagged. All counts are open-ticket scoped so they chain."""
     over = sum(1 for t in tickets if t.get("flag") == "PLUS")   # over-estimated
     under = sum(1 for t in tickets if t.get("flag") == "UNDER")  # under-estimated
-    lines = ["\n*Sprint estimation funnel:*"]
+    analyzed = sum(1 for t in tickets if t.get("flag") not in (None, "n/a"))
+    lines = ["\n*Sprint estimation funnel (open tickets):*"]
     f = stats.get("funnel")
     if f:
         lines.append(f"• Total tickets in this sprint: *{f['sprint_total']}*")
         lines.append(f"• With an estimate (> 0): *{f['with_estimate']}*")
-        lines.append(f"• With an estimate > 1 day: *{f['eligible']}*")
+        lines.append(f"• With an estimate > 1 day: *{f['eligible']}*  ← analyzed pool")
+    lines.append(f"• Analyzed by the model: *{analyzed}*")
     lines.append(
-        f"• Flagged by the model (over/under): *{over + under}* "
+        f"• Flagged (over/under): *{over + under}* "
         f"({over} over-estimated · {under} under-estimated)"
     )
     return "\n".join(lines)
