@@ -435,6 +435,19 @@ def graph_admin_rft_estimate_sprints(
     return list_rft_sprints(settings)
 
 
+@app.get("/graph-admin/rft-estimate/calibration")
+def graph_admin_rft_estimate_calibration(
+    _user: CurrentUser = Depends(require_tab("workflows")),
+) -> dict[str, Any]:
+    """Team estimate→actual overrun factor used to calibrate WF7 should-have times."""
+    from app.rft_calibration import team_overrun_factor
+
+    cal = team_overrun_factor(settings)
+    cal["history_weight"] = settings.rft_estimate_history_weight
+    cal["persona"] = settings.rft_estimate_benchmark_persona
+    return cal
+
+
 # Status-transition log — the n8n "Status Transition Logger" workflow posts each
 # Jira status change here so utilization analytics can count ticket movement.
 @app.post("/workflow/record-transition", response_model=TransitionRecordResponse)

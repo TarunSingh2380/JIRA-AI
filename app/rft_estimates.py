@@ -523,6 +523,44 @@ def _calibration_note(stats: dict[str, Any]) -> str:
     )
 
 
+def _build_overbudget_breakdown(tickets: list[dict[str, Any]]) -> str:
+    """Who / what kind of work drives the over-budget (under-estimated) tickets.
+
+    Over-budget = should-have time > Original Estimate (delta_pct > 0). For each
+    assignee and issue type we sum the shortfall (should-have − estimate) hours.
+    """
+    by_assignee: dict[str, dict[str, float]] = {}
+    by_type: dict[str, dict[str, float]] = {}
+    for t in tickets:
+        d = t.get("delta_pct")
+        if d is None or d <= 0 or t.get("flag") in (None, "n/a"):
+            continue
+        ph = t.get("predicted_hours")
+        if ph is None:
+            continue
+        gap_h = max(0.0, float(ph) - int(t.get("estimate_seconds", 0)) / 3600.0)
+        for bucket, key in (
+            (by_assignee, t.get("assignee") or "Unassigned"),
+            (by_type, t.get("issue_type") or "—"),
+        ):
+            agg = bucket.setdefault(key, {"count": 0, "gap": 0.0})
+            agg["count"] += 1
+            agg["gap"] += gap_h
+
+    if not by_assignee:
+        return ""
+
+    def _fmt(bucket: dict[str, dict[str, float]], top: int = 6) -> str:
+        rows = sorted(bucket.items(), key=lambda kv: kv[1]["gap"], reverse=True)[:top]
+        return ", ".join(f"{name} {int(v['count'])} (+{v['gap']:.0f}h)" for name, v in rows)
+
+    return (
+        "\n\n*Over-budget drivers* (under-estimated tickets, +hours = shortfall vs estimate):"
+        f"\n• By assignee: {_fmt(by_assignee)}"
+        f"\n• By type: {_fmt(by_type)}"
+    )
+
+
 def _build_analysis_alerts(
     settings: Settings,
     channel_id: str,
@@ -534,7 +572,7 @@ def _build_analysis_alerts(
 
     groups, other = _resolve_groups(settings, tickets)
     report_lines = _render_report_lines(groups, other)
-    summary_matrix = _build_summary_matrix(tickets)
+    summary_matrix = _build_summary_matrix(tickets) + _build_overbudget_breakdown(tickets)
 
     base_headline = (
         f":bar_chart: *{project} Estimate Analysis ({scope})* — "

@@ -142,6 +142,32 @@ function Stat({ value, label }) {
 
 // Runtime control for the WF7 RFT-estimate report: which sprint to scope to.
 // Persisted server-side (app_settings) so changes take effect without redeploy.
+const CALIBRATION_INFO =
+  "WF7 grounds each estimate in how this team actually performs. It measures " +
+  "the median actual-vs-estimate ratio of recently closed tickets (time logged " +
+  "vs Original Estimate) and blends that factor into the predicted 'should-have' " +
+  "time. Factor >1 means the team typically takes longer than it estimates " +
+  "(work runs over budget); <1 means estimates are usually padded. Actuals for " +
+  "the ticket being estimated aren't used — only history from completed tickets.";
+
+// Small circular ⓘ with a hover tooltip (native title for reliability).
+function InfoIcon({ text }) {
+  return (
+    <span
+      title={text}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: 15, height: 15, marginLeft: 5, borderRadius: "50%",
+        border: "1px solid var(--muted)", color: "var(--muted)",
+        fontSize: 10, fontWeight: 700, cursor: "help", fontStyle: "normal",
+        lineHeight: 1, verticalAlign: "middle",
+      }}
+    >
+      i
+    </span>
+  );
+}
+
 function SprintFilter() {
   const [options, setOptions] = useState([]);
   const [value, setValue] = useState("open");
@@ -150,6 +176,7 @@ function SprintFilter() {
   const [loadErr, setLoadErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
+  const [calibration, setCalibration] = useState(null);
 
   async function load() {
     setLoadErr("");
@@ -166,6 +193,12 @@ function SprintFilter() {
     } catch (err) {
       setLoadErr(err.message);
     }
+    // Calibration involves a Jira history scan — fetch separately so the card
+    // renders immediately and the factor fills in when ready.
+    setCalibration(null);
+    apiFetch("/graph-admin/rft-estimate/calibration")
+      .then((c) => setCalibration(c))
+      .catch(() => setCalibration({ available: false, error: true }));
   }
 
   useEffect(() => {
@@ -246,6 +279,29 @@ function SprintFilter() {
       <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
         Scopes the daily estimate digest. Current scope: <strong>{scope || "—"}</strong>.
         “Current sprint” auto-tracks the active sprint; pick a specific sprint to pin it.
+      </div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+        Estimate calibration
+        <InfoIcon text={CALIBRATION_INFO} />:{" "}
+        {calibration == null ? (
+          <em>loading…</em>
+        ) : calibration.available ? (
+          <>
+            <strong>×{calibration.factor}</strong> — team runs{" "}
+            <strong>
+              {calibration.median_pct >= 0 ? "+" : ""}
+              {calibration.median_pct}%
+            </strong>{" "}
+            {calibration.median_pct >= 0 ? "over" : "under"} estimate (n={calibration.samples},
+            last {calibration.lookback_days}d), blended at{" "}
+            {Math.round((calibration.history_weight ?? 0) * 100)}%.
+          </>
+        ) : (
+          <em>
+            not enough closed-ticket history yet — using the model estimate as-is
+            {calibration.error ? " (lookup failed)" : ""}.
+          </em>
+        )}
       </div>
       {loadErr && <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 6 }}>{loadErr}</div>}
     </div>
