@@ -29,9 +29,11 @@ ProgressFn = Callable[[dict[str, Any]], None]
 WipeMode = str  # "all" | "managed" | "none"
 
 
-_ERROR_HINTS = ("permission denied", "could not read from remote", "host key",
-                "unprotected private key", "authentication agent", "publickey",
-                "repository not found", "fatal:")
+_ERROR_HINTS = ("permission denied", "host key", "unprotected private key",
+                "authentication agent", "publickey", "repository not found",
+                "connection timed out", "connection refused", "could not resolve",
+                "operation timed out", "no route to host", "port 22", "port 443",
+                "could not read from remote", "fatal:")
 
 
 def _meaningful_error(out: str) -> str:

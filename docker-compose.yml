@@ -33,8 +33,9 @@ services:
       GRAPH_JOB_REPO_CONCURRENCY: 8
 
       # Use the mounted host SSH key for git pull over SSH (git@github.com).
-      # host-key checking is disabled because the key dir is mounted read-only.
-      GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      # Route via ssh.github.com:443 so it works even when outbound port 22 is
+      # blocked (common on AWS). host-key checking is off (key dir is read-only).
+      GIT_SSH_COMMAND: "ssh -o HostName=ssh.github.com -o Port=443 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
     ports:
       - "8000:8000"
