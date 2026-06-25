@@ -32,6 +32,10 @@ services:
       GRAPH_JOB_REPO_TIMEOUT_SECONDS: 3600
       GRAPH_JOB_REPO_CONCURRENCY: 8
 
+      # Use the mounted host SSH key for git pull over SSH (git@github.com).
+      # host-key checking is disabled because the key dir is mounted read-only.
+      GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
     ports:
       - "8000:8000"
 
@@ -39,6 +43,8 @@ services:
       - /home/ubuntu:/host-repos:rw
       - /home/ubuntu:/home/ubuntu:rw
       - ./repo_tree/workspace:/app/repo_tree/workspace:rw
+      # Reuse the ubuntu user's GitHub SSH key so `git pull` can authenticate.
+      - /home/ubuntu/.ssh:/root/.ssh:ro
 
     extra_hosts:
       - "host.docker.internal:host-gateway"

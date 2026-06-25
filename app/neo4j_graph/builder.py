@@ -45,19 +45,29 @@ def _git_pull(repo: dict[str, Any]) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def pull_all_repositories(emit: ProgressFn) -> dict[str, int]:
+def pull_all_repositories(emit: ProgressFn) -> dict[str, Any]:
     """git pull every discovered repo so activity scores + graph see latest code."""
     repos = discover_graph_repositories(settings)
     emit({"phase": "pull", "level": "info", "repos_total": len(repos),
           "message": f"Pulling latest code for {len(repos)} repositories…"})
     pulled = failed = 0
+    sample_errors: list[str] = []
     for repo in repos:
-        ok, _out = _git_pull(repo)
-        pulled += int(ok)
-        failed += int(not ok)
-    emit({"phase": "pull", "level": "info",
-          "message": f"git pull done: {pulled} ok, {failed} failed/no-op"})
-    return {"pulled": pulled, "failed": failed, "total": len(repos)}
+        ok, out = _git_pull(repo)
+        if ok:
+            pulled += 1
+        else:
+            failed += 1
+            last = out.splitlines()[-1].strip() if out else "unknown error"
+            log.warning("git pull failed for %s: %s", repo.get("name"), last)
+            if len(sample_errors) < 3:
+                sample_errors.append(f"{repo.get('name')}: {last[:160]}")
+    msg = f"git pull done: {pulled} ok, {failed} failed"
+    if sample_errors:
+        msg += " — e.g. " + " | ".join(sample_errors)
+    emit({"phase": "pull", "level": "warning" if failed else "info", "message": msg})
+    return {"pulled": pulled, "failed": failed, "total": len(repos),
+            "sample_errors": sample_errors}
 
 
 def select_active_repositories(
