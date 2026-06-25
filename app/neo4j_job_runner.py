@@ -26,9 +26,11 @@ async def run_neo4j_graph_job(
     selected_repositories: list[str] | None = None,
     wipe_mode: str = "managed",
     include_code: bool = True,
+    pull_latest: bool | None = None,
 ) -> None:
     job.status = "running"
-    log.info("Neo4j graph job %s started (wipe=%s, code=%s)", job.job_id, wipe_mode, include_code)
+    log.info("Neo4j graph job %s started (wipe=%s, code=%s, pull=%s)",
+             job.job_id, wipe_mode, include_code, pull_latest)
 
     def progress(event: dict[str, Any]) -> None:
         if "repos_total" in event:
@@ -50,6 +52,7 @@ async def run_neo4j_graph_job(
             selected_names=selected_repositories,
             wipe_mode=wipe_mode,
             include_code=include_code,
+            pull_latest=pull_latest,
             progress=progress,
         )
         # Surface written node/relationship counts in the job totals.

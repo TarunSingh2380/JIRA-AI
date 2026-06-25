@@ -268,6 +268,10 @@ class Neo4jBuildRequest(BaseModel):
         default=True,
         description="Parse source with tree-sitter for the Class/Function/CALLS layer.",
     )
+    pull_latest: bool = Field(
+        default=True,
+        description="git pull --ff-only every repo before building (latest code + activity).",
+    )
 
 
 class Neo4jBuildResponse(BaseModel):

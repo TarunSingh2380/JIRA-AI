@@ -31,6 +31,7 @@ class GraphBuildConfig:
     max_commits_per_repo: int = 3000
     max_file_bytes: int = 1_500_000
     write_batch_size: int = 1000
+    pull_latest: bool = True
     skip_dirs: set[str] = field(default_factory=lambda: set(_DEFAULT_SKIP_DIRS))
     managed_labels: tuple[str, ...] = MANAGED_LABELS
 
@@ -46,6 +47,7 @@ class GraphBuildConfig:
             max_commits_per_repo=s.neo4j_max_commits_per_repo,
             max_file_bytes=s.neo4j_max_file_bytes,
             write_batch_size=s.neo4j_write_batch_size,
+            pull_latest=s.neo4j_build_pull_latest,
         )
 
 

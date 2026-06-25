@@ -197,6 +197,11 @@ class Settings:
     neo4j_max_commits_per_repo: int = int(os.getenv("NEO4J_MAX_COMMITS_PER_REPO", "3000"))
     neo4j_max_file_bytes: int = int(os.getenv("NEO4J_MAX_FILE_BYTES", "1500000"))
     neo4j_write_batch_size: int = int(os.getenv("NEO4J_WRITE_BATCH_SIZE", "1000"))
+    # git pull --ff-only every repo before building so the graph reflects the
+    # latest code (and activity scores see fresh remote commits).
+    neo4j_build_pull_latest: bool = os.getenv(
+        "NEO4J_BUILD_PULL_LATEST", "true"
+    ).lower() in {"1", "true", "yes", "on"}
 
     # Qdrant (vector store for embeddings)
     qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")

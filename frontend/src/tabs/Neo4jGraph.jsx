@@ -26,6 +26,7 @@ export default function Neo4jGraph({ setStatus }) {
   const [selected, setSelected] = useState(() => new Set());
   const [mode, setMode] = useState("managed");
   const [includeCode, setIncludeCode] = useState(true);
+  const [pullLatest, setPullLatest] = useState(true);
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -108,6 +109,7 @@ export default function Neo4jGraph({ setStatus }) {
           repositories: [...selected],
           wipe_mode: mode,
           include_code: includeCode,
+          pull_latest: pullLatest,
         },
       });
       setStatus({
@@ -162,6 +164,15 @@ export default function Neo4jGraph({ setStatus }) {
               disabled={busy}
             />{" "}
             Include code structure (tree-sitter)
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={pullLatest}
+              onChange={(e) => setPullLatest(e.target.checked)}
+              disabled={busy}
+            />{" "}
+            Pull latest code first (git pull)
           </label>
           <button className="primary" onClick={build} disabled={busy}>
             {busy ? "Building…" : "Build / Update Graph DB"}

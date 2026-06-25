@@ -9,6 +9,8 @@ surface live status to the admin UI.
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
 import time
 from typing import Any, Callable
 
@@ -16,7 +18,7 @@ from app.config import settings
 from app.repository_discovery import discover_graph_repositories
 
 from .code_layer import build_code_layer
-from .config import GraphBuildConfig
+from .config import GraphBuildConfig, repo_local_path
 from .git_layer import build_git_layer
 from .writer import Neo4jWriter
 
@@ -25,6 +27,37 @@ log = logging.getLogger(__name__)
 ProgressFn = Callable[[dict[str, Any]], None]
 
 WipeMode = str  # "all" | "managed" | "none"
+
+
+def _git_pull(repo: dict[str, Any]) -> tuple[bool, str]:
+    """git pull --ff-only for one repo. Returns (success, output). Best-effort."""
+    path = repo_local_path(repo)
+    if not path:
+        return False, "no local path"
+    try:
+        result = subprocess.run(
+            ["git", "pull", "--ff-only"],
+            cwd=path, capture_output=True, text=True, timeout=120,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+        return result.returncode == 0, (result.stdout + result.stderr).strip()
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+
+def pull_all_repositories(emit: ProgressFn) -> dict[str, int]:
+    """git pull every discovered repo so activity scores + graph see latest code."""
+    repos = discover_graph_repositories(settings)
+    emit({"phase": "pull", "level": "info", "repos_total": len(repos),
+          "message": f"Pulling latest code for {len(repos)} repositories…"})
+    pulled = failed = 0
+    for repo in repos:
+        ok, _out = _git_pull(repo)
+        pulled += int(ok)
+        failed += int(not ok)
+    emit({"phase": "pull", "level": "info",
+          "message": f"git pull done: {pulled} ok, {failed} failed/no-op"})
+    return {"pulled": pulled, "failed": failed, "total": len(repos)}
 
 
 def select_active_repositories(
@@ -46,6 +79,7 @@ def build_graph(
     selected_names: list[str] | None = None,
     wipe_mode: WipeMode = "managed",
     include_code: bool = True,
+    pull_latest: bool | None = None,
     progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
     cfg = cfg or GraphBuildConfig.from_settings()
@@ -53,6 +87,11 @@ def build_graph(
 
     if not cfg.neo4j_password:
         raise RuntimeError("NEO4J_PASSWORD is not configured on the server.")
+
+    # Pull latest code FIRST so activity scores reflect fresh remote commits and
+    # the graph is built from up-to-date sources.
+    do_pull = cfg.pull_latest if pull_latest is None else pull_latest
+    pull_summary = pull_all_repositories(emit) if do_pull else None
 
     active = select_active_repositories(cfg, selected_names)
     emit({"phase": "discovery", "level": "info", "repos_total": len(active),
@@ -102,4 +141,5 @@ def build_graph(
         "repo_names": [r.get("name") for r in active],
         "counts": counts,
         "elapsed_seconds": elapsed,
+        "pull": pull_summary,
     }

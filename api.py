@@ -724,6 +724,7 @@ def neo4j_build(
         selected_repositories=request.repositories or None,
         wipe_mode=request.wipe_mode,
         include_code=request.include_code,
+        pull_latest=request.pull_latest,
     )
     return Neo4jBuildResponse(
         job_id=job.job_id, status=job.status, repository_count=len(active)
