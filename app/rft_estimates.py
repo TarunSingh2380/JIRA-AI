@@ -574,16 +574,21 @@ def _funnel_block(stats: dict[str, Any], tickets: list[dict[str, Any]]) -> str:
     analyzed → flagged. All counts are open-ticket scoped so they chain."""
     over = sum(1 for t in tickets if t.get("flag") == "PLUS")   # over-estimated
     under = sum(1 for t in tickets if t.get("flag") == "UNDER")  # under-estimated
-    analyzed = sum(1 for t in tickets if t.get("flag") not in (None, "n/a"))
+    analyzed = [t for t in tickets if t.get("flag") not in (None, "n/a")]
+    on_target = sum(1 for t in analyzed if (t.get("delta_pct") or 0) == 0)
+    over_under = len(analyzed) - on_target  # == drift-table Total
     lines = ["\n*Sprint estimation funnel (open tickets):*"]
     f = stats.get("funnel")
     if f:
         lines.append(f"• Total tickets in this sprint: *{f['sprint_total']}*")
         lines.append(f"• With an estimate (> 0): *{f['with_estimate']}*")
         lines.append(f"• With an estimate > 1 day: *{f['eligible']}*  ← analyzed pool")
-    lines.append(f"• Analyzed by the model: *{analyzed}*")
     lines.append(
-        f"• Flagged (over/under): *{over + under}* "
+        f"• Analyzed by the model: *{len(analyzed)}* "
+        f"({over_under} over/under, {on_target} on-target)"
+    )
+    lines.append(
+        f"• Flagged outside ±tolerance: *{over + under}* "
         f"({over} over-estimated · {under} under-estimated)"
     )
     return "\n".join(lines)
