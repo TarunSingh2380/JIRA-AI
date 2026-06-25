@@ -29,6 +29,20 @@ ProgressFn = Callable[[dict[str, Any]], None]
 WipeMode = str  # "all" | "managed" | "none"
 
 
+_ERROR_HINTS = ("permission denied", "could not read from remote", "host key",
+                "unprotected private key", "authentication agent", "publickey",
+                "repository not found", "fatal:")
+
+
+def _meaningful_error(out: str) -> str:
+    """Pick the informative line from git/ssh stderr (not the trailing filler)."""
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    for ln in lines:
+        if any(h in ln.lower() for h in _ERROR_HINTS):
+            return ln
+    return lines[0] if lines else "unknown error"
+
+
 def _git_pull(repo: dict[str, Any]) -> tuple[bool, str]:
     """git pull --ff-only for one repo. Returns (success, output). Best-effort."""
     path = repo_local_path(repo)
@@ -58,10 +72,10 @@ def pull_all_repositories(emit: ProgressFn) -> dict[str, Any]:
             pulled += 1
         else:
             failed += 1
-            last = out.splitlines()[-1].strip() if out else "unknown error"
-            log.warning("git pull failed for %s: %s", repo.get("name"), last)
+            err = _meaningful_error(out)
+            log.warning("git pull failed for %s: %s", repo.get("name"), err)
             if len(sample_errors) < 3:
-                sample_errors.append(f"{repo.get('name')}: {last[:160]}")
+                sample_errors.append(f"{repo.get('name')}: {err[:160]}")
     msg = f"git pull done: {pulled} ok, {failed} failed"
     if sample_errors:
         msg += " — e.g. " + " | ".join(sample_errors)
