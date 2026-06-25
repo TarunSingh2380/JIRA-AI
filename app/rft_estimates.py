@@ -659,17 +659,20 @@ def _build_analysis_alerts(
         f"*{stats.get('flagged', 0)} flagged*"
     )
     funnel = _funnel_block(stats, tickets)
+    # The funnel + drift matrix + drivers form one "summary" block shown at the
+    # very end of the report (the last Slack message), next to the drift table.
+    summary_block = funnel + summary_matrix
 
     # Everything within tolerance — nothing flagged to show, but still report the
     # funnel + drift summary so the distribution is always visible.
     if not report_lines:
         message = (
-            f"{base_headline}\n{funnel}\n\n_All analyzed tickets are within the "
+            f"{base_headline}\n\n_All analyzed tickets are within the "
             "estimate tolerance — nothing to flag._"
         )
         if not stats.get("llm", True):
             message += "\n_⚠ LLM unavailable this run — predictions skipped._"
-        message += summary_matrix
+        message += summary_block
         return [{"channel_id": channel_id, "message": message}]
 
     parts = _chunk_lines(report_lines)
@@ -679,8 +682,7 @@ def _build_analysis_alerts(
     for idx, part in enumerate(parts, 1):
         suffix = f"  (part {idx}/{total})" if total > 1 else ""
         body = "\n".join(part).rstrip()
-        header = f"{base_headline}{suffix}{funnel if idx == 1 else ''}"
-        message = f"{header}\n\n{body}"
+        message = f"{base_headline}{suffix}\n\n{body}"
         if idx == 1:
             message += (
                 "\n\n_Format: [UNDER/PLUS · Δ% · low/med-conf reason] explanation. "
@@ -691,9 +693,9 @@ def _build_analysis_alerts(
             message += _calibration_note(stats)
             if not stats.get("llm", True):
                 message += "\n_⚠ LLM unavailable this run — predictions skipped._"
-        # Drift summary matrix appended at the very end (last message).
+        # Funnel + drift summary at the very end (last message), by the drift table.
         if idx == total:
-            message += summary_matrix
+            message += summary_block
         alerts.append({"channel_id": channel_id, "message": message})
 
     return alerts
