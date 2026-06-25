@@ -87,7 +87,8 @@ class Settings:
     # Flag a ticket when predicted vs original deviates by more than this percent.
     rft_estimate_flag_threshold_pct: int = int(os.getenv("RFT_ESTIMATE_FLAG_THRESHOLD_PCT", "25"))
     # Cap LLM analyses per run (uncached tickets) to bound cost/runtime.
-    rft_estimate_max_analyze: int = int(os.getenv("RFT_ESTIMATE_MAX_ANALYZE", "60"))
+    # 0 (or negative) = unlimited — analyze every eligible ticket.
+    rft_estimate_max_analyze: int = int(os.getenv("RFT_ESTIMATE_MAX_ANALYZE", "0"))
     # Skip tickets whose Original Estimate is <= this many working hours — they
     # are too small for estimate-drift analysis. Default 8h (= 1 working day),
     # so only tickets estimated at more than a day are analyzed/reported.

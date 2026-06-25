@@ -252,7 +252,9 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
     persona = settings.rft_estimate_benchmark_persona
     analyzed = 0
     flagged = 0
+    # 0 / negative = unlimited: analyze every eligible (uncached) ticket.
     budget = settings.rft_estimate_max_analyze
+    unlimited = budget <= 0
 
     try:
         for ticket in tickets:
@@ -268,7 +270,7 @@ def analyze_tickets(settings: Settings, tickets: list[dict[str, Any]]) -> dict[s
                     "reason": cached.get("reason") or "",
                     "explanation": cached.get("explanation") or "",
                 }
-            elif llm_ok and budget > 0:
+            elif llm_ok and (unlimited or budget > 0):
                 pred = _predict_one(settings, llm, ticket, graph_reader)
                 budget -= 1
 
