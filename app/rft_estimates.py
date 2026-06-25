@@ -141,6 +141,67 @@ def _fetch_estimated_tickets(settings: Settings) -> list[dict[str, Any]]:
     return tickets
 
 
+def _sprint_funnel_counts(settings: Settings) -> dict[str, Any] | None:
+    """Count the estimation funnel across the whole sprint scope (all statuses).
+
+    Returns {sprint_total, with_estimate, eligible, min_hours} or None on failure.
+    `eligible` = tickets with Original Estimate strictly greater than the 1-day
+    minimum (the set the analyzer considers).
+    """
+    project = (settings.rft_estimate_project_key or "RFT").strip()
+    clauses = [f'project = "{project}"']
+    sprint_clause = _sprint_clause(settings)
+    if sprint_clause:
+        clauses.append(sprint_clause)
+    jql = " AND ".join(clauses) + " ORDER BY created DESC"
+    min_seconds = int(round(max(0.0, settings.rft_estimate_min_hours) * 3600))
+
+    total = with_estimate = eligible = 0
+    next_page_token: str | None = None
+    start = 0
+    pages = 0
+    try:
+        while pages < 30:  # safety cap (~3000 issues)
+            params: dict[str, Any] = {
+                "jql": jql, "maxResults": 100,
+                "fields": "timetracking,timeoriginalestimate",
+            }
+            if next_page_token:
+                params["nextPageToken"] = next_page_token
+            else:
+                params["startAt"] = start
+            data = jira_fetcher._jira_get("/rest/api/3/search/jql", params)
+            batch = data.get("issues", []) or []
+            for issue in batch:
+                fields = issue.get("fields", {}) or {}
+                tracking = fields.get("timetracking") or {}
+                est = int(tracking.get("originalEstimateSeconds") or fields.get("timeoriginalestimate") or 0)
+                total += 1
+                if est > 0:
+                    with_estimate += 1
+                if est > min_seconds:
+                    eligible += 1
+            pages += 1
+            start += len(batch)
+            next_page_token = data.get("nextPageToken")
+            if data.get("isLast") is True or not batch:
+                break
+            if next_page_token:
+                continue
+            jira_total = data.get("total")
+            if jira_total is not None and start >= jira_total:
+                break
+    except Exception as exc:  # noqa: BLE001 — funnel is informational only
+        LOGGER.warning("rft funnel count failed: %s", exc)
+        return None
+    return {
+        "sprint_total": total,
+        "with_estimate": with_estimate,
+        "eligible": eligible,
+        "min_hours": settings.rft_estimate_min_hours,
+    }
+
+
 def _link(settings: Settings, key: str) -> str:
     base = settings.jira_base_url
     return f"<{base}/browse/{key}|{key}>" if base else key
@@ -199,6 +260,7 @@ def build_rft_estimate_report(settings: Settings) -> dict[str, Any]:
         from app.rft_estimate_analysis import analyze_tickets
 
         stats = analyze_tickets(settings, tickets)
+        stats["funnel"] = _sprint_funnel_counts(settings)
         LOGGER.info("rft-estimates: analyzed=%(analyzed)s flagged=%(flagged)s llm=%(llm)s", stats)
         alerts = _build_analysis_alerts(settings, channel_id, tickets, stats)
     else:
@@ -505,6 +567,23 @@ def _build_summary_matrix(tickets: list[dict[str, Any]]) -> str:
     )
 
 
+def _funnel_block(stats: dict[str, Any], tickets: list[dict[str, Any]]) -> str:
+    """Estimation funnel: sprint total → with estimate → > 1 day → flagged."""
+    over = sum(1 for t in tickets if t.get("flag") == "PLUS")   # over-estimated
+    under = sum(1 for t in tickets if t.get("flag") == "UNDER")  # under-estimated
+    lines = ["\n*Sprint estimation funnel:*"]
+    f = stats.get("funnel")
+    if f:
+        lines.append(f"• Total tickets in this sprint: *{f['sprint_total']}*")
+        lines.append(f"• With an estimate (> 0): *{f['with_estimate']}*")
+        lines.append(f"• With an estimate > 1 day: *{f['eligible']}*")
+    lines.append(
+        f"• Flagged by the model (over/under): *{over + under}* "
+        f"({over} over-estimated · {under} under-estimated)"
+    )
+    return "\n".join(lines)
+
+
 def _calibration_note(stats: dict[str, Any]) -> str:
     """One-line note on how the should-have time was calibrated to the team."""
     cal = stats.get("calibration") or {}
@@ -579,13 +658,14 @@ def _build_analysis_alerts(
         f"{len(tickets)} ticket{'s' if len(tickets) != 1 else ''} · "
         f"*{stats.get('flagged', 0)} flagged*"
     )
+    funnel = _funnel_block(stats, tickets)
 
     # Everything within tolerance — nothing flagged to show, but still report the
-    # drift summary so the distribution is always visible.
+    # funnel + drift summary so the distribution is always visible.
     if not report_lines:
         message = (
-            f"{base_headline}\n\n_All analyzed tickets are within the estimate "
-            "tolerance — nothing to flag._"
+            f"{base_headline}\n{funnel}\n\n_All analyzed tickets are within the "
+            "estimate tolerance — nothing to flag._"
         )
         if not stats.get("llm", True):
             message += "\n_⚠ LLM unavailable this run — predictions skipped._"
@@ -599,7 +679,8 @@ def _build_analysis_alerts(
     for idx, part in enumerate(parts, 1):
         suffix = f"  (part {idx}/{total})" if total > 1 else ""
         body = "\n".join(part).rstrip()
-        message = f"{base_headline}{suffix}\n\n{body}"
+        header = f"{base_headline}{suffix}{funnel if idx == 1 else ''}"
+        message = f"{header}\n\n{body}"
         if idx == 1:
             message += (
                 "\n\n_Format: [UNDER/PLUS · Δ% · low/med-conf reason] explanation. "
