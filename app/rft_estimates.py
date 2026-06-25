@@ -321,6 +321,10 @@ def _render_item(label: str, t: dict[str, Any] | None, indent: str) -> str:
             return f"{base}: _not analyzed yet_"
         return f"{base}:"
     seg = [flag, _fmt_delta(t.get("delta_pct"))]
+    predicted = t.get("predicted")
+    if predicted and predicted != "—":
+        est = t.get("estimate") or _fmt_estimate(int(t.get("estimate_seconds", 0)), "")
+        seg.append(f"FAANG {predicted} vs est {est}")
     conf = (t.get("confidence") or "").lower()
     if conf in ("low", "medium") and t.get("reason"):
         seg.append(f"{conf} conf: {t['reason']}")
@@ -393,6 +397,62 @@ def _chunk_lines(lines: list[str]) -> list[list[str]]:
     return parts or [[]]
 
 
+# Drift buckets for the summary matrix: |predicted − Original Estimate| %.
+_DRIFT_BUCKETS = (("<25%", 0, 25), ("25-50%", 25, 50), ("50-100%", 50, 100), ("100%+", 100, float("inf")))
+
+
+def _drift_bucket(abs_pct: float) -> int:
+    for i, (_label, lo, hi) in enumerate(_DRIFT_BUCKETS):
+        if lo <= abs_pct < hi:
+            return i
+    return len(_DRIFT_BUCKETS) - 1
+
+
+def _build_summary_matrix(tickets: list[dict[str, Any]]) -> str:
+    """Over/Under × drift-magnitude matrix over all analyzed tickets.
+
+    Over  = developer over-estimated (FAANG-median prediction < Original Estimate)
+    Under = developer under-estimated (prediction > Original Estimate)
+    """
+    over = [0, 0, 0, 0]
+    under = [0, 0, 0, 0]
+    for t in tickets:
+        d = t.get("delta_pct")
+        if d is None or t.get("flag") in (None, "n/a"):
+            continue
+        idx = _drift_bucket(abs(d))
+        if d < 0:
+            over[idx] += 1
+        elif d > 0:
+            under[idx] += 1
+    total_over, total_under = sum(over), sum(under)
+    grand = total_over + total_under
+    if grand == 0:
+        return ""
+
+    cols = [b[0] for b in _DRIFT_BUCKETS]
+    header = ["", *cols, "Total"]
+    body = [
+        ["Over", *(str(x) for x in over), str(total_over)],
+        ["Under", *(str(x) for x in under), str(total_under)],
+        ["Total", *(str(over[i] + under[i]) for i in range(4)), str(grand)],
+    ]
+    widths = [max(len(header[c]), *(len(r[c]) for r in body)) for c in range(len(header))]
+
+    def _row(cells: list[str]) -> str:
+        out = [cells[0].ljust(widths[0])]
+        out += [cells[c].rjust(widths[c]) for c in range(1, len(widths))]
+        return "  ".join(out)
+
+    table = "\n".join([_row(header), *(_row(r) for r in body)])
+    return (
+        "\n\n*Estimate drift summary* "
+        "(Over = developer over-estimated, Under = under-estimated; "
+        "% = how far the FAANG-median prediction is from the Original Estimate):\n"
+        f"```\n{table}\n```"
+    )
+
+
 def _build_analysis_alerts(
     settings: Settings,
     channel_id: str,
@@ -404,6 +464,7 @@ def _build_analysis_alerts(
 
     groups, other = _resolve_groups(settings, tickets)
     report_lines = _render_report_lines(groups, other)
+    summary_matrix = _build_summary_matrix(tickets)
 
     base_headline = (
         f":bar_chart: *{project} Estimate Analysis ({scope})* — "
@@ -411,7 +472,8 @@ def _build_analysis_alerts(
         f"*{stats.get('flagged', 0)} flagged*"
     )
 
-    # Everything within tolerance — nothing flagged to show.
+    # Everything within tolerance — nothing flagged to show, but still report the
+    # drift summary so the distribution is always visible.
     if not report_lines:
         message = (
             f"{base_headline}\n\n_All analyzed tickets are within the estimate "
@@ -419,6 +481,7 @@ def _build_analysis_alerts(
         )
         if not stats.get("llm", True):
             message += "\n_⚠ LLM unavailable this run — predictions skipped._"
+        message += summary_matrix
         return [{"channel_id": channel_id, "message": message}]
 
     parts = _chunk_lines(report_lines)
@@ -433,11 +496,14 @@ def _build_analysis_alerts(
             message += (
                 "\n\n_Format: [UNDER/PLUS · Δ% · low/med-conf reason] explanation. "
                 "UNDER = the Original Estimate looks too low, PLUS = too high. "
-                "Within-tolerance tickets are hidden. Predicted for an average "
-                "experienced developer._"
+                "Within-tolerance tickets are hidden. Predicted = time a median "
+                "(50th-percentile) FAANG engineer would need._"
             )
             if not stats.get("llm", True):
                 message += "\n_⚠ LLM unavailable this run — predictions skipped._"
+        # Drift summary matrix appended at the very end (last message).
+        if idx == total:
+            message += summary_matrix
         alerts.append({"channel_id": channel_id, "message": message})
 
     return alerts

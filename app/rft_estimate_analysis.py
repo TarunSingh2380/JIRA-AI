@@ -24,18 +24,20 @@ from app.llm_client import build_llm_client
 LOGGER = logging.getLogger(__name__)
 
 # Bump when the prompt / output shape changes so cached rows regenerate.
-# v3: estimates are now grounded in the Neo4j code graph (complexity/churn/
-# blast-radius of related code), so all cached predictions must regenerate.
-_PROMPT_VERSION = "v3"
+# v3: estimates grounded in the Neo4j code graph.
+# v4: baseline persona changed to a median (50th-percentile) FAANG engineer.
+_PROMPT_VERSION = "v4"
 
 _SYSTEM_PROMPT = (
-    "You are a senior engineering estimator. Estimate how long a single average "
-    "experienced developer (mid-to-senior, familiar with the stack but not this "
-    "exact ticket) would realistically need to fully deliver the work: "
-    "implementation, self-test, code review fixes. Use the ticket details and any "
-    "codebase context provided. Account for complexity, unknowns, integration and "
-    "testing — not just the happy-path coding time. You are also given the team's "
-    "current Original Estimate; compare your realistic estimate against it. "
+    "You are a senior engineering estimator. Estimate how long a single "
+    "median (50th-percentile) software engineer at a top-tier tech company "
+    "(FAANG-level: strong fundamentals and fast, but seeing this specific "
+    "codebase/ticket for the first time) would realistically need to fully "
+    "deliver the work: implementation, self-test, code review fixes. Use the "
+    "ticket details and any codebase context provided. Account for complexity, "
+    "unknowns, integration and testing — not just the happy-path coding time. "
+    "You are also given the team's current Original Estimate (the developer's own "
+    "estimate); compare your realistic FAANG-median estimate against it. "
     "Respond with STRICT JSON only:\n"
     '{"predicted_hours": <number, working hours>, '
     '"confidence": "low|medium|high", '
