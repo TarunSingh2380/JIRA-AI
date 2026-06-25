@@ -408,34 +408,85 @@ def _drift_bucket(abs_pct: float) -> int:
     return len(_DRIFT_BUCKETS) - 1
 
 
+class _Cell:
+    """Accumulates count + total Original Estimate + total predicted time (seconds)."""
+
+    __slots__ = ("count", "est_s", "pred_s")
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.est_s = 0
+        self.pred_s = 0
+
+    def add(self, est_s: int, pred_s: int) -> None:
+        self.count += 1
+        self.est_s += est_s
+        self.pred_s += pred_s
+
+    def merge(self, other: "_Cell") -> None:
+        self.count += other.count
+        self.est_s += other.est_s
+        self.pred_s += other.pred_s
+
+    def render(self) -> str:
+        if self.count == 0:
+            return "0"
+        return f"{self.count} ({_fmt_hours_only(self.est_s)} → {_fmt_hours_only(self.pred_s)})"
+
+
+def _fmt_hours_only(seconds: int) -> str:
+    """Whole-or-one-decimal hours, e.g. '40h' or '27.5h'."""
+    hours = (seconds or 0) / 3600.0
+    return f"{hours:.0f}h" if abs(hours - round(hours)) < 0.05 else f"{hours:.1f}h"
+
+
 def _build_summary_matrix(tickets: list[dict[str, Any]]) -> str:
     """Over/Under × drift-magnitude matrix over all analyzed tickets.
 
     Over  = developer over-estimated (FAANG-median prediction < Original Estimate)
     Under = developer under-estimated (prediction > Original Estimate)
+    Each cell: count (Σ Original Estimate → Σ predicted FAANG-median time).
     """
-    over = [0, 0, 0, 0]
-    under = [0, 0, 0, 0]
+    over = [_Cell() for _ in _DRIFT_BUCKETS]
+    under = [_Cell() for _ in _DRIFT_BUCKETS]
+    any_row = False
     for t in tickets:
         d = t.get("delta_pct")
         if d is None or t.get("flag") in (None, "n/a"):
             continue
+        est_s = int(t.get("estimate_seconds") or 0)
+        ph = t.get("predicted_hours")
+        pred_s = int(round(float(ph) * 3600)) if ph else 0
         idx = _drift_bucket(abs(d))
         if d < 0:
-            over[idx] += 1
+            over[idx].add(est_s, pred_s)
+            any_row = True
         elif d > 0:
-            under[idx] += 1
-    total_over, total_under = sum(over), sum(under)
-    grand = total_over + total_under
-    if grand == 0:
+            under[idx].add(est_s, pred_s)
+            any_row = True
+    if not any_row:
         return ""
+
+    def _row_total(cells: list[_Cell]) -> _Cell:
+        agg = _Cell()
+        for c in cells:
+            agg.merge(c)
+        return agg
+
+    col_totals = []
+    for i in range(len(_DRIFT_BUCKETS)):
+        c = _Cell()
+        c.merge(over[i])
+        c.merge(under[i])
+        col_totals.append(c)
+    grand = _row_total(col_totals)
 
     cols = [b[0] for b in _DRIFT_BUCKETS]
     header = ["", *cols, "Total"]
     body = [
-        ["Over", *(str(x) for x in over), str(total_over)],
-        ["Under", *(str(x) for x in under), str(total_under)],
-        ["Total", *(str(over[i] + under[i]) for i in range(4)), str(grand)],
+        ["Over", *(c.render() for c in over), _row_total(over).render()],
+        ["Under", *(c.render() for c in under), _row_total(under).render()],
+        ["Total", *(c.render() for c in col_totals), grand.render()],
     ]
     widths = [max(len(header[c]), *(len(r[c]) for r in body)) for c in range(len(header))]
 
@@ -448,7 +499,8 @@ def _build_summary_matrix(tickets: list[dict[str, Any]]) -> str:
     return (
         "\n\n*Estimate drift summary* "
         "(Over = developer over-estimated, Under = under-estimated; "
-        "% = how far the FAANG-median prediction is from the Original Estimate):\n"
+        "% = how far the FAANG-median prediction is from the Original Estimate). "
+        "Each cell: count (total Original Estimate → total predicted FAANG time):\n"
         f"```\n{table}\n```"
     )
 
