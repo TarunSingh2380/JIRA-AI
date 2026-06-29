@@ -38,14 +38,38 @@ JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
 JIRA_TIMEOUT = 30
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-# ── Google service account (read org-restricted PRD/TechDoc Google Docs) ──────
+# ── Google credentials for reading org-restricted PRD/TechDoc Google Docs ─────
 # Docs shared only to the organisation are invisible to the public export URL.
-# A service account with domain-wide delegation that *impersonates* an org user
-# can read exactly what that user can — so the org-domain sharing boundary itself
-# enforces "only visible to our organization email". Leave unset to keep the
-# old public-export-only behaviour.
-#   GOOGLE_SA_CREDENTIALS_JSON  path to the SA key file, or the JSON inline.
-#   GOOGLE_IMPERSONATE_USER     org mailbox the SA acts as, e.g. docbot@acme.com.
+# Two authenticated paths are supported, tried in this order:
+#
+#   1. OAuth user credentials (PRIMARY). An authorised org user grants the app
+#      Drive read access once (see scripts/google_oauth_setup.py); the resulting
+#      offline *refresh token* lets Workflow 6 read exactly what that user can,
+#      non-interactively. Use this when the org docs are not reachable via a
+#      service account (no domain-wide delegation, or the SA simply can't see
+#      them — which is the case here).
+#        GOOGLE_OAUTH_CLIENT_ID      OAuth 2.0 client id     (Google Cloud console)
+#        GOOGLE_OAUTH_CLIENT_SECRET  OAuth 2.0 client secret
+#        GOOGLE_OAUTH_REFRESH_TOKEN  the offline refresh token, OR set
+#        GOOGLE_OAUTH_TOKEN_FILE     path to a file holding it (bare token or a
+#                                    JSON blob with a "refresh_token" field).
+#
+#   2. Service account + domain-wide delegation (FALLBACK). A service account
+#      that *impersonates* an org user. Requires Workspace admin to authorise the
+#      SA's client id for the Drive scope.
+#        GOOGLE_SA_CREDENTIALS_JSON  path to the SA key file, or the JSON inline.
+#        GOOGLE_IMPERSONATE_USER     org mailbox the SA acts as, e.g. bot@acme.com.
+#
+# If neither is configured the public-export URL is used (works only for docs
+# shared "anyone with the link").
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_REFRESH_TOKEN = os.environ.get("GOOGLE_OAUTH_REFRESH_TOKEN", "")
+GOOGLE_OAUTH_TOKEN_FILE = os.environ.get("GOOGLE_OAUTH_TOKEN_FILE", "")
+GOOGLE_OAUTH_TOKEN_URI = os.environ.get(
+    "GOOGLE_OAUTH_TOKEN_URI", "https://oauth2.googleapis.com/token"
+)
+
 GOOGLE_SA_CREDENTIALS_JSON = os.environ.get("GOOGLE_SA_CREDENTIALS_JSON", "")
 GOOGLE_IMPERSONATE_USER = os.environ.get("GOOGLE_IMPERSONATE_USER", "")
 GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
@@ -216,24 +240,83 @@ def _normalise_gdoc(url: str) -> str:
     return url
 
 
-# Lazy Drive client singleton. ``_drive_unavailable`` latches once we know the
-# service account is unconfigured / the libs are missing, so we don't retry the
+# Lazy Drive client singleton. ``_drive_unavailable`` latches once we know no
+# authenticated path is configured / the libs are missing, so we don't retry the
 # (failing) import on every link.
 _drive_service: Any = None
 _drive_unavailable = False
 _FALLBACK = "__fallback__"  # sentinel: API path opted out, use public export
 
 
+def _oauth_refresh_token() -> str:
+    """Resolve the OAuth refresh token from the inline env var or token file."""
+    if GOOGLE_OAUTH_REFRESH_TOKEN:
+        return GOOGLE_OAUTH_REFRESH_TOKEN.strip()
+    if GOOGLE_OAUTH_TOKEN_FILE and os.path.isfile(GOOGLE_OAUTH_TOKEN_FILE):
+        try:
+            with open(GOOGLE_OAUTH_TOKEN_FILE, encoding="utf-8") as fh:
+                raw = fh.read().strip()
+        except OSError:
+            log.exception("could not read GOOGLE_OAUTH_TOKEN_FILE %s", GOOGLE_OAUTH_TOKEN_FILE)
+            return ""
+        # Accept either a bare token or a JSON blob with a "refresh_token" field.
+        try:
+            return str(json.loads(raw).get("refresh_token", "")).strip()
+        except (json.JSONDecodeError, AttributeError):
+            return raw
+    return ""
+
+
+def _build_oauth_drive() -> Any:
+    """Build a Drive client from stored OAuth user credentials, or return None if
+    the OAuth path is not fully configured. google-auth refreshes the short-lived
+    access token automatically from the refresh token on each request."""
+    refresh_token = _oauth_refresh_token()
+    if not (GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET and refresh_token):
+        return None
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        client_id=GOOGLE_OAUTH_CLIENT_ID,
+        client_secret=GOOGLE_OAUTH_CLIENT_SECRET,
+        token_uri=GOOGLE_OAUTH_TOKEN_URI,
+        scopes=GOOGLE_SCOPES,
+    )
+    return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def _build_sa_drive() -> Any:
+    """Build a Drive client from a service account with domain-wide delegation,
+    or return None if the SA path is not configured."""
+    if not GOOGLE_SA_CREDENTIALS_JSON or not GOOGLE_IMPERSONATE_USER:
+        return None
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+
+    if os.path.isfile(GOOGLE_SA_CREDENTIALS_JSON):
+        creds = service_account.Credentials.from_service_account_file(
+            GOOGLE_SA_CREDENTIALS_JSON, scopes=GOOGLE_SCOPES
+        )
+    else:
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(GOOGLE_SA_CREDENTIALS_JSON), scopes=GOOGLE_SCOPES
+        )
+    creds = creds.with_subject(GOOGLE_IMPERSONATE_USER)
+    return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
 def _drive():
+    """Cached Drive client, preferring OAuth user credentials and falling back to
+    a service account. Latches unavailable after the first attempt so we don't
+    retry a failing import/config on every link."""
     global _drive_service, _drive_unavailable
     if _drive_service is not None or _drive_unavailable:
         return _drive_service
-    if not GOOGLE_SA_CREDENTIALS_JSON or not GOOGLE_IMPERSONATE_USER:
-        _drive_unavailable = True
-        return None
     try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
+        import googleapiclient.discovery  # noqa: F401 - probe the libs are present
     except ImportError:
         log.warning(
             "google-api-python-client/google-auth not installed; "
@@ -241,21 +324,19 @@ def _drive():
         )
         _drive_unavailable = True
         return None
-    try:
-        if os.path.isfile(GOOGLE_SA_CREDENTIALS_JSON):
-            creds = service_account.Credentials.from_service_account_file(
-                GOOGLE_SA_CREDENTIALS_JSON, scopes=GOOGLE_SCOPES
-            )
-        else:
-            creds = service_account.Credentials.from_service_account_info(
-                json.loads(GOOGLE_SA_CREDENTIALS_JSON), scopes=GOOGLE_SCOPES
-            )
-        creds = creds.with_subject(GOOGLE_IMPERSONATE_USER)
-        _drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
-    except Exception:  # noqa: BLE001 - never block a review on Google setup
-        log.exception("failed to initialise Google Drive client; using public export")
-        _drive_unavailable = True
-    return _drive_service
+    for name, builder in (("oauth", _build_oauth_drive), ("service account", _build_sa_drive)):
+        try:
+            service = builder()
+        except Exception:  # noqa: BLE001 - never block a review on Google setup
+            log.exception("failed to initialise Google Drive client via %s", name)
+            continue
+        if service is not None:
+            log.info("Google Drive client initialised via %s", name)
+            _drive_service = service
+            return _drive_service
+    log.info("no Google Drive credentials configured; using public export fallback")
+    _drive_unavailable = True
+    return None
 
 
 def _fetch_gdoc_via_api(doc_id: str, limit_chars: int) -> tuple[str, str]:
@@ -272,9 +353,9 @@ def _fetch_gdoc_via_api(doc_id: str, limit_chars: int) -> tuple[str, str]:
     except Exception as exc:  # noqa: BLE001 - googleapiclient HttpError + transport
         status = getattr(getattr(exc, "resp", None), "status", None)
         if status in (401, 403):
+            account = GOOGLE_IMPERSONATE_USER or "the authorised OAuth user"
             return "", (
-                f"document is not shared with the review account "
-                f"({GOOGLE_IMPERSONATE_USER})"
+                f"document is not shared with the review account ({account})"
             )
         if status == 404:
             return "", "document not found or not accessible to the review account"

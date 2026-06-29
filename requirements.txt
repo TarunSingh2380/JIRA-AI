@@ -10,6 +10,9 @@ anthropic>=0.40.0
 requests>=2.31.0
 google-api-python-client>=2.120.0
 google-auth>=2.28.0
+# Only needed to run scripts/google_oauth_setup.py (one-time OAuth consent for
+# Workflow 6 doc-review); the running app refreshes tokens via google-auth alone.
+google-auth-oauthlib>=1.2.0
 pyyaml>=6.0
 openpyxl>=3.1.5
 python-docx>=1.1.0
