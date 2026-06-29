@@ -131,9 +131,12 @@ class CommentPostResult:
 def extract_doc_links(description: Any) -> list[DocLink]:
     """Collect PRD/TechDoc links in either form, deduplicated by URL:
 
-      * raw link    — "PRD: https://…" / "TechDoc - https://…" in plain text;
+      * raw link    — "PRD: https://…" / "TechDoc - https://…" in plain text,
+                      including Jira wiki-markup / smart links written as
+                      "Tech Doc : [<url>|<url>|smart-link]";
       * hyperlinked  — the word "TechDoc" (or "PRD:" before it) linking to a URL,
-                      stored in Jira ADF as a `link` mark with an ``href``.
+                      stored in Jira ADF as a `link` mark or an
+                      `inlineCard`/`blockCard` smart-link node.
     """
     links: list[DocLink] = []
     seen: set[str] = set()
@@ -145,15 +148,35 @@ def extract_doc_links(description: Any) -> list[DocLink]:
         seen.add(url)
         links.append(DocLink(label=label, url=url))
 
-    # 1. Hyperlinked text — read link marks out of the ADF tree.
+    # 1. Hyperlinked text / cards — read link marks + smart-link cards out of ADF.
     for label, url in _adf_hyperlinks(description):
         add(label, url)
 
-    # 2. Raw links — regex over the flattened text.
-    for m in LINK_PATTERN.finditer(_description_to_text(description)):
+    # 2. Raw links — regex over the flattened text, after unwrapping Jira wiki
+    #    markup links so a "Tech Doc : [<url>|…|smart-link]" still matches (the
+    #    raw pattern expects the URL right after the label, not a "[").
+    flat = _unwrap_wiki_links(_description_to_text(description))
+    for m in LINK_PATTERN.finditer(flat):
         add(_normalise_label(m.group("label")), m.group("url"))
 
     return links
+
+
+def _unwrap_wiki_links(text: str) -> str:
+    """Replace Jira wiki-markup links — ``[visible|url]``, ``[visible|url|smart-link]``
+    or ``[url]`` — with the bare target URL, so a "Tech Doc : [<url>]" smart link
+    matches the raw LINK_PATTERN (which expects the URL right after the label)."""
+    if "[" not in text:
+        return text
+
+    def repl(m: re.Match) -> str:
+        for part in m.group(1).split("|"):
+            part = part.strip()
+            if part.startswith(("http://", "https://")):
+                return f" {part} "
+        return m.group(0)
+
+    return re.sub(r"\[([^\[\]]+)\]", repl, text)
 
 
 def _adf_hyperlinks(description: Any) -> list[tuple[str, str]]:
@@ -173,12 +196,21 @@ def _adf_hyperlinks(description: Any) -> list[tuple[str, str]]:
 
     def walk(node: Any) -> None:
         if isinstance(node, dict):
-            if node.get("type") == "text":
+            ntype = node.get("type")
+            if ntype == "text":
                 href = ""
                 for mark in node.get("marks", []) or []:
                     if mark.get("type") == "link":
                         href = (mark.get("attrs") or {}).get("href", "") or href
                 tokens.append((node.get("text", ""), href))
+            elif ntype in ("inlineCard", "blockCard"):
+                # Jira smart-links render as a card node with no text; the URL is
+                # on attrs.url (or attrs.data.url). Emit a textless href token so
+                # the preceding "Tech Doc :" label still tags it.
+                attrs = node.get("attrs") or {}
+                url = attrs.get("url") or (attrs.get("data") or {}).get("url", "")
+                if url:
+                    tokens.append(("", url))
             for child in node.get("content", []) or []:
                 walk(child)
         elif isinstance(node, list):
