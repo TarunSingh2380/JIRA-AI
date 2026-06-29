@@ -5,10 +5,15 @@ import { fmtDate } from "../lib/format";
 // Aggregated utilization analytics for the AI Governor system. Reads
 // /graph-admin/utilization; every section is optional (available flag) so the
 // view degrades gracefully when a data source has no table yet.
+//
+// Every stat box (and the ticket-status rows) is clickable: it drills into
+// /graph-admin/utilization/tickets to list the tickets that make up that number,
+// each linking out to Jira.
 export default function Utilization() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [drill, setDrill] = useState(null); // { metric, status, title }
 
   async function load() {
     setError("");
@@ -35,6 +40,9 @@ export default function Utilization() {
   const doc = data?.documentation || {};
   const conv = data?.conversations || {};
 
+  // metric: backend key; status: optional jira_ticket_cache status filter.
+  const openDrill = (metric, title, status = "") => setDrill({ metric, title, status });
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
@@ -48,6 +56,9 @@ export default function Utilization() {
         >
           Refresh
         </button>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          Tip: click any box to see the tickets behind it.
+        </span>
       </div>
 
       {data && !data.database_configured && (
@@ -60,15 +71,15 @@ export default function Utilization() {
       {data?.database_configured && (
         <>
           <div className="stats-grid">
-            <Stat value={tc.total_test_cases} label="Test Cases Built" />
-            <Stat value={tc.tickets_covered} label="Tickets w/ Test Cases" />
-            <Stat value={tc.avg_per_ticket} label="Avg Cases / Ticket" />
-            <Stat value={dr.docs_reviewed} label="PRD/BRD Docs Reviewed" />
-            <Stat value={dr.total_reviews} label="Doc Review Runs" />
-            <Stat value={tr.total} label="State Transitions" />
-            <Stat value={tk.total} label="Tickets Tracked" />
-            <Stat value={doc.generated} label="Docs Generated" />
-            <Stat value={conv.threads} label="Slack Q&A Threads" />
+            <Stat value={tc.total_test_cases} label="Test Cases Built" onClick={() => openDrill("test_cases", "Tickets with test cases")} />
+            <Stat value={tc.tickets_covered} label="Tickets w/ Test Cases" onClick={() => openDrill("test_cases", "Tickets with test cases")} />
+            <Stat value={tc.avg_per_ticket} label="Avg Cases / Ticket" onClick={() => openDrill("test_cases", "Tickets with test cases")} />
+            <Stat value={dr.docs_reviewed} label="PRD/BRD Docs Reviewed" onClick={() => openDrill("doc_reviews", "Tickets with reviewed docs")} />
+            <Stat value={dr.total_reviews} label="Doc Review Runs" onClick={() => openDrill("doc_reviews", "Tickets with reviewed docs")} />
+            <Stat value={tr.total} label="State Transitions" onClick={() => openDrill("transitions", "Tickets with state transitions")} />
+            <Stat value={tk.total} label="Tickets Tracked" onClick={() => openDrill("tickets", "Cached Jira tickets")} />
+            <Stat value={doc.generated} label="Docs Generated" onClick={() => openDrill("documentation", "Generated documents (by repo)")} />
+            <Stat value={conv.threads} label="Slack Q&A Threads" onClick={() => openDrill("conversations", "Tickets with Slack Q&A threads")} />
           </div>
 
           <div
@@ -100,6 +111,7 @@ export default function Utilization() {
             rows={tk.by_status}
             cols={[["status", "Status"], ["count", "Tickets"]]}
             empty={tk.available === false ? "No jira_ticket_cache table found." : "No tickets cached yet."}
+            onRowClick={(row) => openDrill("tickets", `Tickets in “${row.status}”`, row.status)}
           />
 
           <Breakdown
@@ -169,20 +181,39 @@ export default function Utilization() {
 
       {loading && !data && <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 8 }}>Loading…</div>}
       {error && <div style={{ color: "var(--danger)", fontSize: 13, marginTop: 8 }}>{error}</div>}
+
+      {drill && <DrillModal drill={drill} onClose={() => setDrill(null)} />}
     </div>
   );
 }
 
-function Stat({ value, label }) {
+function Stat({ value, label, onClick }) {
   return (
-    <div className="stat-card">
+    <div
+      className="stat-card"
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      title={onClick ? "Click to see the tickets behind this number" : undefined}
+      style={onClick ? { cursor: "pointer" } : undefined}
+    >
       <div className="stat-value">{value ?? 0}</div>
       <div className="stat-label">{label}</div>
     </div>
   );
 }
 
-function Breakdown({ title, rows, cols, empty, hideWhenEmpty }) {
+function Breakdown({ title, rows, cols, empty, hideWhenEmpty, onRowClick }) {
   const list = rows || [];
   if (hideWhenEmpty && list.length === 0) return null;
   return (
@@ -201,7 +232,12 @@ function Breakdown({ title, rows, cols, empty, hideWhenEmpty }) {
           </thead>
           <tbody>
             {list.map((row, i) => (
-              <tr key={i}>
+              <tr
+                key={i}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                style={onRowClick ? { cursor: "pointer" } : undefined}
+                title={onRowClick ? "Click to list these tickets" : undefined}
+              >
                 {cols.map(([key]) => (
                   <td key={key}>{row[key] ?? "—"}</td>
                 ))}
@@ -210,6 +246,141 @@ function Breakdown({ title, rows, cols, empty, hideWhenEmpty }) {
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+// Drill-down overlay: fetches and lists the tickets (or repos) behind a stat.
+function DrillModal({ drill, onClose }) {
+  const [res, setRes] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    const params = new URLSearchParams({ metric: drill.metric });
+    if (drill.status) params.set("status", drill.status);
+    apiFetch(`/graph-admin/utilization/tickets?${params.toString()}`)
+      .then((d) => alive && setRes(d))
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [drill.metric, drill.status]);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const items = res?.items || [];
+  const base = (res?.jira_base_url || "").replace(/\/$/, "");
+  const isRepo = res?.kind === "repo";
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.45)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "6vh 16px",
+        zIndex: 1000,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--card, #fff)",
+          border: "1px solid var(--line)",
+          borderRadius: 12,
+          width: "min(640px, 100%)",
+          maxHeight: "82vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "14px 18px",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{drill.title}</div>
+            {res && (
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                {res.total} {isRepo ? "repos/docs" : "tickets"}
+                {res.truncated ? ` · showing first ${items.length}` : ""}
+              </div>
+            )}
+          </div>
+          <button
+            className="secondary"
+            style={{ width: "auto", minHeight: "unset", padding: "4px 12px", fontSize: 13 }}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div style={{ overflowY: "auto", padding: "8px 0" }}>
+          {loading && <div style={{ color: "var(--muted)", fontSize: 13, padding: "16px 18px" }}>Loading…</div>}
+          {error && <div style={{ color: "var(--danger)", fontSize: 13, padding: "16px 18px" }}>{error}</div>}
+          {!loading && !error && items.length === 0 && (
+            <div style={{ color: "var(--muted)", fontSize: 13, padding: "16px 18px" }}>
+              No tickets found for this metric.
+            </div>
+          )}
+          {!loading &&
+            items.map((it, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 10,
+                  padding: "8px 18px",
+                  borderTop: i === 0 ? "none" : "1px solid var(--line)",
+                  fontSize: 13.5,
+                }}
+              >
+                {isRepo || !base ? (
+                  <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{it.id}</span>
+                ) : (
+                  <a
+                    href={`${base}/browse/${encodeURIComponent(it.id)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontWeight: 600, whiteSpace: "nowrap", color: "var(--accent, #5b5bd6)" }}
+                  >
+                    {it.id}
+                  </a>
+                )}
+                {it.summary && (
+                  <span style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {it.summary}
+                  </span>
+                )}
+                <span style={{ marginLeft: "auto", display: "flex", gap: 8, whiteSpace: "nowrap" }}>
+                  {it.status && <span className="badge">{it.status}</span>}
+                  {it.extra && <span style={{ fontSize: 12, color: "var(--muted)" }}>{it.extra}</span>}
+                </span>
+              </div>
+            ))}
+        </div>
+      </div>
     </div>
   );
 }

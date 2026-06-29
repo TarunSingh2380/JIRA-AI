@@ -373,3 +373,153 @@ def _conversations_section(conn) -> dict[str, Any]:
         "threads": _int(totals.get("threads")),
         "tickets": _int(totals.get("tickets")),
     }
+
+
+# ── metric drill-down (which tickets back each stat) ─────────────────────────
+# Each dashboard box maps to a SQL query that lists the tickets contributing to
+# it. `kind` is "ticket" (jira_ticket_id → Jira link) or "repo" (no ticket, e.g.
+# generated docs are keyed by repo+doc_type, not a ticket). Lists are capped so
+# a click never returns thousands of rows; `truncated`/`total` tell the UI.
+_DRILL_LIMIT = 500
+
+
+def _metric_specs() -> dict[str, dict[str, Any]]:
+    return {
+        # Test Cases Built / Tickets w/ Test Cases / Avg Cases per Ticket all
+        # resolve to the same set: the tickets that have AI-generated cases.
+        "test_cases": {
+            "label": "Tickets with AI-generated test cases",
+            "kind": "ticket",
+            "table": "test_cases",
+            "sql": (
+                "SELECT jira_ticket_id AS id, COUNT(*) AS n "
+                "FROM test_cases GROUP BY jira_ticket_id ORDER BY n DESC"
+            ),
+            "extra": lambda r: f"{_int(r.get('n'))} cases",
+        },
+        "doc_reviews": {
+            "label": "Tickets with reviewed PRD/BRD/Tech docs",
+            "kind": "ticket",
+            "table": "doc_reviews",
+            "sql": (
+                "SELECT jira_ticket_id AS id, COUNT(*) AS docs, "
+                "COALESCE(SUM(review_count),0) AS runs "
+                "FROM doc_reviews GROUP BY jira_ticket_id ORDER BY runs DESC"
+            ),
+            "extra": lambda r: f"{_int(r.get('docs'))} docs, {_int(r.get('runs'))} runs",
+        },
+        "transitions": {
+            "label": "Tickets with recorded state transitions",
+            "kind": "ticket",
+            "table": "ticket_status_history",
+            "sql": (
+                "SELECT jira_ticket_id AS id, COUNT(*) AS n "
+                "FROM ticket_status_history GROUP BY jira_ticket_id ORDER BY n DESC"
+            ),
+            "extra": lambda r: f"{_int(r.get('n'))} moves",
+        },
+        "tickets": {
+            "label": "Cached Jira tickets",
+            "kind": "ticket",
+            "table": "jira_ticket_cache",
+            # Filtered by status when the UI drills from the status table.
+            "sql": (
+                "SELECT ticket_key AS id, status, summary "
+                "FROM jira_ticket_cache {where} ORDER BY ticket_key"
+            ),
+            "filter_col": "status",
+        },
+        "conversations": {
+            "label": "Tickets with Slack Q&A threads",
+            "kind": "ticket",
+            "table": "jira_slack_conversations",
+            "sql": (
+                "SELECT jira_issue_key AS id, COUNT(*) AS n "
+                "FROM jira_slack_conversations GROUP BY jira_issue_key ORDER BY n DESC"
+            ),
+            "extra": lambda r: f"{_int(r.get('n'))} threads",
+        },
+        "documentation": {
+            "label": "Generated documents (by repo)",
+            "kind": "repo",
+            "table": "doc_generation_usage",
+            "sql": (
+                "SELECT repo AS id, doc_type, COUNT(*) AS n "
+                "FROM doc_generation_usage GROUP BY repo, doc_type ORDER BY n DESC"
+            ),
+            "extra": lambda r: f"{r.get('doc_type') or '?'} · {_int(r.get('n'))} jobs",
+        },
+    }
+
+
+def build_metric_drilldown(
+    settings: Settings, metric: str, *, status: str = ""
+) -> dict[str, Any]:
+    """List the tickets (or repos) that make up one dashboard stat box."""
+    specs = _metric_specs()
+    spec = specs.get(metric)
+    base = {
+        "metric": metric,
+        "jira_base_url": settings.jira_base_url,
+        "items": [],
+        "total": 0,
+        "truncated": False,
+    }
+    if spec is None:
+        return {**base, "label": metric, "error": f"unknown metric '{metric}'"}
+    base["label"] = spec["label"]
+    base["kind"] = spec["kind"]
+    if not settings.database_url:
+        return base
+
+    with _connect(settings) as conn:
+        if not _table_exists(conn, spec["table"]):
+            return base
+
+        params: tuple = ()
+        sql = spec["sql"]
+        if "{where}" in sql:
+            if status and spec.get("filter_col"):
+                sql = sql.replace("{where}", f"WHERE {spec['filter_col']} = %s")
+                params = (status,)
+            else:
+                sql = sql.replace("{where}", "")
+
+        rows = _rows(conn, sql, params)
+        base["total"] = len(rows)
+        if len(rows) > _DRILL_LIMIT:
+            base["truncated"] = True
+            rows = rows[:_DRILL_LIMIT]
+
+        extra = spec.get("extra")
+        items = []
+        for r in rows:
+            item: dict[str, Any] = {"id": r.get("id")}
+            if "summary" in r:
+                item["summary"] = r.get("summary")
+            if "status" in r:
+                item["status"] = r.get("status")
+            if extra:
+                item["extra"] = extra(r)
+            items.append(item)
+
+        # Enrich ticket-kind metrics that lack inline summaries with the cached
+        # title/status, so the popover shows what each ticket is about.
+        if spec["kind"] == "ticket" and items and "summary" not in (items[0] or {}):
+            ids = [i["id"] for i in items if i.get("id")]
+            if ids and _table_exists(conn, "jira_ticket_cache"):
+                meta = _rows(
+                    conn,
+                    "SELECT ticket_key, status, summary FROM jira_ticket_cache "
+                    "WHERE ticket_key = ANY(%s)",
+                    (ids,),
+                )
+                by_key = {m["ticket_key"]: m for m in meta}
+                for it in items:
+                    m = by_key.get(it["id"])
+                    if m:
+                        it["summary"] = m.get("summary")
+                        it["status"] = m.get("status")
+
+        base["items"] = items
+    return base

@@ -131,6 +131,7 @@ from app.rft_estimates import (
 )
 from app.app_settings import ensure_app_settings_schema, set_setting
 from app.utilization import (
+    build_metric_drilldown,
     build_utilization_report,
     ensure_status_history_schema,
     record_status_change,
@@ -486,6 +487,21 @@ def graph_admin_utilization(
     except Exception as exc:
         log.exception("/graph-admin/utilization failed")
         raise HTTPException(status_code=500, detail=f"utilization failed: {exc}") from exc
+
+
+@app.get("/graph-admin/utilization/tickets")
+def graph_admin_utilization_tickets(
+    metric: str,
+    status: str = "",
+    _user: CurrentUser = Depends(require_tab("utilization")),
+) -> dict[str, Any]:
+    """Drill-down: the tickets (or repos) that make up one utilization stat box."""
+    log.debug("GET /graph-admin/utilization/tickets metric=%s status=%s", metric, status)
+    try:
+        return build_metric_drilldown(settings, metric, status=status)
+    except Exception as exc:
+        log.exception("/graph-admin/utilization/tickets failed")
+        raise HTTPException(status_code=500, detail=f"drilldown failed: {exc}") from exc
 
 
 # MoM 3 — review PRD / Tech-design docs linked on a ticket; comment the review.
