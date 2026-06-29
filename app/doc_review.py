@@ -371,6 +371,27 @@ def _drive():
     return None
 
 
+def _google_error_reason(exc: Any) -> tuple[str, str]:
+    """Best-effort (reason, message) from a googleapiclient HttpError. ``reason``
+    is the machine code (e.g. "accessNotConfigured"), ``message`` the human text."""
+    content = getattr(exc, "content", None)
+    if isinstance(content, (bytes, bytearray)):
+        content = content.decode("utf-8", "replace")
+    if not isinstance(content, str):
+        return "", str(getattr(exc, "error_details", "") or exc)
+    try:
+        err = (json.loads(content) or {}).get("error", {})
+    except json.JSONDecodeError:
+        return "", content
+    reason = ""
+    errors = err.get("errors")
+    if isinstance(errors, list) and errors:
+        reason = (errors[0] or {}).get("reason", "") or ""
+    if not reason and isinstance(err.get("status"), str):
+        reason = err["status"]  # e.g. "PERMISSION_DENIED"
+    return reason, err.get("message", "") or ""
+
+
 def _fetch_gdoc_via_api(doc_id: str, limit_chars: int) -> tuple[str, str]:
     """Read a Google Doc as text/plain via the Drive API (impersonated SA).
 
@@ -384,6 +405,19 @@ def _fetch_gdoc_via_api(doc_id: str, limit_chars: int) -> tuple[str, str]:
         data = service.files().export(fileId=doc_id, mimeType="text/plain").execute()
     except Exception as exc:  # noqa: BLE001 - googleapiclient HttpError + transport
         status = getattr(getattr(exc, "resp", None), "status", None)
+        reason, message = _google_error_reason(exc)
+        # "accessNotConfigured" / "apiNotActivated" means the Drive API is not
+        # enabled in the OAuth client's Cloud project — a server config problem,
+        # NOT a per-document sharing issue. Don't block the doc on it: log loudly
+        # and defer to the public-export fallback so public docs still work.
+        if reason in ("accessNotConfigured", "apiNotActivated") or "has not been used in project" in message:
+            log.error(
+                "Google Drive API is not enabled for the OAuth client's project — "
+                "enable it at https://console.cloud.google.com/apis/library/drive.googleapis.com "
+                "for the project owning GOOGLE_OAUTH_CLIENT_ID. Detail: %s",
+                message or exc,
+            )
+            return "", _FALLBACK
         if status in (401, 403):
             account = GOOGLE_IMPERSONATE_USER or "the authorised OAuth user"
             return "", (
