@@ -40,9 +40,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--client-secret",
-        required=True,
+        default="",
         help="Path to the OAuth client-secret JSON downloaded from Google Cloud "
-        "console (Desktop app client).",
+        "console (Desktop app client). If omitted, GOOGLE_OAUTH_CLIENT_ID and "
+        "GOOGLE_OAUTH_CLIENT_SECRET are read from the environment / .env instead.",
     )
     parser.add_argument(
         "--out",
@@ -77,7 +78,39 @@ def main() -> int:
         )
         return 2
 
-    flow = InstalledAppFlow.from_client_secrets_file(args.client_secret, scopes=SCOPES)
+    if args.client_secret:
+        flow = InstalledAppFlow.from_client_secrets_file(args.client_secret, scopes=SCOPES)
+    else:
+        # No JSON file given — build the client config from the env vars the app
+        # already uses (load .env first if python-dotenv is around).
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv()
+        except ImportError:
+            pass
+        import os
+
+        client_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+        client_secret = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+        if not (client_id and client_secret):
+            print(
+                "Provide --client-secret <client_secret.json>, or set "
+                "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in the "
+                "environment / .env.",
+                file=sys.stderr,
+            )
+            return 2
+        client_config = {
+            "installed": {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": ["http://localhost"],
+            }
+        }
+        flow = InstalledAppFlow.from_client_config(client_config, scopes=SCOPES)
     # access_type=offline + prompt=consent guarantees a refresh_token is returned.
     # run_local_server is the only supported InstalledAppFlow path now (run_console
     # and the OOB copy/paste flow were removed/disabled by Google). --no-browser
