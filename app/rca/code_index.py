@@ -37,6 +37,13 @@ def _qdrant_client(settings: Settings):
     return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
 
 
+def collection_exists(client, name: str) -> bool:
+    try:
+        return name in {c.name for c in client.get_collections().collections}
+    except Exception:
+        return False
+
+
 def _ensure_collection(client, name: str) -> None:
     from qdrant_client.models import Distance, VectorParams
     existing = {c.name for c in client.get_collections().collections}
@@ -252,13 +259,61 @@ def index_repo(settings: Settings, repo: str, *, force_full: bool = False) -> In
     )
 
 
+def build_index(
+    settings: Settings,
+    repo_names: Optional[list[str]] = None,
+    *,
+    force_full: bool = False,
+    progress: Optional[Any] = None,
+) -> dict[str, Any]:
+    """Build/update the code_chunks index across repos (incremental by default).
+
+    `progress`, if given, is called as progress(done, total, repo, result) after
+    each repo so a job runner can surface live status. Returns a summary.
+    """
+    from app.rca import repos as repo_access
+    repos_to_index = repo_names or repo_access.list_repos(settings)
+    total = len(repos_to_index)
+    results: list[dict[str, Any]] = []
+    chunks_total = 0
+    for i, repo in enumerate(repos_to_index, 1):
+        try:
+            res = index_repo(settings, repo, force_full=force_full)
+            chunks_total += res.chunks_written
+            entry = {"repo": repo, "chunks_written": res.chunks_written,
+                     "skipped": res.skipped, "head": res.head_sha[:10]}
+        except Exception as exc:
+            log.warning("code_chunks build failed for %s: %s", repo, exc)
+            entry = {"repo": repo, "error": str(exc)}
+        results.append(entry)
+        if progress:
+            try:
+                progress(i, total, repo, entry)
+            except Exception:
+                pass
+    log.info("code_chunks build complete: %d repos, %d chunks", total, chunks_total)
+    return {"repos": total, "chunks_written": chunks_total, "results": results}
+
+
 def search(
     settings: Settings,
     query: str,
     repo: Optional[str] = None,
     k: int = 8,
 ) -> list[dict[str, Any]]:
-    """Semantic search over code_chunks. Optionally scope to one repo."""
+    """Semantic search over code_chunks. Optionally scope to one repo.
+
+    Returns [] cleanly (not an error) when the collection has not been built yet,
+    when Ollama is unavailable, or on any query failure — semantic search is one
+    of five retrievers and the pipeline degrades gracefully without it.
+    """
+    client = _qdrant_client(settings)
+    collection = settings.rca_code_chunks_collection
+    if not collection_exists(client, collection):
+        log.info("code_chunks collection '%s' not built yet — semantic search skipped "
+                 "(build it via POST /rca/code-index/build)", collection)
+        return []
+
     embedder = _embedder(settings)
     if not embedder.is_available():
         log.warning("Ollama embedder unavailable — semantic_code_search returns []")
@@ -267,8 +322,6 @@ def search(
     if not vec:
         return []
 
-    client = _qdrant_client(settings)
-    collection = settings.rca_code_chunks_collection
     flt = None
     if repo:
         from qdrant_client.models import Filter, FieldCondition, MatchValue

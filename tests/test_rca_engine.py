@@ -71,6 +71,18 @@ class SynthesisTests(unittest.TestCase):
         self.assertIsNotNone(out["suggested_fix"])
         self.assertTrue(out["suggested_fix"]["human_review_required"])
 
+    def test_user_message_handles_large_observations(self):
+        # Regression: a large tool observation must not break JSON building.
+        big = {"matches": [{"text": "x" * 50} for _ in range(200)]}
+        trace = [{"tool": "grep_codebase", "input": {"repo": "svc"}, "observation": big}]
+        msg = synthesis._user_message({}, {}, [], "found it", trace)
+        self.assertIn("found it", msg)
+        self.assertIn("truncated", msg)  # large observation safely truncated
+
+    def test_truncate_observation_small_passthrough(self):
+        obs = {"count": 1}
+        self.assertEqual(synthesis._truncate_observation(obs, 1500), obs)
+
     def test_bad_json_normalizes_to_empty(self):
         out = synthesis.synthesize(
             self.settings, ticket={}, extracted={}, candidates=[], investigation="",

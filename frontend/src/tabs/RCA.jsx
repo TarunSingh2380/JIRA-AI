@@ -111,6 +111,8 @@ export default function RCA() {
         ) : null}
       </div>
 
+      <CodeIndexPanel />
+
       {error ? <div className="error-banner">{error}</div> : null}
 
       {run ? (
@@ -131,6 +133,57 @@ export default function RCA() {
       ) : null}
 
       {diagnosis ? <Diagnosis markdown={run.markdown} run={run} /> : null}
+    </div>
+  );
+}
+
+// Status + one-click build for the code_chunks semantic index. Building it once
+// enables the semantic retriever (the pipeline still works without it, just with
+// fewer signals). Indexing is incremental thereafter.
+function CodeIndexPanel() {
+  const [status, setStatus] = useState(null);
+  const [building, setBuilding] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const refresh = useCallback(async () => {
+    try {
+      setStatus(await apiFetch("/rca/code-index/status"));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const build = async () => {
+    setBuilding(true);
+    setMsg("");
+    try {
+      await apiFetch("/rca/code-index/build", { method: "POST", body: {} });
+      setMsg("Indexing started in the background — this can take a while on first run.");
+      setTimeout(refresh, 4000);
+    } catch (e) {
+      setMsg(e.message);
+    } finally {
+      setBuilding(false);
+    }
+  };
+
+  const ready = status?.exists;
+  return (
+    <div className="rca-code-index muted" style={{ fontSize: 13, margin: "4px 0 12px" }}>
+      Semantic code index:{" "}
+      {ready ? (
+        <span style={{ color: "#2e7d32" }}>ready ({status.points} chunks)</span>
+      ) : (
+        <span style={{ color: "#b26a00" }}>not built — semantic retriever disabled</span>
+      )}{" "}
+      <button className="link" onClick={build} disabled={building}>
+        {building ? "starting…" : ready ? "rebuild" : "build now"}
+      </button>
+      {msg ? <span> · {msg}</span> : null}
     </div>
   );
 }

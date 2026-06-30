@@ -831,6 +831,64 @@ def rca_download_docx(
     )
 
 
+def _run_code_index_build(job_id: str, repo_names: list[str], force_full: bool) -> None:
+    """Background worker: build the code_chunks semantic index."""
+    from app.rca import code_index
+    job = job_store.get(job_id)
+    if job is None:
+        return
+    job.status = "running"
+    repos_to_index = repo_names or None
+    try:
+        def _progress(done: int, total: int, repo: str, result: dict[str, Any]) -> None:
+            job.totals["repositories"] = total
+            job.progress["repositories_done"] = done
+            job.logs.append({"repo": repo, **{k: v for k, v in result.items() if k != "repo"}})
+
+        summary = code_index.build_index(
+            settings, repos_to_index, force_full=force_full, progress=_progress)
+        job.logs.append({"summary": summary})
+        job.mark_done()
+    except Exception as exc:  # noqa: BLE001
+        log.exception("code_chunks build job %s failed", job_id)
+        job.mark_failed(str(exc))
+
+
+@app.post("/rca/code-index/build")
+def rca_build_code_index(
+    payload: dict[str, Any] | None = None,
+    background_tasks: BackgroundTasks = None,
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> dict[str, Any]:
+    """Build/update the code_chunks semantic index (Phase A). Returns a job_id."""
+    payload = payload or {}
+    repo_names = [str(r) for r in (payload.get("repositories") or [])]
+    force_full = bool(payload.get("force_full", False))
+    job = job_store.create(action="rca_code_index_build")
+    background_tasks.add_task(_run_code_index_build, job.job_id, repo_names, force_full)
+    return {"job_id": job.job_id, "status": job.status,
+            "repositories": repo_names or "all"}
+
+
+@app.get("/rca/code-index/status")
+def rca_code_index_status(
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> dict[str, Any]:
+    """Whether the code_chunks collection exists + per-repo indexed SHAs."""
+    from app.rca import code_index
+    try:
+        client = code_index._qdrant_client(settings)
+        exists = code_index.collection_exists(client, settings.rca_code_chunks_collection)
+        count = 0
+        if exists:
+            count = client.count(settings.rca_code_chunks_collection).count
+    except Exception as exc:  # noqa: BLE001
+        return {"collection": settings.rca_code_chunks_collection, "exists": False,
+                "error": str(exc)}
+    return {"collection": settings.rca_code_chunks_collection, "exists": exists,
+            "points": count}
+
+
 @app.get("/rca/repo-map")
 def rca_repo_map_list(
     _user: CurrentUser = Depends(require_tab("rca")),

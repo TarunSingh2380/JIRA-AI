@@ -132,8 +132,12 @@ def run_investigation(
                 })
         messages.append({"role": "assistant", "content": assistant_content})
 
-        if resp.stop_reason != "tool_use" or not tool_uses:
+        # Retain the latest reasoning so a cap-terminated run still has findings.
+        if text_parts:
             result.summary = "\n".join(text_parts).strip()
+
+        if resp.stop_reason != "tool_use" or not tool_uses:
+            result.summary = "\n".join(text_parts).strip() or result.summary
             result.stop_reason = resp.stop_reason or "end_turn"
             break
 

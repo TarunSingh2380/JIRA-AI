@@ -76,13 +76,27 @@ _SCHEMA_KEYS = (
 )
 
 
+def _truncate_observation(observation: Any, limit: int) -> Any:
+    """Return the observation compactly: the object if small, else a truncated
+    string. Never produces invalid JSON (no slicing of serialized text)."""
+    try:
+        dumped = json.dumps(observation)
+    except (TypeError, ValueError):
+        return str(observation)[:limit]
+    if len(dumped) <= limit:
+        return observation
+    return dumped[:limit] + "…(truncated)"
+
+
 def _user_message(ticket: dict[str, Any], extracted: dict[str, Any],
                   candidates: list[dict[str, Any]], investigation: str,
                   trace: list[dict[str, Any]]) -> str:
-    # trim the trace to the observations that carry signal
+    # trim the trace to the observations that carry signal. Truncate each
+    # observation as a STRING (slicing the JSON text and re-parsing would yield
+    # invalid JSON); keep it as a plain string so the outer dumps stays valid.
     trimmed = [
         {"tool": t.get("tool"), "input": t.get("input"),
-         "observation": json.loads(json.dumps(t.get("observation"))[:1500])}
+         "observation": _truncate_observation(t.get("observation"), 1500)}
         for t in trace[-20:]
     ]
     return (
