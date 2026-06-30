@@ -236,6 +236,44 @@ class Settings:
     smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
     smtp_use_ssl: bool = os.getenv("SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "on"}
 
+    # ── RCA (AI Root Cause Analysis) ────────────────────────────────────────
+    # DIAGNOSIS-ONLY defect investigation. Every step here is read-only with
+    # respect to the codebase: no fixes, patches, branches, or test runs.
+    #
+    # Where the repo working copies live for the read-only git/grep tools.
+    # Repo name == immediate subdirectory name. Defaults to the graph-build
+    # search root so a single checkout serves both pipelines.
+    rca_repo_root: str = os.getenv(
+        "RCA_REPO_ROOT",
+        os.getenv("REPOSITORY_SEARCH_ROOT", "/home/ubuntu"),
+    )
+    # Qdrant collection holding function/class-level code chunks (Phase A).
+    # Distinct from the file-level `codebase_bge_m3` collection.
+    rca_code_chunks_collection: str = os.getenv("RCA_CODE_CHUNKS_COLLECTION", "code_chunks")
+    # Largest source file (bytes) the chunker will parse; mirrors the graph cap.
+    rca_chunk_max_file_bytes: int = int(os.getenv("RCA_CHUNK_MAX_FILE_BYTES", "1500000"))
+    # Models for the extraction (Phase C) and synthesis (Phase G) calls.
+    rca_extract_model: str = os.getenv("RCA_EXTRACT_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-6"))
+    rca_synthesis_model: str = os.getenv("RCA_SYNTHESIS_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-6"))
+    rca_agent_model: str = os.getenv("RCA_AGENT_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-6"))
+    # Hard caps for the agentic investigation loop (Phase F).
+    rca_agent_max_iterations: int = int(os.getenv("RCA_AGENT_MAX_ITERATIONS", "12"))
+    rca_agent_max_tokens: int = int(os.getenv("RCA_AGENT_MAX_TOKENS", "150000"))
+    # Confidence at/above which a diagnosis is auto-delivered; below routes to
+    # the human-review queue (Phase H).
+    rca_confidence_threshold: float = float(os.getenv("RCA_CONFIDENCE_THRESHOLD", "0.6"))
+    # Diagnosis-first: a concrete suggested fix is emitted ONLY at/above this
+    # confidence; below it the resolution names the suspected area only. The fix
+    # is always advisory (human-review), never applied.
+    rca_confidence_threshold_for_fix: float = float(
+        os.getenv("RCA_CONFIDENCE_THRESHOLD_FOR_FIX", "0.95")
+    )
+    # Post the diagnosis back to Jira as a comment. OFF by default (dry-run):
+    # above-threshold runs store the comment but do not call Jira.
+    rca_jira_post_enabled: bool = os.getenv(
+        "RCA_JIRA_POST_ENABLED", "false"
+    ).lower() in {"1", "true", "yes", "on"}
+
     # LLM pricing for document-generation cost estimates (USD per 1M tokens).
     # Defaults are Claude Sonnet 4.x list prices; override per deployment.
     doc_price_input_per_mtok: float = float(os.getenv("DOC_PRICE_INPUT_PER_MTOK", "3.0"))

@@ -15,6 +15,7 @@ import SimilarTickets from "../tabs/SimilarTickets.jsx";
 import Workflows from "../tabs/Workflows.jsx";
 import Utilization from "../tabs/Utilization.jsx";
 import Neo4jGraph from "../tabs/Neo4jGraph.jsx";
+import RCA from "../tabs/RCA.jsx";
 
 // Tab registry — order matches the original UI. "docs" is intentionally absent:
 // the Documentation portal is a separate route, not a tab here.
@@ -28,6 +29,7 @@ const TABS = [
   { key: "workflows", label: "Workflows", Component: Workflows },
   { key: "utilization", label: "Utilization", Component: Utilization },
   { key: "neo4j", label: "Neo4j Graph", Component: Neo4jGraph },
+  { key: "rca", label: "RCA", Component: RCA },
 ];
 
 const DEFAULT_OPTIONS = {

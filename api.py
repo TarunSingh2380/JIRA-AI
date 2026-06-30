@@ -48,6 +48,8 @@ from app.json_utils import parse_model_json, review_status, review_text
 from app.llm_client import build_llm_client
 from app.prompt_store import PromptStore
 from app.repository_discovery import discover_graph_repositories
+from app.rca import localize as rca_localize, rca_document, runner as rca_runner
+from app.rca.store import RCARunStore
 from app.repo_doc_generator import (
     list_doc_repositories,
     list_document_types,
@@ -756,6 +758,105 @@ def neo4j_get_job(
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     return GraphJobResponse(**job.to_dict())
+
+
+# ─── RCA (AI Root Cause Analysis) — diagnosis only ───────────────────────────
+
+# Module-level run store (Postgres-backed + in-memory live mirror), mirroring the
+# job_store pattern. One instance shared across requests.
+rca_run_store = RCARunStore(settings)
+
+
+def _run_rca_pipeline(run_id: str) -> None:
+    """Background worker: execute the read-only RCA pipeline for a run."""
+    run = rca_run_store.get(run_id)
+    if run is None:
+        log.warning("RCA run %s vanished before execution", run_id)
+        return
+    rca_runner.run_pipeline(settings, rca_run_store, run)
+
+
+@app.post("/rca/{jira_key}")
+def rca_start(
+    jira_key: str,
+    background_tasks: BackgroundTasks,
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> dict[str, Any]:
+    """Kick off a root-cause analysis run for a Jira key. Returns run_id."""
+    key = jira_key.strip().upper()
+    if not re.match(r"^[A-Z][A-Z0-9]+-\d+$", key):
+        raise HTTPException(status_code=400, detail=f"Invalid Jira key: {jira_key!r}")
+    run = rca_run_store.create(key)
+    background_tasks.add_task(_run_rca_pipeline, run.run_id)
+    log.info("Enqueued RCA run %s for %s", run.run_id, key)
+    return {"run_id": run.run_id, "jira_key": key, "status": run.status}
+
+
+@app.get("/rca/runs")
+def rca_list_runs(
+    limit: int = 25,
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> dict[str, Any]:
+    return {"runs": rca_run_store.list_recent(limit=limit)}
+
+
+@app.get("/rca/runs/{run_id}")
+def rca_get_run(
+    run_id: str,
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> dict[str, Any]:
+    run = rca_run_store.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"RCA run '{run_id}' not found")
+    data = run.to_dict()
+    if run.document:
+        data["markdown"] = rca_document.render_markdown(run.document)
+    return data
+
+
+@app.get("/rca/runs/{run_id}/document.docx")
+def rca_download_docx(
+    run_id: str,
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> Response:
+    run = rca_run_store.get(run_id)
+    if run is None or not run.document:
+        raise HTTPException(status_code=404, detail="No completed RCA document for this run")
+    data = rca_document.render_docx(run.document)
+    filename = f"RCA-{run.jira_key}.docx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/rca/repo-map")
+def rca_repo_map_list(
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> dict[str, Any]:
+    return {"mappings": rca_localize.list_mappings(settings)}
+
+
+@app.post("/rca/repo-map/seed")
+def rca_repo_map_seed(
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> dict[str, Any]:
+    return rca_localize.seed_map(settings)
+
+
+@app.post("/rca/repo-map")
+def rca_repo_map_upsert(
+    payload: dict[str, Any],
+    _user: CurrentUser = Depends(require_tab("rca")),
+) -> dict[str, Any]:
+    component = str(payload.get("component", "")).strip()
+    repo = str(payload.get("repo", "")).strip()
+    if not component or not repo:
+        raise HTTPException(status_code=400, detail="component and repo are required")
+    rca_localize.upsert_mapping(settings, component, repo,
+                                float(payload.get("weight", 1.0)), source="manual")
+    return {"status": "ok", "component": component, "repo": repo}
 
 
 @app.post("/graph-admin/code-analysis-report")

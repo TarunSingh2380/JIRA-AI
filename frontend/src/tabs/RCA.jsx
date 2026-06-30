@@ -1,0 +1,181 @@
+// RCA tab — enter a Jira Ticket ID, run a read-only Root Cause Analysis, and
+// view the 9-section diagnosis (with confidence, evidence, agent trace) plus a
+// downloadable .docx in the house template.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch, apiDownload } from "../api.js";
+
+const TERMINAL = new Set(["delivered", "low_confidence", "failed"]);
+
+const STATUS_LABEL = {
+  queued: "Queued",
+  investigating: "Investigating codebase…",
+  synthesizing: "Synthesizing diagnosis…",
+  delivered: "Diagnosis ready",
+  low_confidence: "Low confidence — review",
+  failed: "Failed",
+};
+
+export default function RCA() {
+  const [ticketId, setTicketId] = useState("");
+  const [run, setRun] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const pollRef = useRef(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  useEffect(() => stopPolling, []);
+
+  const poll = useCallback((runId) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const data = await apiFetch(`/rca/runs/${runId}`);
+        setRun(data);
+        if (TERMINAL.has(data.status)) {
+          stopPolling();
+          setBusy(false);
+        }
+      } catch (e) {
+        setError(e.message);
+        stopPolling();
+        setBusy(false);
+      }
+    }, 2500);
+  }, []);
+
+  const start = async () => {
+    const key = ticketId.trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
+      setError("Enter a valid Jira key, e.g. OPS-428");
+      return;
+    }
+    setError("");
+    setBusy(true);
+    setRun(null);
+    try {
+      const res = await apiFetch(`/rca/${key}`, { method: "POST" });
+      setRun({ run_id: res.run_id, jira_key: key, status: res.status });
+      poll(res.run_id);
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  };
+
+  const downloadDocx = async () => {
+    if (!run?.run_id) return;
+    try {
+      await apiDownload(`/rca/runs/${run.run_id}/document.docx`, {
+        fallbackName: `RCA-${run.jira_key}.docx`,
+      });
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const status = run?.status;
+  const diagnosis = run?.diagnosis;
+  const confidence = run?.confidence;
+
+  return (
+    <div className="rca-tab">
+      <h2>Root Cause Analysis</h2>
+      <p className="muted">
+        Enter a Jira defect ID. The system investigates the codebase read-only and
+        produces a diagnosis pinpointing the most likely root cause with evidence.
+        It does not generate or apply fixes.
+      </p>
+
+      <div className="rca-controls" style={{ display: "flex", gap: 8, margin: "12px 0" }}>
+        <input
+          value={ticketId}
+          onChange={(e) => setTicketId(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !busy && start()}
+          placeholder="Ticket ID (e.g. OPS-428)"
+          disabled={busy}
+          style={{ flex: "0 0 240px" }}
+        />
+        <button onClick={start} disabled={busy}>
+          {busy ? "Running…" : "Run RCA"}
+        </button>
+        {status === "delivered" || status === "low_confidence" ? (
+          <button onClick={downloadDocx} className="secondary">
+            Download .docx
+          </button>
+        ) : null}
+      </div>
+
+      {error ? <div className="error-banner">{error}</div> : null}
+
+      {run ? (
+        <div className="rca-status" style={{ margin: "8px 0" }}>
+          <strong>{STATUS_LABEL[status] || status}</strong>
+          {typeof confidence === "number" ? (
+            <span> · confidence {Math.round(confidence * 100)}%</span>
+          ) : null}
+          {status === "low_confidence" ? (
+            <span className="muted"> · routed to human review (below threshold)</span>
+          ) : null}
+          {run.error ? <div className="error-banner">{run.error}</div> : null}
+        </div>
+      ) : null}
+
+      {!TERMINAL.has(status) && run ? (
+        <LiveTrace trace={run.agent_trace} />
+      ) : null}
+
+      {diagnosis ? <Diagnosis markdown={run.markdown} run={run} /> : null}
+    </div>
+  );
+}
+
+function LiveTrace({ trace }) {
+  if (!trace || trace.length === 0) {
+    return <p className="muted">Gathering evidence…</p>;
+  }
+  return (
+    <div className="rca-trace">
+      <h4>Investigation ({trace.length} steps)</h4>
+      <ul>
+        {trace.slice(-8).map((t, i) => (
+          <li key={i}>
+            <code>{t.tool}</code>{" "}
+            <span className="muted">{summarizeInput(t.input)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function summarizeInput(input) {
+  if (!input) return "";
+  return Object.entries(input)
+    .map(([k, v]) => `${k}=${String(v).slice(0, 40)}`)
+    .join(", ");
+}
+
+function Diagnosis({ markdown, run }) {
+  const [showTrace, setShowTrace] = useState(false);
+  return (
+    <div className="rca-result">
+      <pre className="rca-markdown" style={{ whiteSpace: "pre-wrap" }}>
+        {markdown || "Diagnosis produced; open the .docx for the full report."}
+      </pre>
+      <button className="link" onClick={() => setShowTrace((s) => !s)}>
+        {showTrace ? "Hide" : "Show"} agent trace ({run.agent_trace?.length || 0} steps)
+      </button>
+      {showTrace ? (
+        <pre className="rca-trace-json" style={{ maxHeight: 300, overflow: "auto" }}>
+          {JSON.stringify(run.agent_trace, null, 2)}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
