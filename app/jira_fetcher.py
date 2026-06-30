@@ -535,6 +535,43 @@ def fetch_project_tickets(
         return tickets
 
 
+def fetch_live_statuses(keys: list[str]) -> dict[str, str]:
+    """Return the *current* Jira status name for each issue key, live from the API.
+
+    Used by the utilization drill-down so displayed statuses aren't stale versus
+    the cache. One JQL `key in (...)` search per batch of 100 keys, requesting
+    only the ``status`` field. Degrades to an empty dict (callers fall back to
+    the cached status) if Jira credentials are missing or the call fails.
+    """
+    keys = [k for k in (keys or []) if k]
+    if not keys or not settings.jira_base_url or not settings.jira_api_token:
+        return {}
+
+    out: dict[str, str] = {}
+    for i in range(0, len(keys), 100):
+        chunk = keys[i : i + 100]
+        jql = "key in (" + ",".join(f'"{k}"' for k in chunk) + ")"
+        next_page_token: Optional[str] = None
+        while True:
+            params: dict[str, Any] = {"jql": jql, "maxResults": 100, "fields": "status"}
+            if next_page_token:
+                params["nextPageToken"] = next_page_token
+            try:
+                data = _jira_get("/rest/api/3/search/jql", params)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("fetch_live_statuses batch failed: %s", exc)
+                break
+            for issue in data.get("issues", []):
+                key = issue.get("key")
+                name = ((issue.get("fields") or {}).get("status") or {}).get("name")
+                if key and name:
+                    out[key] = name
+            next_page_token = data.get("nextPageToken")
+            if data.get("isLast") is True or not next_page_token:
+                break
+    return out
+
+
 def get_cached_ticket_count() -> int:
     """Return the total number of tickets currently in the cache (any age)."""
     if not settings.database_url:

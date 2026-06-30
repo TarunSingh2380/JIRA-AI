@@ -323,6 +323,7 @@ function DrillModal({ drill, onClose }) {
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                 {res.total} {isRepo ? "repos/docs" : "tickets"}
                 {res.truncated ? ` · showing first ${items.length}` : ""}
+                {res.status_source === "live" ? " · live status from Jira" : ""}
               </div>
             )}
           </div>

@@ -522,4 +522,22 @@ def build_metric_drilldown(
                         it["status"] = m.get("status")
 
         base["items"] = items
+
+    # Overlay the *current* status straight from Jira so the list never shows a
+    # stale cached value. Best-effort: on any failure each item keeps its cached
+    # status. Done outside the DB connection block (it's a network call).
+    if spec["kind"] == "ticket" and base["items"]:
+        try:
+            from app.jira_fetcher import fetch_live_statuses
+
+            live = fetch_live_statuses([i["id"] for i in base["items"] if i.get("id")])
+            if live:
+                base["status_source"] = "live"
+                for it in base["items"]:
+                    fresh = live.get(it["id"])
+                    if fresh:
+                        it["status"] = fresh
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("live status overlay failed: %s", exc)
+
     return base

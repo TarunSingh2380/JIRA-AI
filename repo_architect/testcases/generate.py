@@ -83,7 +83,14 @@ _BASE_RULES = dedent("""
       the architecture context. If the ticket asks for behavior the repo
       can't possibly satisfy (e.g., a route that doesn't exist), say so in a
       `## Gaps` section at the end — don't invent code.
-    - Cover happy path, edge cases, and at least one error/failure case.
+    - How many: generate only as many test cases as this specific ticket
+      genuinely needs — never pad to hit a number. Let the scope decide: a
+      small or simple change may need just 2-3 cases; a broad or risky one may
+      need more. Cap at a HARD MAXIMUM of 8 test cases — never exceed 8. Within
+      that budget, always cover the primary happy path, the edge cases that
+      actually matter for this change, and at least one reachable error/failure
+      case. If fewer than 8 cases fully cover the behavior, stop there; do not
+      invent low-value or redundant cases just to reach the maximum.
     - Authentication, authorization, validation, and persistence are common
       misses — include them when relevant.
     - Be concrete: real payload values, real assertions. No placeholders like
@@ -101,14 +108,17 @@ _BASE_RULES = dedent("""
 
 
 _BUG_RULES = dedent("""
-    Bug-ticket coverage requirements:
+    Bug-ticket coverage (apply each only when it genuinely fits this bug, and
+    still respect the hard maximum of 8 cases):
     - Include one reproduction test for the current failing behavior.
     - Include one regression test proving the fix remains in place.
     - Include one fix-verification positive test.
-    - Include negative validation coverage for malformed/missing inputs.
+    - Include negative validation coverage for malformed/missing inputs when
+      the bug involves input handling.
     - Include auth/security coverage when the endpoint is protected.
     - Include a data-boundary test when the bug involves filtering, dates,
       status flags, pagination, permissions, or persistence.
+    Skip any bullet that doesn't apply rather than forcing an artificial test.
 """).strip()
 
 
@@ -153,8 +163,9 @@ _STYLE_INSTRUCTIONS = {
 
     "plain": dedent("""
         Output format: conventional QA test cases, not BDD/Gherkin.
-        Generate 6-8 production-ready test cases. Each item must use this
-        exact structure:
+        Generate production-ready test cases following the "How many" rule
+        above — as few or as many as the ticket needs, never more than 8.
+        Each item must use this exact structure:
 
         ### TC-01: <short descriptive title>
         - Type: Positive | Negative | Edge | Regression | Security | Reproduction
