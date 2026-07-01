@@ -13,6 +13,7 @@ import Logs from "../tabs/Logs.jsx";
 import TestCases from "../tabs/TestCases.jsx";
 import SimilarTickets from "../tabs/SimilarTickets.jsx";
 import Workflows from "../tabs/Workflows.jsx";
+import ChannelHealth from "../tabs/ChannelHealth.jsx";
 import Utilization from "../tabs/Utilization.jsx";
 import Neo4jGraph from "../tabs/Neo4jGraph.jsx";
 import RCA from "../tabs/RCA.jsx";
@@ -27,6 +28,7 @@ const TABS = [
   { key: "testcases", label: "Test Cases", Component: TestCases },
   { key: "similar", label: "Similar Tickets", Component: SimilarTickets },
   { key: "workflows", label: "Workflows", Component: Workflows },
+  { key: "channels", label: "Channel Health", Component: ChannelHealth },
   { key: "utilization", label: "Utilization", Component: Utilization },
   { key: "neo4j", label: "Neo4j Graph", Component: Neo4jGraph },
   { key: "rca", label: "RCA", Component: RCA },

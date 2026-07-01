@@ -427,3 +427,15 @@ class N8nMonitorResponse(BaseModel):
     executions_sampled: int = 0
     workflows: list[N8nWorkflowRow] = []
     totals: N8nMonitorTotals = N8nMonitorTotals()
+
+
+class ChannelHealthCheckRequest(BaseModel):
+    channel_ids: list[str] | None = Field(
+        None,
+        description="Specific channel IDs to probe. When omitted, the full "
+        "discovered inventory (role map + assignee DMs + env channels) is swept.",
+    )
+    message: str | None = Field(
+        None,
+        description="Override the probe message text sent to each channel.",
+    )

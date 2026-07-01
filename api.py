@@ -103,7 +103,9 @@ from app.schemas import (
     TransitionRecordRequest,
     TransitionRecordResponse,
     RftSprintSettingRequest,
+    ChannelHealthCheckRequest,
 )
+from app.channel_health import ChannelHealthChecker, ChannelHealthError
 from app.similar_ticket_finder import SimilarTicketFinder
 from app.slack_client import SlackClient
 from app.slack_review_workflow import SlackReviewWorkflow
@@ -1394,6 +1396,53 @@ def graph_admin_n8n_workflows(
         log.warning("n8n monitor unavailable: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc))
     return N8nMonitorResponse(**data)
+
+
+# ─── Slack channel health ─────────────────────────────────────────────────────
+# Discover every channel ID the Slack digests fan out to (role map + assignee
+# DMs + env-pinned channels) and, on demand, probe each one to flag the IDs the
+# bot can't post to (e.g. `not_in_channel`) — the failure that surfaces as a red
+# Slack node in n8n without naming the offending channel.
+@app.get("/graph-admin/channel-health/channels")
+def graph_admin_channel_health_channels(
+    _user: CurrentUser = Depends(require_tab("channels")),
+) -> dict[str, Any]:
+    """List the known channel IDs and their sources without sending anything."""
+    log.debug("GET /graph-admin/channel-health/channels")
+    try:
+        channels = ChannelHealthChecker(settings=settings).discover()
+    except ChannelHealthError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/graph-admin/channel-health/channels failed")
+        raise HTTPException(status_code=500, detail=f"channel discovery failed: {exc}") from exc
+    return {
+        "configured": bool(settings.slack_bot_token),
+        "count": len(channels),
+        "channels": channels,
+    }
+
+
+@app.post("/graph-admin/channel-health/check")
+def graph_admin_channel_health_check(
+    request: ChannelHealthCheckRequest,
+    _user: CurrentUser = Depends(require_tab("channels")),
+) -> dict[str, Any]:
+    """Probe each channel with a test message and flag the failures."""
+    log.info(
+        "POST /graph-admin/channel-health/check ids=%s",
+        len(request.channel_ids) if request.channel_ids else "all",
+    )
+    try:
+        return ChannelHealthChecker(settings=settings).check(
+            channel_ids=request.channel_ids,
+            message=request.message,
+        )
+    except ChannelHealthError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/graph-admin/channel-health/check failed")
+        raise HTTPException(status_code=500, detail=f"channel health check failed: {exc}") from exc
 
 
 @app.get("/graph-admin/jira-ticket-insights")

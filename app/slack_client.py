@@ -23,9 +23,69 @@ class SlackPostResult:
     raw: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SlackProbeResult:
+    """Outcome of a single non-raising post attempt used for health checks."""
+
+    channel_id: str
+    ok: bool
+    error: str | None
+    message_ts: str | None
+    raw: dict[str, Any]
+
+
 class SlackClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+
+    def probe_channel(self, *, channel_id: str, text: str) -> SlackProbeResult:
+        """Attempt a chat.postMessage and report success/failure without raising.
+
+        Unlike :meth:`post_message`, this never raises on a Slack API error so a
+        caller can sweep many channels and flag the ones that fail (e.g.
+        ``not_in_channel``, ``channel_not_found``). Used by the Channel Health
+        check exposed in the admin panel.
+        """
+        if not self.settings.slack_bot_token:
+            return SlackProbeResult(
+                channel_id=channel_id,
+                ok=False,
+                error="slack_bot_token_not_configured",
+                message_ts=None,
+                raw={"ok": False, "reason": "SLACK_BOT_TOKEN is not configured"},
+            )
+
+        try:
+            response = requests.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={
+                    "Authorization": f"Bearer {self.settings.slack_bot_token}",
+                    "Content-Type": "application/json; charset=utf-8",
+                },
+                json={"channel": channel_id, "text": text},
+                timeout=self.settings.external_request_timeout_seconds,
+            )
+            data = response.json()
+        except requests.RequestException as exc:
+            log.warning("Slack probe request failed for channel=%s: %s", channel_id, exc)
+            return SlackProbeResult(
+                channel_id=channel_id,
+                ok=False,
+                error=f"request_error: {exc}",
+                message_ts=None,
+                raw={"ok": False, "exception": str(exc)},
+            )
+
+        ok = bool(data.get("ok"))
+        if not ok:
+            log.info("Slack probe failed channel=%s error=%s", channel_id, data.get("error"))
+        return SlackProbeResult(
+            channel_id=channel_id,
+            ok=ok,
+            error=None if ok else str(data.get("error") or "unknown_error"),
+            message_ts=data.get("ts") if ok else None,
+            raw=data,
+        )
 
     def post_message(self, *, channel_id: str, text: str, thread_ts: str | None = None) -> SlackPostResult:
         if not self.settings.slack_bot_token:
