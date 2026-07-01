@@ -21,7 +21,9 @@ services:
       # hung/RAM-starved Ollama into a 10-minute "stuck" RCA instead of a quick
       # fallback. Keep this low so embeds fail fast and callers degrade.
       OLLAMA_EMBED_TIMEOUT_SECONDS: 60
-      OLLAMA_EMBED_BATCH_SIZE: 32
+      # Smaller batches finish well within the 60s window on this host's Ollama.
+      # 32-text batches were intermittently exceeding it; 8 gives ~4x headroom.
+      OLLAMA_EMBED_BATCH_SIZE: 8
       OLLAMA_NUM_PARALLEL: 4
       # Serialize embed requests — parallel calls compound RAM pressure on a
       # single host Ollama and make timeouts more likely, not faster.
