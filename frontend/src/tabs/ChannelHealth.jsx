@@ -1,18 +1,19 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../api";
+import { fmtDate } from "../lib/format";
 
 // Slack channel health: discover every channel ID the digests post to
-// (role map + assignee DMs + env-pinned channels) and probe each one with a
-// test message, flagging the IDs the bot can't post to (e.g. not_in_channel) —
-// the failure that shows up as a red Slack node in n8n without naming the ID.
+// (role map + assignee DMs + env-pinned channels), show who's behind each ID,
+// and probe each with a test message — flagging the ones the bot can't post to
+// (e.g. not_in_channel). Probe results are persisted server-side, so the last
+// known status shows immediately on load; "Run health check" refreshes them.
 export default function ChannelHealth() {
   const [channels, setChannels] = useState([]);
   const [configured, setConfigured] = useState(true);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
-  const [summary, setSummary] = useState(null);
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState({}); // channel_id -> fresh probe result
 
   async function loadChannels() {
     setError("");
@@ -36,20 +37,21 @@ export default function ChannelHealth() {
   async function runCheck(channelIds) {
     setError("");
     setChecking(true);
-    setResults(null);
-    setSummary(null);
     try {
       const res = await apiFetch("/graph-admin/channel-health/check", {
         method: "POST",
         body: channelIds ? { channel_ids: channelIds } : {},
       });
-      setResults(res.results || []);
-      setSummary({
-        checked: res.checked,
-        ok: res.ok_count,
-        failed: res.failed_count,
-        configured: res.configured,
+      // Merge fresh results by channel_id (a targeted retest updates one row).
+      setResults((prev) => {
+        const next = { ...prev };
+        (res.results || []).forEach((r) => {
+          next[r.channel_id] = r;
+        });
+        return next;
       });
+      // Reload so persisted last_checked_at / status stay in sync.
+      loadChannels();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -57,11 +59,30 @@ export default function ChannelHealth() {
     }
   }
 
-  // Merge probe results back onto the discovered channel rows for display.
-  const resultMap = {};
-  (results || []).forEach((r) => {
-    resultMap[r.channel_id] = r;
-  });
+  // Effective status for a row: a fresh probe from this session wins; otherwise
+  // fall back to the persisted last_status from the server.
+  function rowStatus(c) {
+    const fresh = results[c.channel_id];
+    if (fresh) {
+      return { ok: fresh.ok, error: fresh.error, checkedAt: null, live: true };
+    }
+    if (c.last_status) {
+      return {
+        ok: c.last_status === "ok",
+        error: c.last_error,
+        checkedAt: c.last_checked_at,
+        live: false,
+      };
+    }
+    return null;
+  }
+
+  const total = channels.length;
+  const probed = channels.filter((c) => rowStatus(c)).length;
+  const failed = channels.filter((c) => {
+    const s = rowStatus(c);
+    return s && !s.ok;
+  }).length;
 
   return (
     <div>
@@ -77,6 +98,7 @@ export default function ChannelHealth() {
         <span style={{ fontSize: 13, color: "var(--muted)" }}>
           Sends a test message to every Slack channel/DM the digests post to and
           flags the ones the bot can’t reach (e.g. <code>not_in_channel</code>).
+          Last result is remembered across reloads.
         </span>
         <button
           style={{ width: "auto", minHeight: "unset", padding: "6px 16px", fontSize: 13 }}
@@ -98,49 +120,58 @@ export default function ChannelHealth() {
       {!configured && (
         <div style={{ color: "var(--muted)", fontSize: 14, padding: "12px 0" }}>
           <code>SLACK_BOT_TOKEN</code> is not configured — discovery works but
-          probes will all fail until the bot token is set in the server
-          environment.
+          probes will all fail until a bot token (<code>xoxb-…</code>) with{" "}
+          <code>chat:write</code> is set in the server environment.
         </div>
       )}
 
-      {summary && (
-        <div className="stats-grid" style={{ marginBottom: 14 }}>
-          <Stat value={summary.checked} label="Probed" />
-          <Stat value={summary.ok} label="Reachable" />
-          <Stat value={summary.failed} label="Failed" danger={summary.failed > 0} />
-        </div>
-      )}
+      <div className="stats-grid" style={{ marginBottom: 14 }}>
+        <Stat value={total} label="Channels" />
+        <Stat value={probed} label="Probed" />
+        <Stat value={failed} label="Failed" danger={failed > 0} />
+      </div>
 
       <table>
         <thead>
           <tr>
-            <th style={{ width: "22%" }}>Channel ID</th>
-            <th style={{ width: "34%" }}>Sources</th>
-            <th style={{ width: "14%" }}>Status</th>
-            <th style={{ width: "20%" }}>Error</th>
+            <th style={{ width: "18%" }}>Channel ID</th>
+            <th style={{ width: "20%" }}>Name</th>
+            <th style={{ width: "22%" }}>Sources</th>
+            <th style={{ width: "9%" }}>Status</th>
+            <th style={{ width: "15%" }}>Error</th>
+            <th style={{ width: "10%" }}>Last checked</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody>
           {channels.length === 0 ? (
             <tr>
-              <td colSpan={5} style={{ color: "var(--muted)" }}>
+              <td colSpan={7} style={{ color: "var(--muted)" }}>
                 {loading ? "Loading…" : "No channel IDs discovered."}
               </td>
             </tr>
           ) : (
             channels.map((c) => {
-              const r = resultMap[c.channel_id];
+              const s = rowStatus(c);
+              const names = c.names || [];
+              const emails = c.emails || [];
               return (
                 <tr key={c.channel_id}>
                   <td style={{ fontFamily: "monospace", fontSize: 12 }}>{c.channel_id}</td>
+                  <td style={{ fontSize: 12 }}>
+                    {names.length ? (
+                      <span title={emails.join(", ")}>{names.join(", ")}</span>
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
+                  </td>
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>
                     {(c.sources || []).join(", ")}
                   </td>
                   <td>
-                    {!r ? (
+                    {!s ? (
                       <span className="badge">—</span>
-                    ) : r.ok ? (
+                    ) : s.ok ? (
                       <span className="badge ok">OK</span>
                     ) : (
                       <span className="badge err">Failed</span>
@@ -149,11 +180,14 @@ export default function ChannelHealth() {
                   <td
                     style={{
                       fontSize: 12,
-                      color: r && !r.ok ? "var(--danger)" : "var(--muted)",
-                      fontFamily: r && !r.ok ? "monospace" : undefined,
+                      color: s && !s.ok ? "var(--danger)" : "var(--muted)",
+                      fontFamily: s && !s.ok ? "monospace" : undefined,
                     }}
                   >
-                    {r && !r.ok ? r.error : "—"}
+                    {s && !s.ok ? s.error : "—"}
+                  </td>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>
+                    {s && s.checkedAt ? fmtDate(s.checkedAt) : s && s.live ? "just now" : "—"}
                   </td>
                   <td>
                     <button

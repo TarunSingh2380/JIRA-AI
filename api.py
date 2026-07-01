@@ -174,6 +174,12 @@ async def lifespan(_app: FastAPI):
     except Exception:  # noqa: BLE001
         log.exception("RFT estimate predictions schema initialization failed")
     try:
+        from app.channel_health import ensure_channel_health_schema
+
+        ensure_channel_health_schema(settings)
+    except Exception:  # noqa: BLE001
+        log.exception("Channel-health schema initialization failed")
+    try:
         yield
     finally:
         shutdown_repo_tree()
