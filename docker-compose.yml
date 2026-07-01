@@ -17,10 +17,15 @@ services:
 
       # IMPORTANT — these point at host services
       OLLAMA_URL: http://host.docker.internal:11434
-      OLLAMA_EMBED_TIMEOUT_SECONDS: 600
+      # Fail fast: a healthy bge-m3 embed returns in <1s. A 600s ceiling turns a
+      # hung/RAM-starved Ollama into a 10-minute "stuck" RCA instead of a quick
+      # fallback. Keep this low so embeds fail fast and callers degrade.
+      OLLAMA_EMBED_TIMEOUT_SECONDS: 60
       OLLAMA_EMBED_BATCH_SIZE: 32
       OLLAMA_NUM_PARALLEL: 4
-      OLLAMA_EMBED_CONCURRENCY: 4
+      # Serialize embed requests — parallel calls compound RAM pressure on a
+      # single host Ollama and make timeouts more likely, not faster.
+      OLLAMA_EMBED_CONCURRENCY: 1
       CODEBASE_EMBED_MAX_CHARS: 2000
       CODEBASE_EMBED_MAX_FILES_PER_REPO: 1000
       QDRANT_URL: http://host.docker.internal:6333
