@@ -314,6 +314,16 @@ def search(
                  "(build it via POST /rca/code-index/build)", collection)
         return []
 
+    # An existing-but-empty collection (e.g. every embed timed out during the
+    # build) has nothing to match — skip the query embed so RCA doesn't stall on
+    # a slow/hung Ollama for zero possible results.
+    try:
+        if client.count(collection_name=collection, exact=False).count == 0:
+            log.info("code_chunks collection '%s' is empty — semantic search skipped", collection)
+            return []
+    except Exception as exc:
+        log.debug("code_chunks count check failed (continuing): %s", exc)
+
     embedder = _embedder(settings)
     if not embedder.is_available():
         log.warning("Ollama embedder unavailable — semantic_code_search returns []")
