@@ -37,32 +37,39 @@ def _similar_ticket_keys(settings: Settings, summary: str, description: str,
         return []
 
 
-def _ownership_from_blame(settings: Settings, root_cause: dict[str, Any]) -> dict[str, Any]:
-    """Derive Original Developer from git blame on the root-cause lines."""
-    repo, path, lines = root_cause.get("repo"), root_cause.get("file"), root_cause.get("lines")
+def _append_blame_evidence(settings: Settings, diagnosis: dict[str, Any]) -> None:
+    """Add git history for the root-cause lines as a NEUTRAL evidence fact.
+
+    RULE 9: git blame shows who last changed a line, not who is responsible — so
+    this records the commit that last touched the suspected lines as supporting
+    evidence, without attributing blame to a person. Skipped when the run is
+    undetermined/insufficient or the lines aren't localized.
+    """
+    root_cause = str(diagnosis.get("root_cause") or "")
+    if root_cause in ("Undetermined.",) or root_cause.startswith("INSUFFICIENT DATA"):
+        return
+    loc = diagnosis.get("root_cause_location") or {}
+    repo, path, lines = loc.get("repo"), loc.get("file"), loc.get("lines")
     if not (repo and path and lines):
-        return {}
+        return
     try:
         start, _, end = str(lines).partition("-")
         s = int(start.strip())
         e = int(end.strip()) if end.strip() else s
         blame = repo_access.git_blame(settings, repo, path, s, e)
     except Exception:
-        return {}
+        return
     if not blame:
-        return {}
-    # most frequent author across the blamed lines
-    authors: dict[str, int] = {}
-    for b in blame:
-        a = b.get("author") or ""
-        if a:
-            authors[a] = authors.get(a, 0) + 1
-    if not authors:
-        return {}
-    original = max(authors, key=authors.get)
+        return
     last = blame[-1]
-    return {"original_developer": original, "last_commit_sha": last.get("sha"),
-            "blame_lines": f"{path}:{s}-{e}"}
+    sha = str(last.get("sha") or "")[:10]
+    if not sha:
+        return
+    diagnosis.setdefault("evidence", []).append({
+        "type": "git_history",
+        "detail": f"Suspected lines were last modified in commit {sha}",
+        "ref": f"{path}:{s}-{e}",
+    })
 
 
 def run_pipeline(
@@ -130,7 +137,7 @@ def run_pipeline(
             investigation=agent_res.summary, trace=run.agent_trace,
             llm_client=synthesis_client,
         )
-        diagnosis["ownership"] = _ownership_from_blame(settings, diagnosis.get("root_cause", {}))
+        _append_blame_evidence(settings, diagnosis)
         run.diagnosis = diagnosis
         run.confidence = diagnosis.get("confidence")
 

@@ -1,6 +1,6 @@
 // RCA tab — enter a Jira Ticket ID, run a read-only Root Cause Analysis, and
-// view the 9-section diagnosis (with confidence, evidence, agent trace) plus a
-// downloadable .docx in the house template.
+// view the evidence-first diagnosis (classification, High/Med/Low confidence,
+// facts/inferences/unknowns, evidence, agent trace) plus a downloadable .docx.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, apiDownload } from "../api.js";
 
@@ -81,7 +81,8 @@ export default function RCA() {
 
   const status = run?.status;
   const diagnosis = run?.diagnosis;
-  const confidence = run?.confidence;
+  const confidenceLabel = diagnosis?.confidence_label;
+  const classification = diagnosis?.issue_classification;
 
   return (
     <div className="rca-tab">
@@ -118,11 +119,10 @@ export default function RCA() {
       {run ? (
         <div className="rca-status" style={{ margin: "8px 0" }}>
           <strong>{STATUS_LABEL[status] || status}</strong>
-          {typeof confidence === "number" ? (
-            <span> · confidence {Math.round(confidence * 100)}%</span>
-          ) : null}
+          {classification ? <span> · {classification}</span> : null}
+          {confidenceLabel ? <span> · confidence {confidenceLabel}</span> : null}
           {status === "low_confidence" ? (
-            <span className="muted"> · routed to human review (below threshold)</span>
+            <span className="muted"> · routed to human review (low confidence)</span>
           ) : null}
           {run.error ? <div className="error-banner">{run.error}</div> : null}
         </div>

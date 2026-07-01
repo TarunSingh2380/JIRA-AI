@@ -5,59 +5,81 @@ import unittest
 
 from app.rca import eval as rca_eval
 from app.rca import rca_document as D
+from app.rca import synthesis
 from app.rca.eval import TicketLabel
 
+_NUMERIC = {"High": 0.95, "Medium": 0.75, "Low": 0.3}
 
-def _diag(confidence, suggested_fix=None):
+
+def _diag(confidence_label, recommended_fix=None, *, insufficient=False,
+          contributing_factors=None, evidence=None):
     return {
-        "root_cause": {"repo": "svc", "file": "a.py", "symbol": "f", "lines": "1-9"},
-        "what_happened": "wh", "explanation": "ex", "five_whys": ["w1", "w2"],
-        "final_root_cause": "frc", "confidence": confidence,
-        "alternative_hypotheses": [], "evidence": [{"type": "t", "detail": "d"}],
-        "impact": {"affected": "users", "impact_type": "x", "description": "y"},
-        "expectation_vs_reality": {"development": {"expected": "e", "actual": "a", "gap": "g"}},
-        "contributing_factors": {"code_issue": "ci", "configuration_issue": "Not applicable"},
-        "preventive_actions": ["pa"], "lessons_learned": {"do_differently": "dd"},
-        "suggested_fix": suggested_fix,
-        "ownership": {"original_developer": "Dev A", "blame_lines": "a.py:1-9", "last_commit_sha": "deadbeef"},
+        "insufficient_data": insufficient,
+        "issue_classification": "Runtime Bug",
+        "confidence_label": confidence_label,
+        "confidence": _NUMERIC[confidence_label],
+        "facts": ["f1", "f2"],
+        "inferences": ["i1"],
+        "unknowns": ["u1"],
+        "root_cause": (synthesis.INSUFFICIENT_DATA_MESSAGE if insufficient
+                       else "Null deref in a.py because f() returns None."),
+        "root_cause_location": {"repo": "svc", "file": "a.py", "symbol": "f", "lines": "1-9"},
+        "evidence": evidence if evidence is not None else [
+            {"type": "code", "detail": "d", "ref": "a.py:5"},
+            {"type": "log", "detail": "e", "ref": "log:1"},
+        ],
+        "contributing_factors": contributing_factors or [],
+        "recommended_fix": recommended_fix,
     }
 
 
 class DocumentTests(unittest.TestCase):
-    def test_area_only_resolution_when_no_fix(self):
-        doc = D.build_document({"key": "OPS-1", "summary": "s"}, {}, _diag(0.7))
+    def test_diagnosis_only_when_no_fix(self):
+        doc = D.build_document({"key": "OPS-1", "summary": "s"}, {}, _diag("Medium"))
         md = D.render_markdown(doc)
-        self.assertIn("## 7. Resolution", md)
-        self.assertIn("Diagnosis-only", md)
-        self.assertNotIn("```", md)  # no fix code block
+        self.assertIn("## RECOMMENDED FIX", md)
+        self.assertIn(synthesis.NO_FIX_MESSAGE, md)
 
-    def test_suggested_fix_rendered_with_review_note(self):
-        fix = {"description": "pass customerID", "code": "waiverAmt(leadID, customerID)",
-               "confidence_basis": "read the call site", "human_review_required": True}
-        doc = D.build_document({"key": "OPS-2", "summary": "s"}, {}, _diag(0.97, fix))
+    def test_fix_rendered_at_high(self):
+        doc = D.build_document({"key": "OPS-2", "summary": "s"}, {},
+                               _diag("High", "Guard against a None return from f()."))
         md = D.render_markdown(doc)
-        self.assertIn("waiverAmt(leadID, customerID)", md)
-        self.assertIn("requires human review", md.lower())
+        self.assertIn("Guard against a None return from f().", md)
+        self.assertNotIn(synthesis.NO_FIX_MESSAGE, md)
 
-    def test_all_nine_sections_present(self):
-        doc = D.build_document({"key": "OPS-3", "summary": "s"}, {}, _diag(0.8))
+    def test_output_format_sections(self):
+        doc = D.build_document({"key": "OPS-3", "summary": "s"}, {}, _diag("High"))
         md = D.render_markdown(doc)
-        for i, name in enumerate([
-            "Issue Summary", "Impact Assessment", "Ownership", "Root Cause Analysis",
-            "Expectation vs Reality", "Contributing Factors", "Resolution",
-            "Preventive Actions", "Lessons Learned"], 1):
-            self.assertIn(f"## {i}. {name}", md)
-        # "Not applicable" factor is suppressed
-        self.assertNotIn("Configuration Issue", md)
-        # ownership from blame surfaces
-        self.assertIn("Dev A", md)
+        self.assertIn("**Issue Classification:** Runtime Bug", md)
+        self.assertIn("**Confidence:** High", md)
+        for heading in ["## FACTS", "## INFERENCES", "## UNKNOWNS",
+                        "## ROOT CAUSE", "## EVIDENCE", "## RECOMMENDED FIX"]:
+            self.assertIn(heading, md)
+        # No supported contributing factors → section is omitted.
+        self.assertNotIn("## CONTRIBUTING FACTORS", md)
+        # Evidence ref is surfaced.
+        self.assertIn("a.py:5", md)
+
+    def test_contributing_factors_shown_when_present(self):
+        doc = D.build_document({"key": "OPS-3b", "summary": "s"}, {},
+                               _diag("High", contributing_factors=["No regression test covered f()"]))
+        md = D.render_markdown(doc)
+        self.assertIn("## CONTRIBUTING FACTORS", md)
+        self.assertIn("No regression test covered f()", md)
+
+    def test_insufficient_data_only_states_that(self):
+        doc = D.build_document({"key": "OPS-5", "summary": "s"}, {}, _diag("Low", insufficient=True))
+        md = D.render_markdown(doc)
+        self.assertIn(synthesis.INSUFFICIENT_DATA_MESSAGE, md)
+        self.assertNotIn("## FACTS", md)          # no fabricated sections
+        self.assertNotIn("## RECOMMENDED FIX", md)
 
     def test_render_docx_bytes(self):
         try:
             import docx  # noqa: F401
         except ImportError:
             self.skipTest("python-docx not installed in this environment")
-        doc = D.build_document({"key": "OPS-4", "summary": "s"}, {}, _diag(0.8))
+        doc = D.build_document({"key": "OPS-4", "summary": "s"}, {}, _diag("Medium"))
         data = D.render_docx(doc)
         self.assertTrue(data.startswith(b"PK"))  # .docx is a zip
 

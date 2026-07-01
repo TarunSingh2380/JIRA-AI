@@ -1,13 +1,19 @@
-"""Phase G — structured synthesis (DIAGNOSIS-first).
+"""Phase G — evidence-first root-cause synthesis.
 
-Turns the intake + retrieval candidates + agent findings into one structured
-diagnosis that fills the house RCA template (9 sections) plus the machine schema
-(root_cause / explanation / confidence / alternatives / evidence).
+Turns the intake + retrieval candidates + agent findings into a strict,
+evidence-grounded diagnosis. The contract (see `_SYSTEM`) optimizes for being
+CORRECT, not for producing a complete report:
 
-Fix policy: the system is diagnosis-first. A concrete `suggested_fix` is emitted
-ONLY when confidence ≥ 0.95 (configurable); otherwise the resolution names the
-suspected change area only. Any suggested fix is advisory — it is never applied,
-never written to a worktree, and carries a human-review flag.
+* the defect is classified into exactly one category;
+* facts, inferences and unknowns are kept separate;
+* a root cause is asserted ONLY with ≥2 independent pieces of evidence, else it
+  stays "Undetermined";
+* confidence is categorical (High/Medium/Low) — never an invented probability;
+* if the required evidence is unavailable, the whole run is flagged
+  INSUFFICIENT DATA and nothing is speculated;
+* a concrete fix is proposed ONLY at High confidence; otherwise diagnosis-only.
+
+Any suggested fix is advisory — never applied, never written to a worktree.
 """
 from __future__ import annotations
 
@@ -20,59 +26,100 @@ from app.json_utils import parse_model_json
 
 log = logging.getLogger(__name__)
 
+# The one-of classification set (RULE 3). Anything else normalizes to
+# "Cannot Determine".
+ISSUE_CLASSES = (
+    "Runtime Bug", "Missing Implementation", "Configuration Issue",
+    "Infrastructure Issue", "Deployment Issue", "Data Issue", "Requirement Gap",
+    "Third-party Dependency", "Performance Issue", "Security Issue",
+    "Cannot Determine",
+)
+
+CONFIDENCE_LEVELS = ("High", "Medium", "Low")
+
+# Categorical confidence → internal numeric, used ONLY for the existing delivery
+# gate (RCA_CONFIDENCE_THRESHOLD) and fix gate (RCA_CONFIDENCE_THRESHOLD_FOR_FIX).
+# It is never shown to the user (RULE 6 — no fake probabilities).
+_CONFIDENCE_NUMERIC = {"High": 0.95, "Medium": 0.75, "Low": 0.3}
+
+INSUFFICIENT_DATA_MESSAGE = (
+    "INSUFFICIENT DATA: Target code or evidence required for RCA is unavailable. "
+    "Root cause cannot be determined."
+)
+
+NO_FIX_MESSAGE = "Diagnosis only. Insufficient evidence to recommend a safe fix."
+
 _SYSTEM = """\
-You are synthesizing a root-cause diagnosis for a production defect, to be
-rendered into the team's standard 9-section RCA document.
+You are an Enterprise Software Root Cause Analysis (RCA) Engine.
+Identify the most probable root cause of a software defect using ONLY verifiable
+evidence from source code, git history, logs, stack traces, test failures,
+configuration, deployment artifacts and the ticket itself.
+Never optimize for producing an RCA. Optimize for being CORRECT.
 
 You are given the ticket, extracted signals, retrieved candidate code locations,
-and a read-only investigation summary with the evidence gathered. Produce ONLY a
-JSON object (no prose, no fences) with EXACTLY these keys:
+and a read-only investigation summary + trace with the evidence actually
+gathered. Produce ONLY a JSON object (no prose, no fences) with EXACTLY:
 
 {
-  "root_cause": {"repo": str, "file": str, "symbol": str|null, "lines": str|null},
-  "what_happened": str,                      // §4.1 factual narrative
-  "explanation": str,                        // why the defect occurs, causal terms
-  "five_whys": [str, ...],                   // §4.2, 1-5 ordered "why" answers
-  "final_root_cause": str,                   // single clear statement
-  "confidence": number,                      // 0.0-1.0
-  "alternative_hypotheses": [                // when confidence is low, give >1
-    {"root_cause": {"repo","file","symbol","lines"}, "explanation": str, "confidence": number}
-  ],
-  "evidence": [{"type": str, "detail": str}],// blame line, ticket key, error string, call path...
-  "impact": {"affected": str, "impact_type": str, "description": str},
-  "expectation_vs_reality": {
-    "development": {"expected": str, "actual": str, "gap": str},
-    "code_review": {"expected": str, "actual": str, "gap": str},
-    "qa_testing": {"expected": str, "actual": str, "gap": str},
-    "requirement": {"expected": str, "actual": str, "gap": str}
-  },
-  "contributing_factors": {
-    "code_issue": str, "configuration_issue": str, "infrastructure_issue": str,
-    "qa_miss": str, "process_gap": str, "human_error": str, "requirement_ambiguity": str
-  },
-  "preventive_actions": [str, ...],
-  "lessons_learned": {"do_differently": str, "process_change": str},
-  "suggested_fix": null | {"description": str, "code": str, "confidence_basis": str}
+  "insufficient_data": bool,        // true if target code/PR/repo/evidence is unavailable
+  "issue_classification": str,      // EXACTLY one of the categories below
+  "confidence": "High"|"Medium"|"Low",
+  "facts": [str, ...],              // only directly observed evidence
+  "inferences": [str, ...],         // logical conclusions supported by the facts
+  "unknowns": [str, ...],           // evidence that is missing
+  "root_cause": str,                // ONE concise paragraph, or exactly "Undetermined."
+  "root_cause_location": {"repo": str, "file": str, "symbol": str|null, "lines": str|null},
+  "evidence": [{"type": str, "detail": str, "ref": str}],  // ref = file:line / commit / log / stack / ticket
+  "contributing_factors": [str, ...],   // optional; ONLY if supported by evidence
+  "recommended_fix": str|null       // non-null ONLY when confidence is High
 }
 
-Rules:
-- Ground every claim in the investigation evidence. Cite file:line, commit, ticket
-  key, or call path in the evidence array. Do not invent locations.
-- root_cause.lines is a range like "42-58" when known, else null.
-- If you are not confident, LOWER the confidence and provide multiple
-  alternative_hypotheses rather than one over-confident answer.
-- suggested_fix MUST be null UNLESS you are at least 95% certain of the correct
-  fix from the code you actually read. When unsure, set it to null and let the
-  resolution name only the suspected area. A non-null suggested_fix is a proposal
-  for a human to review — never a final or applied change.
-- For contributing_factors, use "Not applicable" for factors that do not apply.
+Classification (choose exactly one): Runtime Bug, Missing Implementation,
+Configuration Issue, Infrastructure Issue, Deployment Issue, Data Issue,
+Requirement Gap, Third-party Dependency, Performance Issue, Security Issue,
+Cannot Determine.
+
+Hard rules:
+1. EVIDENCE FIRST — every conclusion must be directly supported by evidence you
+   can point to. If you cannot point to evidence, do not state it. Never infer
+   infrastructure, deployment, architecture, developer mistakes, QA failures or
+   process gaps without direct evidence.
+2. NO GHOST DATA — if the suspected code/PR/repo is unavailable, set
+   "insufficient_data": true and put "Undetermined." in root_cause. Do not
+   speculate.
+3. CLASSIFY FIRST — a feature that was never implemented is NOT a runtime bug
+   (use "Missing Implementation"). Match the analysis to the class.
+4. FACTS ≠ INFERENCES — keep them in their separate arrays. unknowns lists what
+   is missing.
+5. EVIDENCE THRESHOLD — do NOT assert a root cause unless it is supported by at
+   least TWO independent pieces of evidence (e.g. stack trace + code, git diff +
+   failing test, logs + config, ticket + implementation). One clue is never
+   enough; if you only have one, set root_cause to "Undetermined." and
+   confidence "Low".
+6. NO FAKE CERTAINTY — confidence is High only with direct evidence, Medium with
+   partial evidence, Low when the cause cannot be proven. Never output a numeric
+   percentage.
+7. DYNAMIC SIZE — match depth to the defect. A trivial UI/CSS bug gets 1-2
+   facts and a one-sentence root cause; a complex P1 gets more. Do not pad.
+8. ROOT CAUSE ONLY — missing tests, "QA missed it", "code review missed it",
+   missing docs, "developer error", process gaps are NOT root causes on their
+   own. Include them only under contributing_factors and only with evidence.
+9. GIT BLAME identifies who last changed a line, NOT who is responsible. Never
+   attribute blame to a person based on git history.
+10. NO GENERIC RECOMMENDATIONS — recommended_fix must directly address THIS
+    defect. Never say "improve QA / testing / reviews / docs" unless the
+    evidence demonstrates that specific failure.
+11. recommended_fix is non-null ONLY when confidence is High AND root_cause is
+    not "Undetermined." It is an advisory proposal for a human — never applied.
+
+It is better to return root_cause "Undetermined." than an incorrect one. Never
+reward completeness over correctness.
 """
 
 _SCHEMA_KEYS = (
-    "root_cause", "what_happened", "explanation", "five_whys", "final_root_cause",
-    "confidence", "alternative_hypotheses", "evidence", "impact",
-    "expectation_vs_reality", "contributing_factors", "preventive_actions",
-    "lessons_learned", "suggested_fix",
+    "insufficient_data", "issue_classification", "confidence", "facts",
+    "inferences", "unknowns", "root_cause", "root_cause_location", "evidence",
+    "contributing_factors", "recommended_fix",
 )
 
 
@@ -150,40 +197,58 @@ def _with_model(settings: Settings, model: str) -> Settings:
 def _normalize(parsed: dict[str, Any], settings: Settings) -> dict[str, Any]:
     out: dict[str, Any] = {k: parsed.get(k) for k in _SCHEMA_KEYS}
 
-    rc = out.get("root_cause") or {}
-    out["root_cause"] = {
+    # Location is kept for linking/blame; it is not asserted as the root cause.
+    rc = out.get("root_cause_location") or {}
+    out["root_cause_location"] = {
         "repo": str(rc.get("repo") or ""), "file": str(rc.get("file") or ""),
         "symbol": rc.get("symbol"), "lines": rc.get("lines"),
     }
-    try:
-        out["confidence"] = max(0.0, min(1.0, float(out.get("confidence") or 0.0)))
-    except (TypeError, ValueError):
-        out["confidence"] = 0.0
 
-    out["five_whys"] = _str_list(out.get("five_whys"))
-    out["preventive_actions"] = _str_list(out.get("preventive_actions"))
+    out["issue_classification"] = _one_of(
+        out.get("issue_classification"), ISSUE_CLASSES, "Cannot Determine")
+    label = _one_of(out.get("confidence"), CONFIDENCE_LEVELS, "Low")
+
+    out["facts"] = _str_list(out.get("facts"))
+    out["inferences"] = _str_list(out.get("inferences"))
+    out["unknowns"] = _str_list(out.get("unknowns"))
+    out["contributing_factors"] = _str_list(out.get("contributing_factors"))
     out["evidence"] = _evidence_list(out.get("evidence"))
-    out["alternative_hypotheses"] = out.get("alternative_hypotheses") or []
-    out["what_happened"] = str(out.get("what_happened") or "")
-    out["explanation"] = str(out.get("explanation") or "")
-    out["final_root_cause"] = str(out.get("final_root_cause") or "")
-    out["impact"] = out.get("impact") or {}
-    out["expectation_vs_reality"] = out.get("expectation_vs_reality") or {}
-    out["contributing_factors"] = out.get("contributing_factors") or {}
-    out["lessons_learned"] = out.get("lessons_learned") or {}
+    out["root_cause"] = str(out.get("root_cause") or "").strip()
 
-    # Enforce the ≥95% gate in code regardless of what the model returned.
-    fix = out.get("suggested_fix")
-    if out["confidence"] < settings.rca_confidence_threshold_for_fix or not isinstance(fix, dict):
-        out["suggested_fix"] = None
+    insufficient = bool(out.get("insufficient_data"))
+
+    # RULE 2 — no ghost data. An INSUFFICIENT DATA run states only that.
+    if insufficient:
+        out["root_cause"] = INSUFFICIENT_DATA_MESSAGE
+        label = "Low"
     else:
-        out["suggested_fix"] = {
-            "description": str(fix.get("description") or ""),
-            "code": str(fix.get("code") or ""),
-            "confidence_basis": str(fix.get("confidence_basis") or ""),
-            "human_review_required": True,  # always advisory
-        }
+        # RULE 5 — a root cause needs ≥2 independent evidence items. Fewer than
+        # that (or an empty/undetermined statement) collapses to Undetermined.
+        undetermined = (not out["root_cause"]
+                        or out["root_cause"].lower().startswith("undetermined"))
+        if len(out["evidence"]) < 2 or undetermined:
+            out["root_cause"] = "Undetermined."
+            label = "Low"
+
+    out["confidence_label"] = label
+    out["confidence"] = _CONFIDENCE_NUMERIC[label]  # internal gate only
+
+    # RULE 11 — a fix is offered ONLY at High confidence with a determined cause.
+    determined = out["root_cause"] not in ("Undetermined.", INSUFFICIENT_DATA_MESSAGE)
+    fix = out.get("recommended_fix")
+    if label == "High" and determined and isinstance(fix, str) and fix.strip():
+        out["recommended_fix"] = fix.strip()
+    else:
+        out["recommended_fix"] = None
     return out
+
+
+def _one_of(value: Any, allowed: tuple[str, ...], default: str) -> str:
+    text = str(value or "").strip()
+    for candidate in allowed:
+        if text.lower() == candidate.lower():
+            return candidate
+    return default
 
 
 def _str_list(value: Any) -> list[str]:
@@ -200,7 +265,8 @@ def _evidence_list(value: Any) -> list[dict[str, str]]:
         for e in value:
             if isinstance(e, dict):
                 out.append({"type": str(e.get("type") or ""),
-                            "detail": str(e.get("detail") or "")})
+                            "detail": str(e.get("detail") or ""),
+                            "ref": str(e.get("ref") or "")})
             elif isinstance(e, str) and e.strip():
-                out.append({"type": "note", "detail": e.strip()})
+                out.append({"type": "note", "detail": e.strip(), "ref": ""})
     return out

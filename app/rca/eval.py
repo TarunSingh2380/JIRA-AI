@@ -203,7 +203,7 @@ def _judge_plausibility(settings: Settings, diagnosis: dict[str, Any],
         "Judge whether this root-cause explanation is plausible and consistent with "
         "the files the fix actually changed. Return JSON {\"plausible\": bool, "
         "\"reason\": str, \"score\": 0..1}.\n\n"
-        f"DIAGNOSIS root_cause+explanation:\n{json.dumps({k: diagnosis.get(k) for k in ('root_cause','explanation','final_root_cause')}, indent=2)}\n\n"
+        f"DIAGNOSIS:\n{json.dumps({k: diagnosis.get(k) for k in ('issue_classification','confidence_label','root_cause','root_cause_location','evidence')}, indent=2)}\n\n"
         f"GROUND-TRUTH changed files:\n{json.dumps(list(ground_truth), default=list)}"
     )
     from app.json_utils import parse_model_json

@@ -45,31 +45,64 @@ class SynthesisTests(unittest.TestCase):
     def setUp(self):
         self.settings = make_settings(Path("/tmp"))
 
-    def _diag(self, confidence, with_fix):
+    def _diag(self, confidence, with_fix, *, evidence_count=2, insufficient=False):
         import json
         d = {
-            "root_cause": {"repo": "svc", "file": "a.py", "symbol": "f", "lines": "1-9"},
-            "what_happened": "x", "explanation": "y", "five_whys": ["a", "b"],
-            "final_root_cause": "z", "confidence": confidence,
-            "alternative_hypotheses": [], "evidence": [{"type": "t", "detail": "d"}],
-            "impact": {}, "expectation_vs_reality": {}, "contributing_factors": {},
-            "preventive_actions": ["p"], "lessons_learned": {},
-            "suggested_fix": {"description": "do x", "code": "y=1", "confidence_basis": "sure"} if with_fix else None,
+            "insufficient_data": insufficient,
+            "issue_classification": "Runtime Bug",
+            "confidence": confidence,  # High | Medium | Low
+            "facts": ["f1", "f2"],
+            "inferences": ["i1"],
+            "unknowns": ["u1"],
+            "root_cause": "Null deref in a.py because f() returns None on empty input.",
+            "root_cause_location": {"repo": "svc", "file": "a.py", "symbol": "f", "lines": "1-9"},
+            "evidence": [{"type": "code", "detail": "d", "ref": f"a.py:{i}"}
+                         for i in range(evidence_count)],
+            "contributing_factors": [],
+            "recommended_fix": "Guard against a None return from f()." if with_fix else None,
         }
         return json.dumps(d)
 
-    def test_fix_dropped_below_threshold(self):
+    def test_fix_dropped_below_high(self):
         out = synthesis.synthesize(
             self.settings, ticket={}, extracted={}, candidates=[], investigation="",
-            trace=[], llm_client=FakeLLM(self._diag(0.8, with_fix=True)))
-        self.assertIsNone(out["suggested_fix"])  # 0.8 < 0.95
+            trace=[], llm_client=FakeLLM(self._diag("Medium", with_fix=True)))
+        self.assertIsNone(out["recommended_fix"])  # only High gets a fix
+        self.assertEqual(out["confidence_label"], "Medium")
 
-    def test_fix_kept_at_threshold_with_review_flag(self):
+    def test_fix_kept_at_high(self):
         out = synthesis.synthesize(
             self.settings, ticket={}, extracted={}, candidates=[], investigation="",
-            trace=[], llm_client=FakeLLM(self._diag(0.97, with_fix=True)))
-        self.assertIsNotNone(out["suggested_fix"])
-        self.assertTrue(out["suggested_fix"]["human_review_required"])
+            trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True)))
+        self.assertIsNotNone(out["recommended_fix"])
+        self.assertEqual(out["confidence_label"], "High")
+        self.assertEqual(out["confidence"], 0.95)  # internal numeric for the gate
+
+    def test_single_evidence_forces_undetermined(self):
+        # RULE 5: <2 independent evidence items → no asserted root cause.
+        out = synthesis.synthesize(
+            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
+            trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True, evidence_count=1)))
+        self.assertEqual(out["root_cause"], "Undetermined.")
+        self.assertEqual(out["confidence_label"], "Low")
+        self.assertIsNone(out["recommended_fix"])
+
+    def test_insufficient_data_short_circuits(self):
+        out = synthesis.synthesize(
+            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
+            trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True, insufficient=True)))
+        self.assertEqual(out["root_cause"], synthesis.INSUFFICIENT_DATA_MESSAGE)
+        self.assertEqual(out["confidence_label"], "Low")
+        self.assertIsNone(out["recommended_fix"])
+
+    def test_classification_defaults_to_cannot_determine(self):
+        import json
+        bad = json.dumps({"issue_classification": "banana", "confidence": "High",
+                          "root_cause": "x", "evidence": [{"type": "a", "detail": "b"}]})
+        out = synthesis.synthesize(
+            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
+            trace=[], llm_client=FakeLLM(bad))
+        self.assertEqual(out["issue_classification"], "Cannot Determine")
 
     def test_user_message_handles_large_observations(self):
         # Regression: a large tool observation must not break JSON building.
@@ -83,12 +116,13 @@ class SynthesisTests(unittest.TestCase):
         obs = {"count": 1}
         self.assertEqual(synthesis._truncate_observation(obs, 1500), obs)
 
-    def test_bad_json_normalizes_to_empty(self):
+    def test_bad_json_normalizes_to_undetermined(self):
         out = synthesis.synthesize(
             self.settings, ticket={}, extracted={}, candidates=[], investigation="",
             trace=[], llm_client=FakeLLM("not json"))
-        self.assertEqual(out["confidence"], 0.0)
-        self.assertEqual(out["root_cause"]["repo"], "")
+        self.assertEqual(out["confidence_label"], "Low")
+        self.assertEqual(out["root_cause"], "Undetermined.")
+        self.assertEqual(out["issue_classification"], "Cannot Determine")
 
 
 # ── Phase F: agent loop with fakes ────────────────────────────────────────────
