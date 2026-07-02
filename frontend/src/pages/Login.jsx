@@ -33,7 +33,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={onSubmit}>
-        <h1>Jira AI Admin</h1>
+        <h1>AI Admin</h1>
         <p className="sub">Sign in to continue</p>
 
         <div className="tc-field">

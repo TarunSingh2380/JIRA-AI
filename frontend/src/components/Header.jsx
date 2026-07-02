@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth.jsx";
 import { hasAnyDashboardTab } from "../lib/tabs";
 
-export default function Header({ title = "Jira AI Admin" }) {
+export default function Header({ title = "AI Admin" }) {
   const { user, logout, hasTab } = useAuth();
   const navigate = useNavigate();
   const showDashboard = hasAnyDashboardTab(hasTab);

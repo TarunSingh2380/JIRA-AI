@@ -119,7 +119,7 @@ export default function Users() {
 
   return (
     <>
-      <Header title="Jira AI Admin" />
+      <Header title="AI Admin" />
       <div className="page">
         <h2>User management</h2>
         <p className="sub">

@@ -592,6 +592,7 @@ pre {
 .ring-field select, .ring-field input {
   padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm);
   font: inherit; font-size: 13px; font-weight: 500; background: var(--surface); color: var(--ink);
+  width: 100%; min-width: 0; box-sizing: border-box;
 }
 .ring-field select:focus, .ring-field input:focus { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
 
@@ -603,8 +604,9 @@ pre {
 
 .ring-batch { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 6px; }
 .ring-batch p { margin: 0 0 10px; font-size: 13px; }
-.ring-batch-row { display: flex; align-items: flex-end; gap: 10px; }
-.ring-batch-row .ring-field { flex: 1; }
+.ring-batch-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+.ring-batch-row .ring-field { min-width: 0; }
+.ring-batch-row button { grid-column: 1 / -1; width: 100%; }
 
 .ring-empty { padding: 48px 20px; text-align: center; }
 
