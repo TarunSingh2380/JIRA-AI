@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
@@ -26,6 +27,13 @@ _TAGS_ENDPOINT  = "/api/tags"
 # for large ticket/commit lists.
 _BATCH_CHUNK = 32
 _EMBED_TIMEOUT_SECONDS = 120
+
+# When a request fails (usually a read timeout on a slow/cold model), retry the
+# single-text case a few times with linear backoff before giving up. Multi-text
+# chunks are split in half first — a smaller request is far more likely to beat
+# the timeout — so one slow batch can't silently drop all of its texts.
+_MAX_SINGLE_RETRIES = 2
+_RETRY_BACKOFF_SECONDS = 2.0
 
 
 class OllamaEmbedder:
@@ -155,28 +163,52 @@ class OllamaEmbedder:
         return results
 
     def _call_embed(self, texts: list[str]) -> list[Optional[list[float]]]:
-        """Single HTTP call to /api/embed for a chunk of texts."""
+        """Embed a chunk of texts, retrying and splitting on failure.
+
+        A failed request (typically a read timeout) does not silently drop all of
+        its texts: a multi-text chunk is split in half and each half retried
+        (smaller requests beat the timeout), and a single text is retried a few
+        times with backoff before finally yielding None for just that one text.
+        """
         try:
-            resp = requests.post(
-                f"{self.base_url}{_EMBED_ENDPOINT}",
-                json={"model": self.model, "input": texts},
-                timeout=self.timeout_seconds,
-            )
-            resp.raise_for_status()
-            embeddings: list[list[float]] = resp.json().get("embeddings", [])
-
-            if len(embeddings) != len(texts):
-                log.warning(
-                    "Ollama returned %d embeddings for %d texts; padding with None",
-                    len(embeddings),
-                    len(texts),
-                )
-
-            result: list[Optional[list[float]]] = list(embeddings)
-            while len(result) < len(texts):
-                result.append(None)
-            return result
-
+            return self._embed_once(texts)
         except Exception as exc:
-            log.warning("Ollama embed request failed: %s", exc)
-            return [None] * len(texts)
+            log.warning("Ollama embed request failed for %d text(s): %s", len(texts), exc)
+
+        # Multi-text: split and retry each half — much cheaper than losing all.
+        if len(texts) > 1:
+            mid = len(texts) // 2
+            return self._call_embed(texts[:mid]) + self._call_embed(texts[mid:])
+
+        # Single text: back off and retry a bounded number of times.
+        for attempt in range(1, _MAX_SINGLE_RETRIES + 1):
+            time.sleep(_RETRY_BACKOFF_SECONDS * attempt)
+            try:
+                return self._embed_once(texts)
+            except Exception as exc:
+                log.warning(
+                    "Ollama embed retry %d/%d failed: %s", attempt, _MAX_SINGLE_RETRIES, exc
+                )
+        return [None] * len(texts)
+
+    def _embed_once(self, texts: list[str]) -> list[Optional[list[float]]]:
+        """Single HTTP call to /api/embed. Raises on transport/HTTP failure."""
+        resp = requests.post(
+            f"{self.base_url}{_EMBED_ENDPOINT}",
+            json={"model": self.model, "input": texts},
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        embeddings: list[list[float]] = resp.json().get("embeddings", [])
+
+        if len(embeddings) != len(texts):
+            log.warning(
+                "Ollama returned %d embeddings for %d texts; padding with None",
+                len(embeddings),
+                len(texts),
+            )
+
+        result: list[Optional[list[float]]] = list(embeddings)
+        while len(result) < len(texts):
+            result.append(None)
+        return result

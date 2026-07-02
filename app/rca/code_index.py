@@ -123,6 +123,19 @@ def _set_indexed_sha(settings: Settings, repo: str, sha: str, chunk_count: int) 
         )
 
 
+def _clear_indexed_sha(settings: Settings, repo: str) -> None:
+    """Forget a repo's indexed SHA so the next build re-chunks it in full.
+
+    Called when a build left embedding gaps (e.g. Ollama timeouts): dropping the
+    state row means a subsequent normal (non-force) build treats the repo as
+    never-indexed and retries every chunk, so the index self-heals instead of
+    permanently skipping the repo at a partially-indexed HEAD."""
+    if not settings.database_url:
+        return
+    with _connect(settings) as conn:
+        conn.execute("DELETE FROM rca_code_index_state WHERE repo = %s", (repo,))
+
+
 # ── Qdrant write helpers ──────────────────────────────────────────────────────
 
 def _delete_file_points(client, collection: str, repo: str, file_paths: list[str]) -> None:
@@ -142,7 +155,10 @@ def _upsert_chunks(
     collection: str,
     chunks: list[CodeChunk],
     sha: str,
-) -> int:
+) -> tuple[int, int]:
+    """Embed + upsert chunks. Returns (written, failed) where `failed` counts
+    chunks whose embedding could not be produced (so the caller can decide not to
+    mark the repo indexed and retry later)."""
     from qdrant_client.models import PointStruct
 
     embedder = _embedder(settings)
@@ -153,12 +169,14 @@ def _upsert_chunks(
         )
 
     written = 0
+    failed = 0
     for i in range(0, len(chunks), _UPSERT_BATCH):
         batch = chunks[i : i + _UPSERT_BATCH]
         vectors = embedder.embed_batch([c.embed_text() for c in batch])
         points = []
         for chunk, vec in zip(batch, vectors):
             if not vec:
+                failed += 1
                 continue
             points.append(PointStruct(
                 id=_stable_id(chunk.point_seed()),
@@ -179,7 +197,10 @@ def _upsert_chunks(
             client.upsert(collection_name=collection, points=points)
             written += len(points)
             log.info("code_chunks[%s]: upserted %d/%d", chunks[0].repo, written, len(chunks))
-    return written
+    if failed:
+        log.warning("code_chunks[%s]: %d/%d chunk(s) failed to embed",
+                    chunks[0].repo, failed, len(chunks))
+    return written, failed
 
 
 # ── public API ────────────────────────────────────────────────────────────────
@@ -193,6 +214,7 @@ class IndexResult:
     chunks_written: int
     files_deleted: int
     skipped: bool
+    chunks_failed: int = 0
 
 
 def _changed_files(settings: Settings, repo: str, old_sha: str) -> tuple[list[str], list[str]]:
@@ -245,8 +267,21 @@ def index_repo(settings: Settings, repo: str, *, force_full: bool = False) -> In
         files_deleted = 0
 
     chunks = list(iter_repo_chunks(settings, repo, target_files))
-    written = _upsert_chunks(settings, client, collection, chunks, head) if chunks else 0
-    _set_indexed_sha(settings, repo, head, written)
+    if chunks:
+        written, failed = _upsert_chunks(settings, client, collection, chunks, head)
+    else:
+        written, failed = 0, 0
+
+    # Only advance the indexed SHA when every chunk embedded cleanly. If any
+    # chunk failed (e.g. a transient Ollama timeout), forget the repo's state so
+    # the next build retries it in full rather than skipping it at a
+    # partially-indexed HEAD.
+    if failed:
+        _clear_indexed_sha(settings, repo)
+        log.warning("code_chunks[%s]: %d chunk(s) failed to embed — leaving repo "
+                    "un-indexed so the next build retries it", repo, failed)
+    else:
+        _set_indexed_sha(settings, repo, head, written)
 
     return IndexResult(
         repo=repo,
@@ -256,6 +291,7 @@ def index_repo(settings: Settings, repo: str, *, force_full: bool = False) -> In
         chunks_written=written,
         files_deleted=files_deleted,
         skipped=False,
+        chunks_failed=failed,
     )
 
 
@@ -276,12 +312,16 @@ def build_index(
     total = len(repos_to_index)
     results: list[dict[str, Any]] = []
     chunks_total = 0
+    failed_total = 0
     for i, repo in enumerate(repos_to_index, 1):
         try:
             res = index_repo(settings, repo, force_full=force_full)
             chunks_total += res.chunks_written
+            failed_total += res.chunks_failed
             entry = {"repo": repo, "chunks_written": res.chunks_written,
                      "skipped": res.skipped, "head": res.head_sha[:10]}
+            if res.chunks_failed:
+                entry["chunks_failed"] = res.chunks_failed
         except Exception as exc:
             log.warning("code_chunks build failed for %s: %s", repo, exc)
             entry = {"repo": repo, "error": str(exc)}
@@ -291,8 +331,10 @@ def build_index(
                 progress(i, total, repo, entry)
             except Exception:
                 pass
-    log.info("code_chunks build complete: %d repos, %d chunks", total, chunks_total)
-    return {"repos": total, "chunks_written": chunks_total, "results": results}
+    log.info("code_chunks build complete: %d repos, %d chunks, %d failed",
+             total, chunks_total, failed_total)
+    return {"repos": total, "chunks_written": chunks_total,
+            "chunks_failed": failed_total, "results": results}
 
 
 def search(
