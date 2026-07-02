@@ -300,9 +300,11 @@ VIEWS: list[tuple[str, str, str]] = [
      "and hand-set micro-pavé"),
 ]
 
+# The HERO view is the ANCHOR: it is rendered first from text, then its image is
+# fed back as a reference so the other four views depict the identical ring.
 VIEW_TEMPLATE = """Create a single high-resolution, photorealistic 3D product render of ONE women's engagement ring — the "{ring_name}" ({ring_subtitle}).
 
-THE RING (keep every detail identical across all renders of this design):
+THE RING (this exact design will be reused for four more views, so make it distinctive and consistent):
 - Centre diamond: {diamond_shape} cut, {carat} ct, {color} colour / {clarity} clarity / {cut} cut.
 - Metal: {metal}. Band width: {band_width}. Setting: {setting}.
 - Accent stones: {total_diamonds} diamonds (~{accent_carat} ct total), hand-set micro-pavé.
@@ -310,6 +312,14 @@ THE RING (keep every detail identical across all renders of this design):
 VIEW: {view_instruction}.
 
 STYLE: luxury jewelry catalog. Soft {background} studio background, gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
+
+# Prompt for the non-hero views. The hero image is supplied as a reference so the
+# model re-renders THE SAME ring rather than inventing a new one.
+EDIT_TEMPLATE = """The reference image shows ONE women's engagement ring — the "{ring_name}". Re-render THAT EXACT SAME ring — keep the identical {metal} metal, the identical {diamond_shape} centre diamond ({carat} ct), the identical {setting} and band, and the same proportions, colour and finish. Do NOT redesign the ring or change any detail.
+
+NEW CAMERA VIEW: {view_instruction}.
+
+Keep it photorealistic, luxury jewelry catalog quality, on a soft {background} studio background with the single ring centred and generous negative space. No text, no watermark, no hands, no other objects."""
 
 
 def _rings_static_dir() -> Path:
@@ -319,12 +329,21 @@ def _rings_static_dir() -> Path:
 
 
 def build_view_prompts(meta: dict[str, Any]) -> list[dict[str, str]]:
-    """Build the five single-view prompts for one ring design (same meta)."""
+    """Build the five single-view prompts for one ring design (same meta).
+
+    The first item (hero) is the ``anchor`` (text→image); the rest are ``edit``
+    prompts that re-render the anchor image from a new angle.
+    """
     out: list[dict[str, str]] = []
-    for view, label, instruction in VIEWS:
+    for idx, (view, label, instruction) in enumerate(VIEWS):
         view_instruction = instruction.format(**meta)
-        prompt = VIEW_TEMPLATE.format(view_instruction=view_instruction, **meta)
-        out.append({"view": view, "label": label, "prompt": prompt})
+        if idx == 0:
+            prompt = VIEW_TEMPLATE.format(view_instruction=view_instruction, **meta)
+            mode = "anchor"
+        else:
+            prompt = EDIT_TEMPLATE.format(view_instruction=view_instruction, **meta)
+            mode = "edit"
+        out.append({"view": view, "label": label, "prompt": prompt, "mode": mode})
     return out
 
 
@@ -347,32 +366,74 @@ class RingViewsResult(BaseModel):
     message: Optional[str] = None
 
 
-def _render_one(
+def _fetch_bytes(url: str) -> bytes:
+    import urllib.request
+
+    with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310 - provider URL
+        return resp.read()
+
+
+def _image_bytes_from_response(resp: Any) -> bytes:
+    """Extract raw PNG bytes from an OpenAI images response (b64 or URL)."""
+    datum = resp.data[0]
+    b64 = getattr(datum, "b64_json", None)
+    if b64:
+        return base64.b64decode(b64)
+    url = getattr(datum, "url", None)
+    if url:
+        return _fetch_bytes(url)
+    raise RuntimeError("Image response contained no data")
+
+
+def _save_png(data: bytes, name_hint: str, view: str) -> tuple[str, str]:
+    safe = "".join(c for c in str(name_hint) if c.isalnum()) or "ring"
+    filename = f"{safe.lower()}-{view}-{int(time.time())}-{uuid.uuid4().hex[:6]}.png"
+    path = _rings_static_dir() / filename
+    path.write_bytes(data)
+    log.info("Ring Studio rendered %s (%d bytes)", filename, path.stat().st_size)
+    return filename, f"/static/rings/{filename}"
+
+
+def _render_anchor(
     settings: Settings, item: dict[str, str], name_hint: str, model: str
-) -> RingImageResult:
-    """Render a single view prompt to a PNG. Errors are captured, not raised."""
+) -> tuple[Optional[bytes], RingImageResult]:
+    """Render the hero (anchor) view from text. Returns (image_bytes, result)."""
     view, label, prompt = item["view"], item["label"], item["prompt"]
     try:
         from openai import OpenAI
 
         client = OpenAI(api_key=settings.openai_api_key)
         resp = client.images.generate(model=model, prompt=prompt, size=_IMAGE_SIZE, n=1)
-        b64 = resp.data[0].b64_json
-        if not b64:
-            url = getattr(resp.data[0], "url", None)
-            if url:
-                return RingImageResult(status="rendered", view=view, label=label,
-                                       prompt=prompt, image_url=url)
-            raise RuntimeError("Image response contained no data")
-        safe = "".join(c for c in str(name_hint) if c.isalnum()) or "ring"
-        filename = f"{safe.lower()}-{view}-{int(time.time())}-{uuid.uuid4().hex[:6]}.png"
-        path = _rings_static_dir() / filename
-        path.write_bytes(base64.b64decode(b64))
-        log.info("Ring Studio rendered %s (%d bytes)", filename, path.stat().st_size)
+        data = _image_bytes_from_response(resp)
+        filename, url = _save_png(data, name_hint, view)
+        return data, RingImageResult(status="rendered", view=view, label=label,
+                                     prompt=prompt, image_url=url, filename=filename)
+    except Exception as exc:  # noqa: BLE001 - surface, don't crash the batch
+        log.exception("Ring Studio anchor (%s) render failed", view)
+        return None, RingImageResult(status="error", view=view, label=label, prompt=prompt,
+                                     message=f"Render failed: {exc}")
+
+
+def _render_edit(
+    settings: Settings, item: dict[str, str], ref_bytes: bytes, name_hint: str, model: str
+) -> RingImageResult:
+    """Render a non-hero view by editing the anchor image (keeps the same ring)."""
+    view, label, prompt = item["view"], item["label"], item["prompt"]
+    try:
+        import io
+
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        ref = io.BytesIO(ref_bytes)
+        ref.name = "reference.png"  # SDK uses this for the multipart filename
+        resp = client.images.edit(model=model, image=ref, prompt=prompt, size=_IMAGE_SIZE, n=1)
+        data = _image_bytes_from_response(resp)
+        filename, url = _save_png(data, name_hint, view)
         return RingImageResult(status="rendered", view=view, label=label, prompt=prompt,
-                               image_url=f"/static/rings/{filename}", filename=filename)
-    except Exception as exc:  # noqa: BLE001 - surface per-view, don't crash the batch
-        log.exception("Ring Studio %s view render failed", view)
+                               image_url=url, filename=filename)
+    except Exception as exc:  # noqa: BLE001 - surface per-view
+        log.exception("Ring Studio edit (%s) render failed", view)
         return RingImageResult(status="error", view=view, label=label, prompt=prompt,
                                message=f"Render failed: {exc}")
 
@@ -384,12 +445,13 @@ def render_ring_views(
     *,
     model: str = "gpt-image-1",
 ) -> RingViewsResult:
-    """Render the five per-view images for one ring design.
+    """Render the five per-view images for one ring design, all the SAME ring.
 
-    If ``OPENAI_API_KEY`` is not configured this is a graceful no-op that returns
-    the five view prompts (status ``not_configured``) for manual use. Otherwise
-    the five views are rendered in parallel and any per-view error is captured so
-    the dashboard can show the rest.
+    The hero view is rendered first (text→image) and becomes the visual anchor;
+    the other four are rendered by editing that anchor image so they depict the
+    identical ring from a new angle. If ``OPENAI_API_KEY`` is not configured this
+    is a graceful no-op returning the five prompts for manual use. Per-view errors
+    are captured so the dashboard can show whatever succeeded.
     """
     items = build_view_prompts(meta)
 
@@ -401,13 +463,35 @@ def render_ring_views(
         ]
         return RingViewsResult(
             status="not_configured", meta=meta, seed=seed, views=views,
-            message=("OPENAI_API_KEY is not set — image rendering is disabled. Copy each "
-                     "view prompt below into ChatGPT's image model to generate it."),
+            message=("OPENAI_API_KEY is not set — image rendering is disabled. Generate the "
+                     "hero prompt first, then use its image as the reference for the other "
+                     "four view prompts below."),
         )
 
     name_hint = str(meta.get("ring_name", "ring"))
-    with ThreadPoolExecutor(max_workers=len(items)) as pool:
-        views = list(pool.map(lambda it: _render_one(settings, it, name_hint, model), items))
+    anchor_item, rest_items = items[0], items[1:]
+
+    # 1) Render the hero anchor from text.
+    ref_bytes, anchor_result = _render_anchor(settings, anchor_item, name_hint, model)
+    views: list[RingImageResult] = [anchor_result]
+
+    # 2) Render the remaining views in parallel, each conditioned on the anchor
+    #    image so the ring stays identical. If the anchor failed, we cannot keep
+    #    context — mark the rest errored rather than inventing new rings.
+    if ref_bytes is not None:
+        with ThreadPoolExecutor(max_workers=len(rest_items)) as pool:
+            rest = list(pool.map(
+                lambda it: _render_edit(settings, it, ref_bytes, name_hint, model),
+                rest_items,
+            ))
+    else:
+        rest = [
+            RingImageResult(status="error", view=it["view"], label=it["label"],
+                            prompt=it["prompt"],
+                            message="Hero view failed, so the reference ring is unavailable.")
+            for it in rest_items
+        ]
+    views.extend(rest)
 
     rendered = sum(1 for v in views if v.status == "rendered")
     if rendered == len(views):
@@ -418,8 +502,7 @@ def render_ring_views(
         overall = "partial"
     message = None
     if overall != "rendered":
-        first_err = next((v.message for v in views if v.status == "error" and v.message), None)
-        message = first_err
+        message = next((v.message for v in views if v.status == "error" and v.message), None)
     return RingViewsResult(status=overall, meta=meta, seed=seed, model=model,
                            views=views, message=message)
 

@@ -297,7 +297,8 @@ export default function RingStudio() {
                   {rendering ? "Rendering 5 views…" : "🖼️ Render 5 Views"}
                 </button>
                 <span className="ring-render-hint muted">
-                  Hero · Top · Side · Front · Detail — one image per view
+                  Hero renders first, then Top · Side · Front · Detail re-render
+                  from it — same ring across all five.
                 </span>
               </div>
 
