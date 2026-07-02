@@ -104,14 +104,13 @@ a:hover { text-decoration: underline; }
   gap: 10px;
   white-space: nowrap;
 }
-.app-header h1::before {
-  content: "";
-  width: 26px;
-  height: 26px;
+.app-logo {
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
-  background: var(--accent-grad);
-  box-shadow: 0 4px 12px -2px rgba(124, 58, 237, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  object-fit: cover;
   flex: none;
+  box-shadow: 0 4px 12px -2px rgba(37, 99, 235, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 .app-nav { display: flex; gap: 4px; }
 .app-nav a {
@@ -465,11 +464,11 @@ pre {
   margin: 0 0 4px; font-size: 23px; font-weight: 800; letter-spacing: -0.02em;
   display: flex; align-items: center; gap: 12px;
 }
-.login-card h1::before {
-  content: ""; width: 34px; height: 34px; border-radius: 10px; flex: none;
-  background: var(--accent-grad); box-shadow: 0 8px 20px -4px rgba(124, 58, 237, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+.login-card h1 .app-logo {
+  width: 40px; height: 40px; border-radius: 10px;
+  box-shadow: 0 8px 20px -4px rgba(37, 99, 235, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
-.login-card p.sub { margin: 0 0 24px; color: var(--muted); font-size: 14px; padding-left: 46px; margin-top: -2px; }
+.login-card p.sub { margin: 0 0 24px; color: var(--muted); font-size: 14px; padding-left: 52px; margin-top: -2px; }
 .login-card .tc-field { margin-bottom: 16px; }
 .login-card button { margin-top: 4px; height: 46px; }
 .login-error { color: var(--danger); font-size: 13px; margin: 2px 0 12px; min-height: 18px; font-weight: 500; }

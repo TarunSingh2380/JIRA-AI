@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth.jsx";
 import { hasAnyDashboardTab } from "../lib/tabs";
+import logo from "../assets/logo.jpeg";
 
 export default function Header({ title = "AI Admin" }) {
   const { user, logout, hasTab } = useAuth();
@@ -15,7 +16,10 @@ export default function Header({ title = "AI Admin" }) {
   return (
     <header className="app-header">
       <div className="app-header-left">
-        <h1>{title}</h1>
+        <h1>
+          <img className="app-logo" src={logo} alt="" />
+          {title}
+        </h1>
         <nav className="app-nav">
           {showDashboard && (
             <NavLink to="/" end>

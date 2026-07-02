@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { useAuth } from "../auth.jsx";
+import logo from "../assets/logo.jpeg";
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -33,7 +34,10 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={onSubmit}>
-        <h1>AI Admin</h1>
+        <h1>
+          <img className="app-logo" src={logo} alt="" />
+          AI Admin
+        </h1>
         <p className="sub">Sign in to continue</p>
 
         <div className="tc-field">
