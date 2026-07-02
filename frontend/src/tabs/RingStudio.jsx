@@ -47,7 +47,7 @@ export default function RingStudio() {
   const [overrides, setOverrides] = useState({});
   const [seed, setSeed] = useState("");
   const [result, setResult] = useState(null); // { prompt, meta, seed }
-  const [image, setImage] = useState(null); // RingImageResult
+  const [views, setViews] = useState(null); // RingViewsResult { status, views[], message }
   const [busy, setBusy] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -83,7 +83,7 @@ export default function RingStudio() {
   const generate = async () => {
     setBusy(true);
     setError("");
-    setImage(null);
+    setViews(null);
     try {
       const data = await apiFetch("/ring-studio/prompt", { method: "POST", body: body() });
       setResult(data);
@@ -101,16 +101,17 @@ export default function RingStudio() {
     setTimeout(generate, 0);
   };
 
-  const renderImage = async () => {
+  const renderImages = async () => {
     if (!result) return;
     setRendering(true);
     setError("");
     try {
+      // Pass the exact generated design (meta) so all five views match.
       const data = await apiFetch("/ring-studio/image", {
         method: "POST",
-        body: { prompt: result.prompt, seed: result.seed, overrides },
+        body: { meta: result.meta, seed: result.seed },
       });
-      setImage(data);
+      setViews(data);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -292,12 +293,15 @@ export default function RingStudio() {
               <pre className="ring-prompt">{result.prompt}</pre>
 
               <div className="ring-actions">
-                <button onClick={renderImage} disabled={rendering}>
-                  {rendering ? "Rendering…" : "🖼️ Render Image"}
+                <button onClick={renderImages} disabled={rendering}>
+                  {rendering ? "Rendering 5 views…" : "🖼️ Render 5 Views"}
                 </button>
+                <span className="ring-render-hint muted">
+                  Hero · Top · Side · Front · Detail — one image per view
+                </span>
               </div>
 
-              {image ? <ImagePanel image={image} /> : null}
+              {views ? <ViewsGallery result={views} /> : null}
             </>
           )}
         </section>
@@ -306,31 +310,54 @@ export default function RingStudio() {
   );
 }
 
-function ImagePanel({ image }) {
-  if (image.status === "rendered" && image.image_url) {
-    return (
-      <div className="ring-image">
-        <img src={image.image_url} alt="Rendered ring spec sheet" />
-        <div className="ring-image-meta muted">
-          Rendered with {image.model}
-          {image.filename ? (
-            <>
-              {" · "}
-              <a href={image.image_url} download>
-                Download PNG
-              </a>
-            </>
-          ) : null}
+function ViewsGallery({ result }) {
+  const notConfigured = result.status === "not_configured";
+  return (
+    <div className="ring-views">
+      {result.message ? (
+        <div className={notConfigured ? "ring-image-note muted" : "error-banner"}>
+          {result.message}
         </div>
+      ) : null}
+      {result.model ? (
+        <div className="ring-image-meta muted">Rendered with {result.model}</div>
+      ) : null}
+      <div className="ring-views-grid">
+        {(result.views || []).map((v) => (
+          <ViewCard key={v.view} v={v} />
+        ))}
       </div>
-    );
-  }
-  if (image.status === "not_configured") {
-    return (
-      <div className="ring-image-note muted">
-        {image.message}
-      </div>
-    );
-  }
-  return <div className="error-banner">{image.message || "Image render failed."}</div>;
+    </div>
+  );
+}
+
+function ViewCard({ v }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(v.prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+  return (
+    <figure className="ring-view-card">
+      {v.status === "rendered" && v.image_url ? (
+        <a href={v.image_url} download title="Download PNG">
+          <img src={v.image_url} alt={v.label} />
+        </a>
+      ) : v.status === "error" ? (
+        <div className="ring-view-err">{v.message || "Render failed."}</div>
+      ) : (
+        <div className="ring-view-placeholder">
+          <button className="link" onClick={copy}>
+            {copied ? "Copied ✓" : "Copy prompt"}
+          </button>
+        </div>
+      )}
+      <figcaption>{v.label}</figcaption>
+    </figure>
+  );
 }

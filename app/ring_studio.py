@@ -24,6 +24,7 @@ import logging
 import random
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional
 
@@ -271,10 +272,44 @@ def batch_to_jsonl(rows: list[dict[str, Any]]) -> str:
     return "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n"
 
 
-# ─── Image rendering (optional) ──────────────────────────────────────────────
+# ─── Per-view image rendering (optional) ─────────────────────────────────────
+# Instead of one composite spec-sheet, we render FIVE separate images — one per
+# camera view — all depicting the EXACT SAME ring. Each view prompt restates the
+# full ring spec so the design stays identical across the five renders.
 
-# gpt-image-1 landscape size closest to the 4:3 CELESTE reference.
-_IMAGE_SIZE = "1536x1024"
+# gpt-image-1 square size — one ring per frame reads best in a square crop.
+_IMAGE_SIZE = "1024x1024"
+
+# (view key, display label, camera/view instruction). {slots} are filled from meta.
+VIEWS: list[tuple[str, str, str]] = [
+    ("hero", "Hero 3/4 View",
+     "a dramatic 3/4 perspective of the ring standing upright, the centre stone "
+     "catching the light and the band sweeping toward the viewer; the band subtly "
+     "engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
+    ("top", "Top View",
+     "the ring seen from directly above, the band curving symmetrically and the "
+     "centre stone centred and facing straight up"),
+    ("side", "Side View",
+     "a pure side profile of the ring showing the setting height, the prongs, and "
+     "the band taper"),
+    ("front", "Front View",
+     "an upright, straight-on front elevation of the ring, centre stone facing the "
+     "viewer"),
+    ("detail", "Detail View",
+     "an extreme macro close-up of the {detail_feature}, showing the fine metalwork "
+     "and hand-set micro-pavé"),
+]
+
+VIEW_TEMPLATE = """Create a single high-resolution, photorealistic 3D product render of ONE women's engagement ring — the "{ring_name}" ({ring_subtitle}).
+
+THE RING (keep every detail identical across all renders of this design):
+- Centre diamond: {diamond_shape} cut, {carat} ct, {color} colour / {clarity} clarity / {cut} cut.
+- Metal: {metal}. Band width: {band_width}. Setting: {setting}.
+- Accent stones: {total_diamonds} diamonds (~{accent_carat} ct total), hand-set micro-pavé.
+
+VIEW: {view_instruction}.
+
+STYLE: luxury jewelry catalog. Soft {background} studio background, gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
 
 
 def _rings_static_dir() -> Path:
@@ -283,88 +318,110 @@ def _rings_static_dir() -> Path:
     return d
 
 
+def build_view_prompts(meta: dict[str, Any]) -> list[dict[str, str]]:
+    """Build the five single-view prompts for one ring design (same meta)."""
+    out: list[dict[str, str]] = []
+    for view, label, instruction in VIEWS:
+        view_instruction = instruction.format(**meta)
+        prompt = VIEW_TEMPLATE.format(view_instruction=view_instruction, **meta)
+        out.append({"view": view, "label": label, "prompt": prompt})
+    return out
+
+
 class RingImageResult(BaseModel):
     status: str  # "rendered" | "not_configured" | "error"
+    view: Optional[str] = None
+    label: Optional[str] = None
     prompt: str
-    meta: dict[str, Any] = Field(default_factory=dict)
-    seed: Optional[int] = None
     image_url: Optional[str] = None
     filename: Optional[str] = None
-    model: Optional[str] = None
     message: Optional[str] = None
 
 
-def render_image(
+class RingViewsResult(BaseModel):
+    status: str  # "rendered" | "partial" | "not_configured" | "error"
+    meta: dict[str, Any] = Field(default_factory=dict)
+    seed: Optional[int] = None
+    model: Optional[str] = None
+    views: list[RingImageResult] = Field(default_factory=list)
+    message: Optional[str] = None
+
+
+def _render_one(
+    settings: Settings, item: dict[str, str], name_hint: str, model: str
+) -> RingImageResult:
+    """Render a single view prompt to a PNG. Errors are captured, not raised."""
+    view, label, prompt = item["view"], item["label"], item["prompt"]
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        resp = client.images.generate(model=model, prompt=prompt, size=_IMAGE_SIZE, n=1)
+        b64 = resp.data[0].b64_json
+        if not b64:
+            url = getattr(resp.data[0], "url", None)
+            if url:
+                return RingImageResult(status="rendered", view=view, label=label,
+                                       prompt=prompt, image_url=url)
+            raise RuntimeError("Image response contained no data")
+        safe = "".join(c for c in str(name_hint) if c.isalnum()) or "ring"
+        filename = f"{safe.lower()}-{view}-{int(time.time())}-{uuid.uuid4().hex[:6]}.png"
+        path = _rings_static_dir() / filename
+        path.write_bytes(base64.b64decode(b64))
+        log.info("Ring Studio rendered %s (%d bytes)", filename, path.stat().st_size)
+        return RingImageResult(status="rendered", view=view, label=label, prompt=prompt,
+                               image_url=f"/static/rings/{filename}", filename=filename)
+    except Exception as exc:  # noqa: BLE001 - surface per-view, don't crash the batch
+        log.exception("Ring Studio %s view render failed", view)
+        return RingImageResult(status="error", view=view, label=label, prompt=prompt,
+                               message=f"Render failed: {exc}")
+
+
+def render_ring_views(
     settings: Settings,
-    prompt: str,
     meta: dict[str, Any],
     seed: Optional[int] = None,
     *,
     model: str = "gpt-image-1",
-) -> RingImageResult:
-    """Render the assembled prompt to a PNG via the OpenAI image model.
+) -> RingViewsResult:
+    """Render the five per-view images for one ring design.
 
     If ``OPENAI_API_KEY`` is not configured this is a graceful no-op that returns
-    the prompt with ``status="not_configured"`` so the operator can paste it into
-    the image model manually. Any API/SDK error is captured (never raised) so the
-    dashboard can surface it inline.
+    the five view prompts (status ``not_configured``) for manual use. Otherwise
+    the five views are rendered in parallel and any per-view error is captured so
+    the dashboard can show the rest.
     """
+    items = build_view_prompts(meta)
+
     if not settings.openai_api_key:
-        return RingImageResult(
-            status="not_configured",
-            prompt=prompt,
-            meta=meta,
-            seed=seed,
-            message=(
-                "OPENAI_API_KEY is not set — image rendering is disabled. Copy the "
-                "prompt above into ChatGPT's image model to generate this design."
-            ),
+        views = [
+            RingImageResult(status="not_configured", view=it["view"], label=it["label"],
+                            prompt=it["prompt"])
+            for it in items
+        ]
+        return RingViewsResult(
+            status="not_configured", meta=meta, seed=seed, views=views,
+            message=("OPENAI_API_KEY is not set — image rendering is disabled. Copy each "
+                     "view prompt below into ChatGPT's image model to generate it."),
         )
 
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return RingImageResult(
-            status="error", prompt=prompt, meta=meta, seed=seed,
-            message="The 'openai' package is not installed on the server.",
-        )
+    name_hint = str(meta.get("ring_name", "ring"))
+    with ThreadPoolExecutor(max_workers=len(items)) as pool:
+        views = list(pool.map(lambda it: _render_one(settings, it, name_hint, model), items))
 
-    try:
-        client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.images.generate(
-            model=model,
-            prompt=prompt,
-            size=_IMAGE_SIZE,
-            n=1,
-        )
-        b64 = resp.data[0].b64_json
-        if not b64:
-            # Some models/endpoints return a URL instead of base64.
-            url = getattr(resp.data[0], "url", None)
-            if url:
-                return RingImageResult(
-                    status="rendered", prompt=prompt, meta=meta, seed=seed,
-                    image_url=url, model=model,
-                    message="Rendered by the provider (external URL).",
-                )
-            raise RuntimeError("Image response contained no data")
-
-        name = meta.get("ring_name", "ring")
-        safe = "".join(c for c in str(name) if c.isalnum()) or "ring"
-        filename = f"{safe.lower()}-{int(time.time())}-{uuid.uuid4().hex[:6]}.png"
-        path = _rings_static_dir() / filename
-        path.write_bytes(base64.b64decode(b64))
-        log.info("Ring Studio rendered %s (%d bytes)", filename, path.stat().st_size)
-        return RingImageResult(
-            status="rendered", prompt=prompt, meta=meta, seed=seed,
-            image_url=f"/static/rings/{filename}", filename=filename, model=model,
-        )
-    except Exception as exc:  # noqa: BLE001 - surface, don't crash the request
-        log.exception("Ring Studio image render failed")
-        return RingImageResult(
-            status="error", prompt=prompt, meta=meta, seed=seed,
-            message=f"Image render failed: {exc}",
-        )
+    rendered = sum(1 for v in views if v.status == "rendered")
+    if rendered == len(views):
+        overall = "rendered"
+    elif rendered == 0:
+        overall = "error"
+    else:
+        overall = "partial"
+    message = None
+    if overall != "rendered":
+        first_err = next((v.message for v in views if v.status == "error" and v.message), None)
+        message = first_err
+    return RingViewsResult(status=overall, meta=meta, seed=seed, model=model,
+                           views=views, message=message)
 
 
 # ─── Pydantic request/response models ────────────────────────────────────────
@@ -386,7 +443,8 @@ class BatchRequest(BaseModel):
 
 
 class ImageRequest(BaseModel):
-    # Either supply a prompt directly, or seed/overrides to assemble one.
-    prompt: Optional[str] = None
+    # Supply the ``meta`` of an already-generated design (preferred, keeps the
+    # exact ring), or seed/overrides to assemble a fresh one first.
+    meta: Optional[dict[str, Any]] = None
     seed: Optional[int] = None
     overrides: dict[str, Any] = Field(default_factory=dict)

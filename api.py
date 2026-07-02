@@ -973,22 +973,23 @@ def ring_studio_batch_download(
     )
 
 
-@app.post("/ring-studio/image", response_model=ring_studio.RingImageResult)
+@app.post("/ring-studio/image", response_model=ring_studio.RingViewsResult)
 def ring_studio_image(
     request: ring_studio.ImageRequest,
     _user: CurrentUser = Depends(require_tab("rings")),
-) -> ring_studio.RingImageResult:
-    """Render an assembled prompt to a PNG via the OpenAI image model.
+) -> ring_studio.RingViewsResult:
+    """Render the FIVE per-view images (hero, top, side, front, detail) for one
+    ring design, all depicting the exact same ring.
 
-    Provide a ready ``prompt``, or ``seed``/``overrides`` to assemble one first.
-    Falls back to returning the prompt when OPENAI_API_KEY is not configured.
+    Pass the ``meta`` of an already-generated design to keep that exact ring, or
+    ``seed``/``overrides`` to assemble a fresh one first. Falls back to returning
+    the five view prompts when OPENAI_API_KEY is not configured.
     """
-    if request.prompt:
-        prompt = request.prompt
-        _, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
+    if request.meta:
+        meta = request.meta
     else:
-        prompt, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
-    return ring_studio.render_image(settings, prompt, meta, seed=request.seed)
+        _, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
+    return ring_studio.render_ring_views(settings, meta, seed=request.seed)
 
 
 @app.post("/graph-admin/code-analysis-report")
