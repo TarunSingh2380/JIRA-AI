@@ -13,9 +13,11 @@ This module backs the React SPA login + role-based access control:
 
 The tab keys used across the backend and frontend are:
 
-    repos, jira, insights, logs, testcases, similar, docs
+    repos, jira, insights, logs, testcases, similar, workflows, channels,
+    utilization, neo4j, rca, rings, docs, users
 
 ``docs`` gates the standalone Documentation portal (its own URL, not a tab).
+``rings`` gates the Ring Studio dashboard (diamond-ring image-prompt generator).
 """
 
 from __future__ import annotations
@@ -41,10 +43,11 @@ log = logging.getLogger(__name__)
 
 # ─── Tabs & roles ────────────────────────────────────────────────────────────
 
-# Capability keys. The first six are dashboard tabs; "docs" gates the standalone
-# Documentation portal; "users" gates the User Management page (no full admin
-# rights needed). "*" in a role grants every capability.
-ALL_TABS = ["repos", "jira", "insights", "logs", "testcases", "similar", "workflows", "channels", "utilization", "neo4j", "rca", "docs", "users"]
+# Capability keys. The leading entries are dashboard tabs; "docs" gates the
+# standalone Documentation portal; "users" gates the User Management page (no
+# full admin rights needed). "*" in a role grants every capability.
+# "rings" gates the Ring Studio (diamond-ring image-prompt generator) dashboard.
+ALL_TABS = ["repos", "jira", "insights", "logs", "testcases", "similar", "workflows", "channels", "utilization", "neo4j", "rca", "rings", "docs", "users"]
 
 # Per-tab custom roles. Edit this map (or override with the AUTH_ROLE_TABS env
 # var as JSON) to change which role can reach which capability.
@@ -59,6 +62,9 @@ DEFAULT_ROLE_TABS: dict[str, list[str]] = {
     # RCA role: only the Root Cause Analysis tab (Ticket ID → full RCA). Admin
     # also has it via "*"; no other role does, by design.
     "rca": ["rca"],
+    # Designer role: lands on (and only sees) the Ring Studio — the diamond-ring
+    # image-prompt generator. Admin also has it via "*"; no other role does.
+    "designer": ["rings"],
 }
 
 

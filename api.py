@@ -50,6 +50,7 @@ from app.prompt_store import PromptStore
 from app.repository_discovery import discover_graph_repositories
 from app.rca import localize as rca_localize, rca_document, runner as rca_runner
 from app.rca.store import RCARunStore
+from app import ring_studio
 from app.repo_doc_generator import (
     list_doc_repositories,
     list_document_types,
@@ -923,6 +924,71 @@ def rca_repo_map_upsert(
     rca_localize.upsert_mapping(settings, component, repo,
                                 float(payload.get("weight", 1.0)), source="manual")
     return {"status": "ok", "component": component, "repo": repo}
+
+
+# ─── Ring Studio (diamond-ring image-prompt generator) ───────────────────────
+# Capability key "rings" (role: designer / admin). Assembles CELESTE-style
+# luxury jewelry spec-sheet prompts and optionally renders them to images.
+
+@app.get("/ring-studio/banks")
+def ring_studio_banks(
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> dict[str, Any]:
+    """All value banks + paired options the design form renders as dropdowns."""
+    return ring_studio.list_banks()
+
+
+@app.post("/ring-studio/prompt", response_model=ring_studio.PromptResponse)
+def ring_studio_prompt(
+    request: ring_studio.PromptRequest,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> ring_studio.PromptResponse:
+    """Assemble a single master prompt. seed = reproducible; overrides pin fields."""
+    prompt, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
+    return ring_studio.PromptResponse(prompt=prompt, meta=meta, seed=request.seed)
+
+
+@app.post("/ring-studio/batch")
+def ring_studio_batch(
+    request: ring_studio.BatchRequest,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> dict[str, Any]:
+    """Generate N reproducible prompts (seed = start_seed + index)."""
+    rows = ring_studio.generate_batch(request.count, request.start_seed)
+    return {"count": len(rows), "start_seed": request.start_seed, "rows": rows}
+
+
+@app.post("/ring-studio/batch.jsonl")
+def ring_studio_batch_download(
+    request: ring_studio.BatchRequest,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> Response:
+    """Download the batch as a ring_prompts.jsonl file (one design per line)."""
+    rows = ring_studio.generate_batch(request.count, request.start_seed)
+    body = ring_studio.batch_to_jsonl(rows)
+    return Response(
+        content=body,
+        media_type="application/x-ndjson; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="ring_prompts.jsonl"'},
+    )
+
+
+@app.post("/ring-studio/image", response_model=ring_studio.RingImageResult)
+def ring_studio_image(
+    request: ring_studio.ImageRequest,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> ring_studio.RingImageResult:
+    """Render an assembled prompt to a PNG via the OpenAI image model.
+
+    Provide a ready ``prompt``, or ``seed``/``overrides`` to assemble one first.
+    Falls back to returning the prompt when OPENAI_API_KEY is not configured.
+    """
+    if request.prompt:
+        prompt = request.prompt
+        _, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
+    else:
+        prompt, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
+    return ring_studio.render_image(settings, prompt, meta, seed=request.seed)
 
 
 @app.post("/graph-admin/code-analysis-report")
@@ -1911,7 +1977,7 @@ def _selected_repositories(
 _API_PATH_PREFIXES = (
     "api/", "graph-admin", "auth/", "static/", "assets/", "analyze-ticket",
     "workflow", "scan/", "repomix/", "testcases/", "jobs", "repo-tree",
-    "prompts", "chat", "health", "openapi.json",
+    "prompts", "chat", "health", "openapi.json", "ring-studio", "rca/",
 )
 
 
