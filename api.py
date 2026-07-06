@@ -997,6 +997,7 @@ def ring_studio_image(
     job = ring_studio.ring_job_store.create()
     background_tasks.add_task(
         ring_studio.run_render_job, job.job_id, settings, meta, request.seed,
+        quality=request.quality,
     )
     return ring_studio.RingJobRef(job_id=job.job_id, status=job.status)
 
@@ -1013,6 +1014,28 @@ def ring_studio_image_status(
         raise HTTPException(status_code=404, detail=f"Ring render job '{job_id}' not found")
     return ring_studio.RingJobStatus(
         job_id=job.job_id, status=job.status, result=job.result, error=job.error,
+    )
+
+
+@app.get("/ring-studio/image/{job_id}/zip")
+def ring_studio_image_zip(
+    job_id: str,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> Response:
+    """Download all rendered views of a completed job as a single ZIP."""
+    job = ring_studio.ring_job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Ring render job '{job_id}' not found")
+    if job.status != "completed" or job.result is None:
+        raise HTTPException(status_code=409, detail="Render is not complete yet.")
+    bundle = ring_studio.build_views_zip(job.result)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="No rendered images to download.")
+    filename, data = bundle
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

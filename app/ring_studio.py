@@ -283,6 +283,42 @@ def batch_to_jsonl(rows: list[dict[str, Any]]) -> str:
 # gpt-image-1 square size — one ring per frame reads best in a square crop.
 _IMAGE_SIZE = "1024x1024"
 
+# gpt-image-1 supports low/medium/high (higher = more output tokens = costlier
+# and sharper). Default medium. The UI exposes these three.
+_QUALITIES = ("low", "medium", "high")
+_DEFAULT_QUALITY = "medium"
+
+# gpt-image-1 token pricing, USD per 1M tokens (openai.com/api/pricing).
+# Cost is derived from the usage the API returns, so it tracks quality/size
+# exactly rather than relying on a hard-coded per-image table.
+_PRICE_PER_MTOK = {"text_input": 5.0, "image_input": 10.0, "image_output": 40.0}
+
+
+def _usage_cost_usd(usage: Any) -> Optional[float]:
+    """USD cost for one gpt-image-1 call from its ``usage`` object, or None if
+    the response carried no usage (older SDK / provider variation)."""
+    if usage is None:
+        return None
+
+    def field(obj: Any, name: str) -> int:
+        val = getattr(obj, name, None)
+        if val is None and isinstance(obj, dict):
+            val = obj.get(name)
+        return int(val or 0)
+
+    details = getattr(usage, "input_tokens_details", None)
+    if details is None and isinstance(usage, dict):
+        details = usage.get("input_tokens_details")
+    text_tokens = field(details, "text_tokens")
+    image_tokens = field(details, "image_tokens")
+    output_tokens = field(usage, "output_tokens")
+    cost = (
+        text_tokens * _PRICE_PER_MTOK["text_input"]
+        + image_tokens * _PRICE_PER_MTOK["image_input"]
+        + output_tokens * _PRICE_PER_MTOK["image_output"]
+    ) / 1_000_000
+    return round(cost, 6)
+
 # (view key, display label, camera/view instruction). {slots} are filled from meta.
 VIEWS: list[tuple[str, str, str]] = [
     ("hero", "Hero 3/4 View",
@@ -358,6 +394,7 @@ class RingImageResult(BaseModel):
     image_url: Optional[str] = None
     filename: Optional[str] = None
     message: Optional[str] = None
+    cost_usd: Optional[float] = None  # gpt-image-1 token cost for this view
 
 
 class RingViewsResult(BaseModel):
@@ -365,7 +402,9 @@ class RingViewsResult(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
     seed: Optional[int] = None
     model: Optional[str] = None
+    quality: Optional[str] = None
     views: list[RingImageResult] = Field(default_factory=list)
+    cost_usd: Optional[float] = None  # summed across all rendered views
     message: Optional[str] = None
 
 
@@ -398,7 +437,7 @@ def _save_png(data: bytes, name_hint: str, view: str) -> tuple[str, str]:
 
 
 def _render_anchor(
-    settings: Settings, item: dict[str, str], name_hint: str, model: str
+    settings: Settings, item: dict[str, str], name_hint: str, model: str, quality: str
 ) -> tuple[Optional[bytes], RingImageResult]:
     """Render the hero (anchor) view from text. Returns (image_bytes, result)."""
     view, label, prompt = item["view"], item["label"], item["prompt"]
@@ -406,11 +445,13 @@ def _render_anchor(
         from openai import OpenAI
 
         client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.images.generate(model=model, prompt=prompt, size=_IMAGE_SIZE, n=1)
+        resp = client.images.generate(model=model, prompt=prompt, size=_IMAGE_SIZE,
+                                      quality=quality, n=1)
         data = _image_bytes_from_response(resp)
         filename, url = _save_png(data, name_hint, view)
         return data, RingImageResult(status="rendered", view=view, label=label,
-                                     prompt=prompt, image_url=url, filename=filename)
+                                     prompt=prompt, image_url=url, filename=filename,
+                                     cost_usd=_usage_cost_usd(getattr(resp, "usage", None)))
     except Exception as exc:  # noqa: BLE001 - surface, don't crash the batch
         log.exception("Ring Studio anchor (%s) render failed", view)
         return None, RingImageResult(status="error", view=view, label=label, prompt=prompt,
@@ -418,7 +459,8 @@ def _render_anchor(
 
 
 def _render_edit(
-    settings: Settings, item: dict[str, str], ref_bytes: bytes, name_hint: str, model: str
+    settings: Settings, item: dict[str, str], ref_bytes: bytes, name_hint: str,
+    model: str, quality: str
 ) -> RingImageResult:
     """Render a non-hero view by editing the anchor image (keeps the same ring)."""
     view, label, prompt = item["view"], item["label"], item["prompt"]
@@ -430,11 +472,13 @@ def _render_edit(
         client = OpenAI(api_key=settings.openai_api_key)
         ref = io.BytesIO(ref_bytes)
         ref.name = "reference.png"  # SDK uses this for the multipart filename
-        resp = client.images.edit(model=model, image=ref, prompt=prompt, size=_IMAGE_SIZE, n=1)
+        resp = client.images.edit(model=model, image=ref, prompt=prompt, size=_IMAGE_SIZE,
+                                   quality=quality, n=1)
         data = _image_bytes_from_response(resp)
         filename, url = _save_png(data, name_hint, view)
         return RingImageResult(status="rendered", view=view, label=label, prompt=prompt,
-                               image_url=url, filename=filename)
+                               image_url=url, filename=filename,
+                               cost_usd=_usage_cost_usd(getattr(resp, "usage", None)))
     except Exception as exc:  # noqa: BLE001 - surface per-view
         log.exception("Ring Studio edit (%s) render failed", view)
         return RingImageResult(status="error", view=view, label=label, prompt=prompt,
@@ -447,15 +491,18 @@ def render_ring_views(
     seed: Optional[int] = None,
     *,
     model: str = "gpt-image-1",
+    quality: str = _DEFAULT_QUALITY,
 ) -> RingViewsResult:
     """Render the five per-view images for one ring design, all the SAME ring.
 
     The hero view is rendered first (text→image) and becomes the visual anchor;
     the other four are rendered by editing that anchor image so they depict the
-    identical ring from a new angle. If ``OPENAI_API_KEY`` is not configured this
-    is a graceful no-op returning the five prompts for manual use. Per-view errors
-    are captured so the dashboard can show whatever succeeded.
+    identical ring from a new angle. ``quality`` (low/medium/high) trades cost
+    for fidelity. If ``OPENAI_API_KEY`` is not configured this is a graceful
+    no-op returning the five prompts for manual use. Per-view errors are captured
+    so the dashboard can show whatever succeeded.
     """
+    quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
     items = build_view_prompts(meta)
 
     if not settings.openai_api_key:
@@ -465,7 +512,7 @@ def render_ring_views(
             for it in items
         ]
         return RingViewsResult(
-            status="not_configured", meta=meta, seed=seed, views=views,
+            status="not_configured", meta=meta, seed=seed, quality=quality, views=views,
             message=("OPENAI_API_KEY is not set — image rendering is disabled. Generate the "
                      "hero prompt first, then use its image as the reference for the other "
                      "four view prompts below."),
@@ -475,7 +522,7 @@ def render_ring_views(
     anchor_item, rest_items = items[0], items[1:]
 
     # 1) Render the hero anchor from text.
-    ref_bytes, anchor_result = _render_anchor(settings, anchor_item, name_hint, model)
+    ref_bytes, anchor_result = _render_anchor(settings, anchor_item, name_hint, model, quality)
     views: list[RingImageResult] = [anchor_result]
 
     # 2) Render the remaining views in parallel, each conditioned on the anchor
@@ -484,7 +531,7 @@ def render_ring_views(
     if ref_bytes is not None:
         with ThreadPoolExecutor(max_workers=len(rest_items)) as pool:
             rest = list(pool.map(
-                lambda it: _render_edit(settings, it, ref_bytes, name_hint, model),
+                lambda it: _render_edit(settings, it, ref_bytes, name_hint, model, quality),
                 rest_items,
             ))
     else:
@@ -506,8 +553,10 @@ def render_ring_views(
     message = None
     if overall != "rendered":
         message = next((v.message for v in views if v.status == "error" and v.message), None)
+    view_costs = [v.cost_usd for v in views if v.cost_usd is not None]
+    total_cost = round(sum(view_costs), 6) if view_costs else None
     return RingViewsResult(status=overall, meta=meta, seed=seed, model=model,
-                           views=views, message=message)
+                           quality=quality, views=views, cost_usd=total_cost, message=message)
 
 
 # ─── Background render jobs ──────────────────────────────────────────────────
@@ -562,6 +611,7 @@ def run_render_job(
     seed: Optional[int] = None,
     *,
     model: str = "gpt-image-1",
+    quality: str = _DEFAULT_QUALITY,
 ) -> None:
     """Execute a queued render, updating the job in place. Runs in a worker
     thread (via FastAPI BackgroundTasks); never raises — failures are recorded
@@ -571,9 +621,9 @@ def run_render_job(
         log.warning("Ring render job %s vanished before start", job_id)
         return
     job.status = "running"
-    log.info("Ring render job %s started", job_id)
+    log.info("Ring render job %s started (quality=%s)", job_id, quality)
     try:
-        job.result = render_ring_views(settings, meta, seed=seed, model=model)
+        job.result = render_ring_views(settings, meta, seed=seed, model=model, quality=quality)
         job.status = "completed"
         log.info("Ring render job %s completed (%s)", job_id, job.result.status)
     except Exception as exc:  # noqa: BLE001 - record, don't crash the worker
@@ -582,6 +632,29 @@ def run_render_job(
         job.status = "failed"
     finally:
         job.completed_at = datetime.now(timezone.utc)
+
+
+def build_views_zip(result: RingViewsResult) -> Optional[tuple[str, bytes]]:
+    """Bundle a render's PNGs into an in-memory ZIP. Returns (filename, bytes),
+    or None when nothing was rendered. Files are read only from the rings static
+    dir by basename, so a tampered filename can't escape the directory."""
+    import io
+    import zipfile
+
+    rings_dir = _rings_static_dir()
+    rendered = [v for v in result.views if v.status == "rendered" and v.filename]
+    if not rendered:
+        return None
+    name = "".join(c for c in str(result.meta.get("ring_name", "ring")) if c.isalnum()) or "ring"
+    name = name.lower()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for v in rendered:
+            path = rings_dir / Path(v.filename).name  # basename only — no traversal
+            if path.exists():
+                zf.write(path, arcname=f"{name}-{v.view}.png")
+    buf.seek(0)
+    return f"{name}-views.zip", buf.getvalue()
 
 
 # ─── Pydantic request/response models ────────────────────────────────────────
@@ -608,6 +681,7 @@ class ImageRequest(BaseModel):
     meta: Optional[dict[str, Any]] = None
     seed: Optional[int] = None
     overrides: dict[str, Any] = Field(default_factory=dict)
+    quality: str = _DEFAULT_QUALITY  # low | medium | high
 
 
 class RingJobRef(BaseModel):

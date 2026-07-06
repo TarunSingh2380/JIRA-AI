@@ -639,6 +639,20 @@ pre {
 
 .ring-render-hint { font-size: 12px; align-self: center; }
 
+/* Quality selector + render button row */
+.ring-render-controls {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px;
+}
+.ring-quality { min-width: 220px; }
+
+/* Cost + download-all toolbar above the gallery */
+.ring-views-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 10px; margin-top: 12px;
+}
+.ring-cost-note { font-weight: 400; }
+.ring-view-cost { font-weight: 400; text-transform: none; letter-spacing: 0; }
+
 /* Five per-view render gallery */
 .ring-views { margin-top: 16px; }
 .ring-views-grid {

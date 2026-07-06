@@ -47,7 +47,9 @@ export default function RingStudio() {
   const [overrides, setOverrides] = useState({});
   const [seed, setSeed] = useState("");
   const [result, setResult] = useState(null); // { prompt, meta, seed }
-  const [views, setViews] = useState(null); // RingViewsResult { status, views[], message }
+  const [views, setViews] = useState(null); // RingViewsResult { status, views[], cost_usd, message }
+  const [renderJobId, setRenderJobId] = useState(null); // for ZIP download
+  const [quality, setQuality] = useState("medium"); // low | medium | high
   const [busy, setBusy] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -106,14 +108,16 @@ export default function RingStudio() {
     setRendering(true);
     setError("");
     setViews(null);
+    setRenderJobId(null);
     try {
       // Rendering five views takes ~40–60s, so the API returns a job id and we
       // poll for the result — this keeps each request short of proxy timeouts.
       // Pass the exact generated design (meta) so all five views match.
       const { job_id } = await apiFetch("/ring-studio/image", {
         method: "POST",
-        body: { meta: result.meta, seed: result.seed },
+        body: { meta: result.meta, seed: result.seed, quality },
       });
+      setRenderJobId(job_id);
       const job = await pollRenderJob(job_id);
       if (job.status === "failed") {
         setError(job.error || "Rendering failed.");
@@ -124,6 +128,17 @@ export default function RingStudio() {
       setError(e.message);
     } finally {
       setRendering(false);
+    }
+  };
+
+  const downloadZip = async () => {
+    if (!renderJobId) return;
+    try {
+      await apiDownload(`/ring-studio/image/${renderJobId}/zip`, {
+        fallbackName: "ring-views.zip",
+      });
+    } catch (e) {
+      setError(e.message);
     }
   };
 
@@ -300,17 +315,30 @@ export default function RingStudio() {
               </div>
               <pre className="ring-prompt">{result.prompt}</pre>
 
-              <div className="ring-actions">
+              <div className="ring-render-controls">
+                <label className="ring-field ring-quality">
+                  <span>Quality</span>
+                  <select
+                    className="tc-select"
+                    value={quality}
+                    onChange={(e) => setQuality(e.target.value)}
+                    disabled={rendering}
+                  >
+                    <option value="high">High (sharpest · costliest)</option>
+                    <option value="medium">Medium (balanced)</option>
+                    <option value="low">Low (fastest · cheapest)</option>
+                  </select>
+                </label>
                 <button onClick={renderImages} disabled={rendering}>
                   {rendering ? "Rendering 5 views…" : "🖼️ Render 5 Views"}
                 </button>
-                <span className="ring-render-hint muted">
-                  Hero renders first, then Top · Side · Front · Detail re-render
-                  from it — same ring across all five.
-                </span>
               </div>
+              <span className="ring-render-hint muted">
+                Hero renders first, then Top · Side · Front · Detail re-render
+                from it — same ring across all five.
+              </span>
 
-              {views ? <ViewsGallery result={views} /> : null}
+              {views ? <ViewsGallery result={views} onDownloadZip={downloadZip} /> : null}
             </>
           )}
         </section>
@@ -333,8 +361,13 @@ async function pollRenderJob(jobId, { intervalMs = 2500, timeoutMs = 5 * 60 * 10
   throw new Error("Rendering timed out — the images may still be processing. Try again shortly.");
 }
 
-function ViewsGallery({ result }) {
+const fmtUsd = (n) =>
+  typeof n === "number" ? `$${n.toFixed(n < 0.1 ? 4 : 3)}` : null;
+
+function ViewsGallery({ result, onDownloadZip }) {
   const notConfigured = result.status === "not_configured";
+  const renderedCount = (result.views || []).filter((v) => v.status === "rendered").length;
+  const cost = fmtUsd(result.cost_usd);
   return (
     <div className="ring-views">
       {result.message ? (
@@ -342,9 +375,28 @@ function ViewsGallery({ result }) {
           {result.message}
         </div>
       ) : null}
-      {result.model ? (
+
+      {renderedCount > 0 ? (
+        <div className="ring-views-toolbar">
+          <div className="ring-image-meta muted">
+            {result.model ? `Rendered with ${result.model}` : null}
+            {result.quality ? ` · ${result.quality} quality` : null}
+            {cost ? (
+              <>
+                {" · "}
+                <b>Cost: {cost}</b>
+                <span className="ring-cost-note"> (est. for {renderedCount} image{renderedCount > 1 ? "s" : ""})</span>
+              </>
+            ) : null}
+          </div>
+          <button className="secondary" onClick={onDownloadZip}>
+            ⬇ Download all as ZIP
+          </button>
+        </div>
+      ) : result.model ? (
         <div className="ring-image-meta muted">Rendered with {result.model}</div>
       ) : null}
+
       <div className="ring-views-grid">
         {(result.views || []).map((v) => (
           <ViewCard key={v.view} v={v} />
@@ -380,7 +432,12 @@ function ViewCard({ v }) {
           </button>
         </div>
       )}
-      <figcaption>{v.label}</figcaption>
+      <figcaption>
+        {v.label}
+        {v.status === "rendered" && typeof v.cost_usd === "number" ? (
+          <span className="ring-view-cost muted"> · {fmtUsd(v.cost_usd)}</span>
+        ) : null}
+      </figcaption>
     </figure>
   );
 }
