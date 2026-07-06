@@ -250,6 +250,9 @@ class Settings:
     # Qdrant collection holding function/class-level code chunks (Phase A).
     # Distinct from the file-level `codebase_bge_m3` collection.
     rca_code_chunks_collection: str = os.getenv("RCA_CODE_CHUNKS_COLLECTION", "code_chunks")
+    # Repos always skipped by the RCA code-index build (comma-separated names),
+    # e.g. very large repos that dominate build time. Editable per-build in the UI.
+    rca_index_excluded_repos: str = os.getenv("RCA_INDEX_EXCLUDED_REPOS", "")
     # Largest source file (bytes) the chunker will parse; mirrors the graph cap.
     rca_chunk_max_file_bytes: int = int(os.getenv("RCA_CHUNK_MAX_FILE_BYTES", "1500000"))
     # Models for the extraction (Phase C) and synthesis (Phase G) calls.

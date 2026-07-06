@@ -146,11 +146,20 @@ function CodeIndexPanel() {
   const [live, setLive] = useState(null); // { points, updating, progress } from embeddings status
   const [building, setBuilding] = useState(false);
   const [msg, setMsg] = useState("");
+  const [scope, setScope] = useState("active"); // "active" | "all"
+  const [exclude, setExclude] = useState(""); // comma-separated repo names to skip
+  const excludeTouched = useRef(false);
   const timerRef = useRef(null);
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await apiFetch("/rca/code-index/status"));
+      const st = await apiFetch("/rca/code-index/status");
+      setStatus(st);
+      // Prefill the skip list from the env default (RCA_INDEX_EXCLUDED_REPOS)
+      // until the user edits the field.
+      if (!excludeTouched.current && Array.isArray(st.excluded_default)) {
+        setExclude(st.excluded_default.join(", "));
+      }
     } catch {
       /* ignore */
     }
@@ -185,8 +194,17 @@ function CodeIndexPanel() {
     setBuilding(true);
     setMsg("");
     try {
-      await apiFetch("/rca/code-index/build", { method: "POST", body: {} });
-      setMsg("Indexing started in the background — this can take a while on first run.");
+      const exc = exclude.split(",").map((s) => s.trim()).filter(Boolean);
+      const res = await apiFetch("/rca/code-index/build", {
+        method: "POST",
+        body: { scope, exclude: exc },
+      });
+      const n = res.repository_count;
+      const skipped = res.excluded?.length ? ` (skipping ${res.excluded.join(", ")})` : "";
+      setMsg(
+        `Indexing ${n != null ? `${n} ` : ""}${scope} repo${n === 1 ? "" : "s"}${skipped} in the ` +
+          "background — unchanged repos are skipped, so this is fast after the first run.",
+      );
       setTimeout(refresh, 2000);
     } catch (e) {
       setMsg(e.message);
@@ -218,6 +236,28 @@ function CodeIndexPanel() {
       ) : (
         <span style={{ color: "#b26a00" }}>not built — semantic retriever disabled</span>
       )}{" "}
+      <select
+        value={scope}
+        onChange={(e) => setScope(e.target.value)}
+        disabled={building || updating}
+        title="Which repositories to index"
+        style={{ fontSize: 12, margin: "0 6px", padding: "1px 4px" }}
+      >
+        <option value="active">active repos</option>
+        <option value="all">all repos</option>
+      </select>
+      <input
+        type="text"
+        value={exclude}
+        onChange={(e) => {
+          excludeTouched.current = true;
+          setExclude(e.target.value);
+        }}
+        placeholder="skip repos (e.g. AWS)"
+        disabled={building || updating}
+        title="Comma-separated repo names to skip (large repos like AWS)"
+        style={{ fontSize: 12, marginRight: 6, padding: "1px 6px", width: 150 }}
+      />
       <button className="link" onClick={build} disabled={building || updating}>
         {building ? "starting…" : updating ? "building…" : ready ? "rebuild" : "build now"}
       </button>

@@ -44,6 +44,20 @@ def discover_graph_repositories(settings: Settings) -> list[dict[str, Any]]:
     return repositories
 
 
+def active_repository_names(settings: Settings, min_score: int = 1) -> list[str]:
+    """Names of repos whose commit-activity score meets ``min_score``.
+
+    "Active" here matches the dashboard's default repo selection (score > 0) and
+    honours EXCLUDED_REPOSITORY_NAMES, so callers that only want live repos
+    (e.g. the RCA code index) can skip stale/archived clones.
+    """
+    return [
+        repo["name"]
+        for repo in discover_graph_repositories(settings)
+        if (repo.get("activity_score") or 0) >= min_score
+    ]
+
+
 def _is_git_repository(path: Path) -> bool:
     return (path / ".git").exists()
 

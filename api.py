@@ -48,7 +48,7 @@ from app.n8n_monitor import N8nMonitor, N8nMonitorError
 from app.json_utils import parse_model_json, review_status, review_text
 from app.llm_client import build_llm_client
 from app.prompt_store import PromptStore
-from app.repository_discovery import discover_graph_repositories
+from app.repository_discovery import active_repository_names, discover_graph_repositories
 from app.rca import localize as rca_localize, rca_document, runner as rca_runner
 from app.rca.store import RCARunStore
 from app import ring_studio
@@ -850,6 +850,17 @@ def rca_download_docx(
     )
 
 
+def _rca_excluded_repos(request_exclude: Any = None) -> set[str]:
+    """Repos to skip for an RCA index build: the env default union the request's."""
+    names = {
+        r.strip() for r in settings.rca_index_excluded_repos.split(",") if r.strip()
+    }
+    for r in request_exclude or []:
+        if str(r).strip():
+            names.add(str(r).strip())
+    return names
+
+
 def _run_code_index_build(job_id: str, repo_names: list[str], force_full: bool) -> None:
     """Background worker: build the code_chunks semantic index."""
     from app.rca import code_index
@@ -903,14 +914,41 @@ def rca_build_code_index(
     background_tasks: BackgroundTasks = None,
     _user: CurrentUser = Depends(require_tab("rca")),
 ) -> dict[str, Any]:
-    """Build/update the code_chunks semantic index (Phase A). Returns a job_id."""
+    """Build/update the code_chunks semantic index (Phase A). Returns a job_id.
+
+    Scope (in order of precedence):
+      • explicit ``repositories`` list  → index exactly those
+      • ``scope: "all"``                → index every git repo under the root
+      • default (``scope: "active"``)   → only repos with commit activity
+    """
     payload = payload or {}
     repo_names = [str(r) for r in (payload.get("repositories") or [])]
+    scope = str(payload.get("scope") or "active").lower()
     force_full = bool(payload.get("force_full", False))
+
+    # Repos to skip: env default (RCA_INDEX_EXCLUDED_REPOS) ∪ this request's list.
+    excluded = _rca_excluded_repos(payload.get("exclude"))
+
+    if repo_names:
+        scope = "explicit"
+    elif scope == "all":
+        from app.rca import repos as rca_repos
+        repo_names = rca_repos.list_repos(settings)
+    else:
+        # Default: restrict to active repos so stale/archived clones aren't
+        # re-chunked and embedded on every build.
+        scope = "active"
+        repo_names = active_repository_names(settings)
+
+    skipped = [r for r in repo_names if r in excluded]
+    repo_names = [r for r in repo_names if r not in excluded]
+
     job = job_store.create(action="rca_code_index_build")
     background_tasks.add_task(_run_code_index_build, job.job_id, repo_names, force_full)
-    return {"job_id": job.job_id, "status": job.status,
-            "repositories": repo_names or "all"}
+    return {"job_id": job.job_id, "status": job.status, "scope": scope,
+            "repository_count": len(repo_names),
+            "excluded": sorted(excluded), "skipped": skipped,
+            "repositories": repo_names}
 
 
 @app.get("/rca/code-index/status")
@@ -927,8 +965,10 @@ def rca_code_index_status(
             count = client.count(settings.rca_code_chunks_collection).count
     except Exception as exc:  # noqa: BLE001
         return {"collection": settings.rca_code_chunks_collection, "exists": False,
+                "excluded_default": sorted(_rca_excluded_repos()),
                 "error": str(exc)}
     return {"collection": settings.rca_code_chunks_collection, "exists": exists,
+            "excluded_default": sorted(_rca_excluded_repos()),
             "points": count}
 
 

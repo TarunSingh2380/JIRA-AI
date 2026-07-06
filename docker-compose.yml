@@ -30,6 +30,10 @@ services:
       OLLAMA_EMBED_CONCURRENCY: 1
       CODEBASE_EMBED_MAX_CHARS: 2000
       CODEBASE_EMBED_MAX_FILES_PER_REPO: 1000
+      # Repos the RCA code-index build skips by default (very large repos that
+      # dominate build time). Override per-build via the "skip repos" field on
+      # the RCA tab. Comma-separated.
+      RCA_INDEX_EXCLUDED_REPOS: AWS
       QDRANT_URL: http://host.docker.internal:6333
       REPO_TREE_SRC_PATH: /app
       REPO_TREE_CONFIG_PATH: /app/repo_tree/config/repos.yaml
