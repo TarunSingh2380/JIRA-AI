@@ -23,6 +23,9 @@ class GraphJob:
     totals: dict[str, int] = field(default_factory=lambda: {"repositories": 0, "jira_tickets": 0})
     progress: dict[str, int] = field(default_factory=lambda: {"repositories_done": 0, "jira_tickets_done": 0})
     logs: list[dict[str, Any]] = field(default_factory=list)
+    # Free-form metadata (e.g. the codebase embedding model in use) that doesn't
+    # fit the integer-valued totals/progress counters.
+    meta: dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
@@ -35,6 +38,7 @@ class GraphJob:
             "totals": dict(self.totals),
             "progress": dict(self.progress),
             "logs": list(self.logs),
+            "meta": dict(self.meta),
             "error": self.error,
             "started_at": self.started_at.isoformat(),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,

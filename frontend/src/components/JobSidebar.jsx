@@ -1,6 +1,8 @@
+import EmbeddingsStatus from "./EmbeddingsStatus.jsx";
+
 const EMBED_MODELS = ["codebase_bge_m3", "codebase_qwen3_0_6b", "codebase_mxbai_large"];
 
-export default function JobSidebar({ options, setOption, trigger, busy }) {
+export default function JobSidebar({ options, setOption, trigger, busy, embedRefreshKey }) {
   return (
     <aside>
       <label>
@@ -70,6 +72,7 @@ export default function JobSidebar({ options, setOption, trigger, busy }) {
           Refresh Jira Tickets Only
         </button>
       </div>
+      <EmbeddingsStatus refreshKey={embedRefreshKey} />
     </aside>
   );
 }

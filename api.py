@@ -35,6 +35,7 @@ from app.config import settings
 from app.conversation_store import ConversationStoreError, PostgresConversationStore
 from app.exceptions import LLMConfigurationError, PromptNotFoundError
 from app.graph_context import GraphContextClient
+from app.embedding_status import get_embeddings_status, record_embedding_update
 from app.graph_job import job_store
 from app.graph_job_runner import run_graph_job
 from app.neo4j_job_runner import run_neo4j_graph_job
@@ -673,6 +674,15 @@ async def graph_admin_repomix_reindex(
     )
 
 
+@app.get("/graph-admin/embeddings/status")
+def embeddings_status(
+    _user: CurrentUser = Depends(require_tab("repos", "logs")),
+) -> dict[str, Any]:
+    """Live health, point counts, last-updated time, and in-progress flag for
+    every embedding collection (Jira, codebase, RCA code chunks)."""
+    return get_embeddings_status(settings, job_store)
+
+
 @app.get("/graph-admin/jobs", response_model=list[GraphJobResponse])
 def list_graph_jobs(
     limit: int = 10,
@@ -857,6 +867,7 @@ def _run_code_index_build(job_id: str, repo_names: list[str], force_full: bool) 
         summary = code_index.build_index(
             settings, repos_to_index, force_full=force_full, progress=_progress)
         job.logs.append({"summary": summary})
+        record_embedding_update(settings, settings.rca_code_chunks_collection)
         job.mark_done()
     except Exception as exc:  # noqa: BLE001
         log.exception("code_chunks build job %s failed", job_id)

@@ -26,6 +26,7 @@ from uuid import UUID
 
 import psycopg
 from app.config import settings
+from app.embedding_status import record_embedding_update
 from app.codebase_graph import (
     build_codebase_embedding_documents,
     embed_codebase_documents,
@@ -35,7 +36,12 @@ from app.jira_fetcher import fetch_all_tickets
 from app.jira_graph import _adf_to_text
 from app.flag_embedder import BGEM3Embedder
 from app.ollama_embedder import OllamaEmbedder
-from app.qdrant_store import upsert_jira_embeddings, upsert_jira_hybrid_embeddings
+from app.qdrant_store import (
+    JIRA_COLLECTION,
+    JIRA_HYBRID_COLLECTION,
+    upsert_jira_embeddings,
+    upsert_jira_hybrid_embeddings,
+)
 from app.repository_discovery import discover_graph_repositories
 
 log = logging.getLogger(__name__)
@@ -242,6 +248,7 @@ async def run_graph_job(
 ) -> None:
     """Execute a Qdrant build job in the background; updates `job` and persists to DB."""
     job.status = "running"
+    job.meta["embedding_model"] = embedding_model
     _persist_job_start(job)
     log.info("Qdrant job %s started (action=%s)", job.job_id, job.action)
 
@@ -461,6 +468,8 @@ async def run_graph_job(
                         )
 
                         log.info("Stored %d Jira dense embeddings in Qdrant", stored)
+                        if stored:
+                            record_embedding_update(settings, JIRA_COLLECTION, stored)
 
                         # ── Hybrid ingest (BGE-M3 dense + sparse via FlagEmbedding) ──
                         flag_embedder = BGEM3Embedder()
@@ -479,6 +488,9 @@ async def run_graph_job(
                                 )
                                 _append_job_log(job, "embeddings", "info",
                                     f"Stored {hybrid_stored} hybrid Jira embeddings (jira_tickets_hybrid).")
+                                if hybrid_stored:
+                                    record_embedding_update(
+                                        settings, JIRA_HYBRID_COLLECTION, hybrid_stored)
                             except Exception as _he:
                                 log.warning("Hybrid Jira ingest failed (non-fatal): %s", _he)
                                 _append_job_log(job, "embeddings", "warning",
@@ -571,6 +583,8 @@ async def run_graph_job(
                 "info",
                 f"Stored {stored}/{len(codebase_documents)} codebase embeddings in {embedding_model}.",
             )
+            if stored:
+                record_embedding_update(settings, embedding_model, stored)
             _persist_job_progress(job)
 
         job.mark_done()

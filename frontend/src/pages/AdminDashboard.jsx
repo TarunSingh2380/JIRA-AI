@@ -60,6 +60,9 @@ export default function AdminDashboard() {
   const [job, setJob] = useState(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState({ msg: canRepos ? "Loading repositories..." : "", cls: "" });
+  // Bumped to force the live embeddings-status panel to refresh immediately
+  // (on job start and on job completion).
+  const [embedRefreshKey, setEmbedRefreshKey] = useState(0);
   const pollRef = useRef(null);
 
   const setOption = (key, value) => setOptions((o) => ({ ...o, [key]: value }));
@@ -121,6 +124,7 @@ export default function AdminDashboard() {
         clearInterval(pollRef.current);
         pollRef.current = null;
         setBusy(false);
+        setEmbedRefreshKey((k) => k + 1);
         setStatus({
           msg:
             data.status === "completed"
@@ -168,6 +172,7 @@ export default function AdminDashboard() {
         cls: "running",
       });
       setJob(data);
+      setEmbedRefreshKey((k) => k + 1);
       startPolling(data.job_id);
     } catch (err) {
       setStatus({ msg: err.message, cls: "error" });
@@ -183,7 +188,13 @@ export default function AdminDashboard() {
       <Header />
       <main className={`dash${canRepos ? "" : " no-aside"}`}>
         {canRepos && (
-          <JobSidebar options={options} setOption={setOption} trigger={trigger} busy={busy} />
+          <JobSidebar
+            options={options}
+            setOption={setOption}
+            trigger={trigger}
+            busy={busy}
+            embedRefreshKey={embedRefreshKey}
+          />
         )}
         <section className="dash-main">
           {status.msg && <div className={`status-bar ${status.cls}`}>{status.msg}</div>}

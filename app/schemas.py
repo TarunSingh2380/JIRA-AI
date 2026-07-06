@@ -250,6 +250,7 @@ class GraphJobResponse(BaseModel):
     totals: Dict[str, int]
     progress: Dict[str, int]
     logs: List[Dict[str, Any]] = []
+    meta: Dict[str, Any] = {}
     error: str | None = None
     started_at: str
     completed_at: str | None = None

@@ -22,3 +22,18 @@ export function formatEta(seconds) {
 export function pct(done, total) {
   return total > 0 ? Math.round((Number(done) / Number(total)) * 100) : 0;
 }
+
+// Compact "time ago" for last-updated timestamps ("just now", "3m ago", ...).
+export function fmtRelative(val) {
+  if (!val) return "never";
+  const then = new Date(val).getTime();
+  if (!Number.isFinite(then)) return "—";
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 45) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return days < 30 ? `${days}d ago` : new Date(then).toLocaleDateString();
+}
