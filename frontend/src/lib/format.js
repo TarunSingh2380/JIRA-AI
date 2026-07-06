@@ -23,6 +23,18 @@ export function pct(done, total) {
   return total > 0 ? Math.round((Number(done) / Number(total)) * 100) : 0;
 }
 
+// Compact duration ("45s", "8m", "1h 20m") for ETAs / elapsed times.
+export function fmtDuration(seconds) {
+  seconds = Number(seconds || 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem ? `${hrs}h ${rem}m` : `${hrs}h`;
+}
+
 // Compact "time ago" for last-updated timestamps ("just now", "3m ago", ...).
 export function fmtRelative(val) {
   if (!val) return "never";

@@ -3,6 +3,7 @@
 // facts/inferences/unknowns, evidence, agent trace) plus a downloadable .docx.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, apiDownload } from "../api.js";
+import { fmtDuration } from "../lib/format";
 
 const TERMINAL = new Set(["delivered", "low_confidence", "failed"]);
 
@@ -142,8 +143,10 @@ export default function RCA() {
 // fewer signals). Indexing is incremental thereafter.
 function CodeIndexPanel() {
   const [status, setStatus] = useState(null);
+  const [live, setLive] = useState(null); // { points, updating, progress } from embeddings status
   const [building, setBuilding] = useState(false);
   const [msg, setMsg] = useState("");
+  const timerRef = useRef(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -151,10 +154,31 @@ function CodeIndexPanel() {
     } catch {
       /* ignore */
     }
+    // Pull the RCA code-chunks entry from the shared embeddings status so we can
+    // surface live build progress + ETA (and keep polling while it's building).
+    try {
+      const emb = await apiFetch("/graph-admin/embeddings/status");
+      const row = (emb.collections || []).find((c) => c.kind === "rca");
+      setLive(row || null);
+      return row;
+    } catch {
+      return null;
+    }
   }, []);
 
+  // Poll every 3s while the index is building, else just once.
   useEffect(() => {
-    refresh();
+    let active = true;
+    async function tick() {
+      const row = await refresh();
+      if (!active) return;
+      timerRef.current = setTimeout(tick, row && row.updating ? 3000 : 30000);
+    }
+    tick();
+    return () => {
+      active = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [refresh]);
 
   const build = async () => {
@@ -163,7 +187,7 @@ function CodeIndexPanel() {
     try {
       await apiFetch("/rca/code-index/build", { method: "POST", body: {} });
       setMsg("Indexing started in the background — this can take a while on first run.");
-      setTimeout(refresh, 4000);
+      setTimeout(refresh, 2000);
     } catch (e) {
       setMsg(e.message);
     } finally {
@@ -171,17 +195,29 @@ function CodeIndexPanel() {
     }
   };
 
+  const updating = live?.updating;
+  const p = live?.progress;
+  const points = live?.points ?? status?.points;
   const ready = status?.exists;
+
   return (
     <div className="rca-code-index muted" style={{ fontSize: 13, margin: "4px 0 12px" }}>
       Semantic code index:{" "}
-      {ready ? (
-        <span style={{ color: "#2e7d32" }}>ready ({status.points} chunks)</span>
+      {updating ? (
+        <span style={{ color: "var(--accent-strong)", fontWeight: 700 }}>
+          indexing… {p?.total ? `${p.done}/${p.total} ${p.unit}` : ""}
+          {p?.eta_seconds ? ` · ~${fmtDuration(p.eta_seconds)} left` : ""}
+          {points != null ? ` · ${Number(points).toLocaleString()} chunks so far` : ""}
+        </span>
+      ) : ready ? (
+        <span style={{ color: "#2e7d32" }}>
+          ready ({Number(points).toLocaleString()} chunks)
+        </span>
       ) : (
         <span style={{ color: "#b26a00" }}>not built — semantic retriever disabled</span>
       )}{" "}
-      <button className="link" onClick={build} disabled={building}>
-        {building ? "starting…" : ready ? "rebuild" : "build now"}
+      <button className="link" onClick={build} disabled={building || updating}>
+        {building ? "starting…" : updating ? "building…" : ready ? "rebuild" : "build now"}
       </button>
       {msg ? <span> · {msg}</span> : null}
     </div>

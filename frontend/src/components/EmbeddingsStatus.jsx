@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../api";
-import { fmtDate, fmtRelative } from "../lib/format";
+import { fmtDate, fmtDuration, fmtRelative, pct } from "../lib/format";
 
 // Maps a per-collection health string to a status dot class + label.
 const HEALTH = {
@@ -51,6 +51,7 @@ export default function EmbeddingsStatus({ refreshKey = 0 }) {
   const collections = data?.collections || [];
   const overallCls =
     !data || !data.reachable ? "err" : data.overall === "ok" ? "ok" : "warn";
+  const totalPoints = collections.reduce((sum, c) => sum + (c.points || 0), 0);
 
   return (
     <div className="embed-panel">
@@ -62,7 +63,11 @@ export default function EmbeddingsStatus({ refreshKey = 0 }) {
       >
         <span className={`embed-dot ${data?.updating ? "run" : overallCls}`} />
         <span className="embed-title">Embeddings</span>
-        {data?.updating && <span className="embed-syncing">syncing…</span>}
+        {data?.updating ? (
+          <span className="embed-syncing">syncing…</span>
+        ) : data ? (
+          <span className="embed-total">{totalPoints.toLocaleString()} vectors</span>
+        ) : null}
         <span className="embed-chevron">{open ? "▾" : "▸"}</span>
       </button>
 
@@ -77,28 +82,9 @@ export default function EmbeddingsStatus({ refreshKey = 0 }) {
             </div>
           )}
 
-          {collections.map((c) => {
-            const h = HEALTH[c.health] || HEALTH.unknown;
-            return (
-              <div className="embed-row" key={c.key} title={`${c.key}\nLast updated: ${fmtDate(c.last_updated)}`}>
-                <span className={`embed-dot ${c.updating ? "run" : h.cls}`} />
-                <div className="embed-row-main">
-                  <div className="embed-row-top">
-                    <span className="embed-label">{c.label}</span>
-                    <span className="embed-count">
-                      {c.points != null ? c.points.toLocaleString() : "—"}
-                    </span>
-                  </div>
-                  <div className="embed-row-sub">
-                    <span>{c.updating ? "updating…" : h.text}</span>
-                    <span>·</span>
-                    <span>{fmtRelative(c.last_updated)}</span>
-                    {c.vector_dim ? <span>· {c.vector_dim}d</span> : null}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {collections.map((c) => (
+            <EmbedRow key={c.key} c={c} />
+          ))}
 
           {data && (
             <button type="button" className="embed-refresh" onClick={load}>
@@ -107,6 +93,48 @@ export default function EmbeddingsStatus({ refreshKey = 0 }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function EmbedRow({ c }) {
+  const h = HEALTH[c.health] || HEALTH.unknown;
+  const p = c.progress;
+  const title = `${c.key}\nLast updated: ${fmtDate(c.last_updated)}${
+    c.vector_dim ? `\nVector size: ${c.vector_dim}` : ""
+  }`;
+
+  return (
+    <div className={`embed-row${c.updating ? " is-updating" : ""}`} title={title}>
+      <span className={`embed-dot ${c.updating ? "run" : h.cls}`} />
+      <div className="embed-row-main">
+        <div className="embed-row-top">
+          <span className="embed-label">{c.label}</span>
+          <span className="embed-count">
+            {c.points != null ? c.points.toLocaleString() : "—"}
+          </span>
+        </div>
+
+        {c.updating && p ? (
+          <>
+            <div className="embed-bar">
+              <div className="embed-bar-fill" style={{ width: `${pct(p.done, p.total)}%` }} />
+            </div>
+            <div className="embed-row-sub">
+              <span className="embed-accent">
+                {p.total ? `${p.done}/${p.total} ${p.unit}` : "indexing…"}
+              </span>
+              {p.eta_seconds ? <span>· ~{fmtDuration(p.eta_seconds)} left</span> : null}
+            </div>
+          </>
+        ) : (
+          <div className="embed-row-sub">
+            <span>{h.text}</span>
+            {c.vector_dim ? <span>· {c.vector_dim}-dim</span> : null}
+            {c.last_updated ? <span>· updated {fmtRelative(c.last_updated)}</span> : null}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

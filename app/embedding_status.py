@@ -79,35 +79,76 @@ def _registry(settings: Settings) -> list[dict[str, str]]:
 
 # ─── live "updating" detection from the in-memory job store ───────────────────
 
-def _updating_collections(job_store: Any, registry: list[dict[str, str]]) -> set[str]:
-    """Collections that a currently-running background job is writing to."""
-    updating: set[str] = set()
+def _progress_by_collection(
+    job_store: Any, registry: list[dict[str, str]]
+) -> dict[str, dict[str, Any]]:
+    """Map each collection a running job is writing to → its live progress.
+
+    Each value is ``{done, total, eta_seconds, elapsed_seconds, unit}``. ETA is
+    taken from the job's own estimate where it keeps one (Jira/codebase graph
+    jobs), else extrapolated from elapsed time and fraction complete (the RCA
+    code-index build only reports repo-level progress).
+    """
+    out: dict[str, dict[str, Any]] = {}
     codebase_keys = {c["key"] for c in registry if c["kind"] == "codebase"}
-    rca_keys = {c["key"] for c in registry if c["kind"] == "rca"}
+    rca_keys = [c["key"] for c in registry if c["kind"] == "rca"]
     try:
         jobs = job_store.list_recent(limit=10)
     except Exception:  # noqa: BLE001
-        return updating
+        return out
+    now = datetime.now(timezone.utc)
     for job in jobs:
         if getattr(job, "status", None) not in ("pending", "running"):
             continue
         action = getattr(job, "action", "") or ""
         totals = getattr(job, "totals", {}) or {}
+        progress = getattr(job, "progress", {}) or {}
         meta = getattr(job, "meta", {}) or {}
+        started = getattr(job, "started_at", None)
+        elapsed = (now - started).total_seconds() if started else None
+
+        def _assign(keys: list[str], done: Any, total: Any, eta: Any, unit: str) -> None:
+            done_i, total_i = int(done or 0), int(total or 0)
+            # Derive an ETA when the job doesn't report one but we know progress.
+            if (not eta or eta <= 0) and done_i and total_i and elapsed:
+                eta = elapsed * (total_i - done_i) / done_i
+            block = {
+                "done": done_i,
+                "total": total_i,
+                "eta_seconds": int(eta) if eta and eta > 0 else None,
+                "elapsed_seconds": int(elapsed) if elapsed else None,
+                "unit": unit,
+            }
+            for k in keys:
+                out[k] = block
+
         if action == "rca_code_index_build":
-            updating |= rca_keys
+            _assign(
+                rca_keys,
+                progress.get("repositories_done"),
+                totals.get("repositories"),
+                None,
+                "repos",
+            )
         if action == "jira_tickets_only" or totals.get("jira_embedding_documents"):
-            updating.add(JIRA_COLLECTION)
-            updating.add(JIRA_HYBRID_COLLECTION)
+            _assign(
+                [JIRA_COLLECTION, JIRA_HYBRID_COLLECTION],
+                progress.get("jira_embedding_documents_done"),
+                totals.get("jira_embedding_documents"),
+                progress.get("jira_embedding_eta_seconds"),
+                "tickets",
+            )
         if totals.get("codebase_embedding_documents") or action in ("update", "regenerate", "create_new"):
             model = meta.get("embedding_model")
-            if model in codebase_keys:
-                updating.add(model)
-            else:
-                # Model unknown (older job) — flag all codebase collections so the
-                # panel still shows activity rather than silently missing it.
-                updating |= codebase_keys
-    return updating
+            keys = [model] if model in codebase_keys else list(codebase_keys)
+            _assign(
+                keys,
+                progress.get("codebase_embedding_documents_done"),
+                totals.get("codebase_embedding_documents"),
+                progress.get("codebase_embedding_eta_seconds"),
+                "files",
+            )
+    return out
 
 
 # ─── qdrant probe ────────────────────────────────────────────────────────────
@@ -133,7 +174,7 @@ def _vector_dim(info: Any) -> Optional[int]:
 def get_embeddings_status(settings: Settings, job_store: Any) -> dict[str, Any]:
     """Assemble the full status payload for the live embeddings panel."""
     registry = _registry(settings)
-    updating = _updating_collections(job_store, registry)
+    progress_map = _progress_by_collection(job_store, registry)
 
     reachable = True
     reach_error: Optional[str] = None
@@ -164,7 +205,8 @@ def get_embeddings_status(settings: Settings, job_store: Any) -> dict[str, Any]:
             "points": None,
             "vector_dim": None,
             "last_updated": last_updated,
-            "updating": key in updating,
+            "updating": key in progress_map,
+            "progress": progress_map.get(key),
             "health": "unknown",
         }
         if not reachable:
@@ -196,7 +238,7 @@ def get_embeddings_status(settings: Settings, job_store: Any) -> dict[str, Any]:
         "reachable": reachable,
         "error": reach_error,
         "overall": overall,
-        "updating": bool(updating),
+        "updating": bool(progress_map),
         "qdrant_url": settings.qdrant_url,
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "collections": collections,

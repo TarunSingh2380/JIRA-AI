@@ -676,7 +676,7 @@ async def graph_admin_repomix_reindex(
 
 @app.get("/graph-admin/embeddings/status")
 def embeddings_status(
-    _user: CurrentUser = Depends(require_tab("repos", "logs")),
+    _user: CurrentUser = Depends(require_tab("repos", "logs", "rca")),
 ) -> dict[str, Any]:
     """Live health, point counts, last-updated time, and in-progress flag for
     every embedding collection (Jira, codebase, RCA code chunks)."""
