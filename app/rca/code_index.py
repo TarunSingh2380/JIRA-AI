@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -155,10 +156,15 @@ def _upsert_chunks(
     collection: str,
     chunks: list[CodeChunk],
     sha: str,
+    progress: Optional[Callable[[int, int], None]] = None,
 ) -> tuple[int, int]:
     """Embed + upsert chunks. Returns (written, failed) where `failed` counts
     chunks whose embedding could not be produced (so the caller can decide not to
-    mark the repo indexed and retry later)."""
+    mark the repo indexed and retry later).
+
+    `progress`, if given, is called as progress(chunks_processed, chunks_total)
+    after each batch so a job runner can show live within-repo progress + ETA
+    (the total is known up front, before the slow embedding loop starts)."""
     from qdrant_client.models import PointStruct
 
     embedder = _embedder(settings)
@@ -168,6 +174,9 @@ def _upsert_chunks(
             f"(model {settings.ollama_embed_model}); cannot index code chunks"
         )
 
+    total = len(chunks)
+    if progress:
+        progress(0, total)
     written = 0
     failed = 0
     for i in range(0, len(chunks), _UPSERT_BATCH):
@@ -197,6 +206,8 @@ def _upsert_chunks(
             client.upsert(collection_name=collection, points=points)
             written += len(points)
             log.info("code_chunks[%s]: upserted %d/%d", chunks[0].repo, written, len(chunks))
+        if progress:
+            progress(min(i + len(batch), total), total)
     if failed:
         log.warning("code_chunks[%s]: %d/%d chunk(s) failed to embed",
                     chunks[0].repo, failed, len(chunks))
@@ -235,11 +246,18 @@ def _changed_files(settings: Settings, repo: str, old_sha: str) -> tuple[list[st
     return changed, deleted
 
 
-def index_repo(settings: Settings, repo: str, *, force_full: bool = False) -> IndexResult:
+def index_repo(
+    settings: Settings,
+    repo: str,
+    *,
+    force_full: bool = False,
+    chunk_progress: Optional[Callable[[int, int], None]] = None,
+) -> IndexResult:
     """Index (or delta-sync) one repo's code chunks into Qdrant.
 
     Incremental by default: only re-chunks files changed since the stored SHA.
     Pass force_full=True to re-chunk every tracked source file.
+    `chunk_progress(done, total)` reports live embedding progress for this repo.
     """
     init_schema(settings)
     collection = settings.rca_code_chunks_collection
@@ -268,9 +286,13 @@ def index_repo(settings: Settings, repo: str, *, force_full: bool = False) -> In
 
     chunks = list(iter_repo_chunks(settings, repo, target_files))
     if chunks:
-        written, failed = _upsert_chunks(settings, client, collection, chunks, head)
+        written, failed = _upsert_chunks(
+            settings, client, collection, chunks, head, progress=chunk_progress
+        )
     else:
         written, failed = 0, 0
+        if chunk_progress:
+            chunk_progress(0, 0)
 
     # Only advance the indexed SHA when every chunk embedded cleanly. If any
     # chunk failed (e.g. a transient Ollama timeout), forget the repo's state so
@@ -301,21 +323,41 @@ def build_index(
     *,
     force_full: bool = False,
     progress: Optional[Any] = None,
+    chunk_progress: Optional[Callable[[int, int, str, int, int], None]] = None,
 ) -> dict[str, Any]:
     """Build/update the code_chunks index across repos (incremental by default).
 
     `progress`, if given, is called as progress(done, total, repo, result) after
-    each repo so a job runner can surface live status. Returns a summary.
+    each repo. `chunk_progress(repo_index, repo_total, repo, chunks_done,
+    chunks_total)` fires continuously *during* a repo so a job runner can surface
+    a live within-repo bar + ETA (crucial on the first full build, where a single
+    repo can hold thousands of chunks). Returns a summary.
     """
     from app.rca import repos as repo_access
     repos_to_index = repo_names or repo_access.list_repos(settings)
     total = len(repos_to_index)
+    # Emit the repo total up front so the UI shows "0/N repos" immediately
+    # instead of waiting for the first (possibly large) repo to finish.
+    if progress:
+        try:
+            progress(0, total, "", {})
+        except Exception:
+            pass
     results: list[dict[str, Any]] = []
     chunks_total = 0
     failed_total = 0
     for i, repo in enumerate(repos_to_index, 1):
+        repo_chunk_cb = None
+        if chunk_progress:
+            def repo_chunk_cb(done: int, ctotal: int, _i: int = i, _repo: str = repo) -> None:
+                try:
+                    chunk_progress(_i, total, _repo, done, ctotal)
+                except Exception:
+                    pass
         try:
-            res = index_repo(settings, repo, force_full=force_full)
+            res = index_repo(
+                settings, repo, force_full=force_full, chunk_progress=repo_chunk_cb
+            )
             chunks_total += res.chunks_written
             failed_total += res.chunks_failed
             entry = {"repo": repo, "chunks_written": res.chunks_written,

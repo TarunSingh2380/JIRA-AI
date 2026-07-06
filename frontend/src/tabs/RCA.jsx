@@ -205,9 +205,11 @@ function CodeIndexPanel() {
       Semantic code index:{" "}
       {updating ? (
         <span style={{ color: "var(--accent-strong)", fontWeight: 700 }}>
-          indexing… {p?.total ? `${p.done}/${p.total} ${p.unit}` : ""}
-          {p?.eta_seconds ? ` · ~${fmtDuration(p.eta_seconds)} left` : ""}
-          {points != null ? ` · ${Number(points).toLocaleString()} chunks so far` : ""}
+          indexing… {p?.detail || (p?.total ? `${p.done}/${p.total} ${p.unit}` : "")}
+          {p?.eta_seconds
+            ? ` · ~${fmtDuration(p.eta_seconds)} left${p.eta_scope === "repo" ? " (repo)" : ""}`
+            : ""}
+          {points != null ? ` · ${Number(points).toLocaleString()} chunks total` : ""}
         </span>
       ) : ready ? (
         <span style={{ color: "#2e7d32" }}>

@@ -118,14 +118,22 @@ function EmbedRow({ c }) {
         {c.updating && p ? (
           <>
             <div className="embed-bar">
-              <div className="embed-bar-fill" style={{ width: `${pct(p.done, p.total)}%` }} />
+              <div
+                className="embed-bar-fill"
+                style={{ width: `${p.percent ?? pct(p.done, p.total)}%` }}
+              />
             </div>
             <div className="embed-row-sub">
               <span className="embed-accent">
                 {p.total ? `${p.done}/${p.total} ${p.unit}` : "indexing…"}
               </span>
-              {p.eta_seconds ? <span>· ~{fmtDuration(p.eta_seconds)} left</span> : null}
+              {p.eta_seconds ? (
+                <span>
+                  · ~{fmtDuration(p.eta_seconds)} left{p.eta_scope === "repo" ? " (repo)" : ""}
+                </span>
+              ) : null}
             </div>
+            {p.detail ? <div className="embed-detail">{p.detail}</div> : null}
           </>
         ) : (
           <div className="embed-row-sub">

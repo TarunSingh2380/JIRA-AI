@@ -79,6 +79,54 @@ def _registry(settings: Settings) -> list[dict[str, str]]:
 
 # ─── live "updating" detection from the in-memory job store ───────────────────
 
+def _rca_progress_block(
+    keys: list[str],
+    totals: dict[str, Any],
+    progress: dict[str, Any],
+    meta: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Build progress for the RCA code-index build.
+
+    build_index reports repo-level completion plus live chunk counts for the repo
+    currently embedding. Total chunks across all repos is unknown up front, so the
+    only honest ETA is *within the current repo* (repo_elapsed extrapolated over
+    its known chunk count). The bar shows a smooth overall fraction that blends
+    completed repos with the current repo's fractional progress.
+    """
+    repos_done = int(progress.get("repositories_done") or 0)
+    total_repos = int(totals.get("repositories") or 0)
+    cdone = int(progress.get("current_repo_chunks_done") or 0)
+    ctotal = int(progress.get("current_repo_chunks_total") or 0)
+    repo_elapsed = int(progress.get("current_repo_elapsed") or 0)
+    repo_index = progress.get("current_repo_index")
+    current_repo = meta.get("current_repo")
+
+    repo_frac = (cdone / ctotal) if ctotal else 0.0
+    percent = round(100 * (repos_done + repo_frac) / total_repos) if total_repos else 0
+
+    eta = None
+    if cdone and ctotal and repo_elapsed:
+        eta = int(repo_elapsed * (ctotal - cdone) / cdone)
+
+    detail = None
+    if current_repo:
+        loc = f"repo {repo_index}/{total_repos}" if repo_index and total_repos else "repo"
+        chunks = f" · {cdone:,}/{ctotal:,} chunks" if ctotal else ""
+        detail = f"{loc}: {current_repo}{chunks}"
+
+    block = {
+        "done": repos_done,
+        "total": total_repos,
+        "percent": percent,
+        "eta_seconds": eta,
+        "eta_scope": "repo",  # ETA is for the current repo, not the whole build
+        "elapsed_seconds": None,
+        "unit": "repos",
+        "detail": detail,
+    }
+    return {k: block for k in keys}
+
+
 def _progress_by_collection(
     job_store: Any, registry: list[dict[str, str]]
 ) -> dict[str, dict[str, Any]]:
@@ -107,7 +155,10 @@ def _progress_by_collection(
         started = getattr(job, "started_at", None)
         elapsed = (now - started).total_seconds() if started else None
 
-        def _assign(keys: list[str], done: Any, total: Any, eta: Any, unit: str) -> None:
+        def _assign(
+            keys: list[str], done: Any, total: Any, eta: Any, unit: str,
+            *, detail: Optional[str] = None,
+        ) -> None:
             done_i, total_i = int(done or 0), int(total or 0)
             # Derive an ETA when the job doesn't report one but we know progress.
             if (not eta or eta <= 0) and done_i and total_i and elapsed:
@@ -115,21 +166,18 @@ def _progress_by_collection(
             block = {
                 "done": done_i,
                 "total": total_i,
+                "percent": round(100 * done_i / total_i) if total_i else 0,
                 "eta_seconds": int(eta) if eta and eta > 0 else None,
+                "eta_scope": "overall",
                 "elapsed_seconds": int(elapsed) if elapsed else None,
                 "unit": unit,
+                "detail": detail,
             }
             for k in keys:
                 out[k] = block
 
         if action == "rca_code_index_build":
-            _assign(
-                rca_keys,
-                progress.get("repositories_done"),
-                totals.get("repositories"),
-                None,
-                "repos",
-            )
+            out.update(_rca_progress_block(rca_keys, totals, progress, meta))
         if action == "jira_tickets_only" or totals.get("jira_embedding_documents"):
             _assign(
                 [JIRA_COLLECTION, JIRA_HYBRID_COLLECTION],

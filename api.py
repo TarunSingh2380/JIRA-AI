@@ -858,14 +858,37 @@ def _run_code_index_build(job_id: str, repo_names: list[str], force_full: bool) 
         return
     job.status = "running"
     repos_to_index = repo_names or None
+    # Per-repo wall-clock so we can extrapolate a within-repo ETA (the only
+    # honest ETA on a first full build — total chunk count is unknown up front).
+    repo_clock: dict[str, Any] = {"repo": None, "start": None}
     try:
         def _progress(done: int, total: int, repo: str, result: dict[str, Any]) -> None:
             job.totals["repositories"] = total
             job.progress["repositories_done"] = done
-            job.logs.append({"repo": repo, **{k: v for k, v in result.items() if k != "repo"}})
+            if repo:  # skip the initial "0/N" tick (empty repo name)
+                job.logs.append(
+                    {"repo": repo, **{k: v for k, v in result.items() if k != "repo"}}
+                )
+
+        def _chunk_progress(
+            repo_index: int, repo_total: int, repo: str, cdone: int, ctotal: int
+        ) -> None:
+            if repo != repo_clock["repo"]:
+                repo_clock["repo"] = repo
+                repo_clock["start"] = time.monotonic()
+            job.totals["repositories"] = repo_total
+            job.progress["repositories_done"] = repo_index - 1  # repos fully done
+            job.progress["current_repo_index"] = repo_index
+            job.progress["current_repo_chunks_done"] = cdone
+            job.progress["current_repo_chunks_total"] = ctotal
+            job.progress["current_repo_elapsed"] = int(
+                time.monotonic() - (repo_clock["start"] or time.monotonic())
+            )
+            job.meta["current_repo"] = repo
 
         summary = code_index.build_index(
-            settings, repos_to_index, force_full=force_full, progress=_progress)
+            settings, repos_to_index, force_full=force_full,
+            progress=_progress, chunk_progress=_chunk_progress)
         job.logs.append({"summary": summary})
         record_embedding_update(settings, settings.rca_code_chunks_collection)
         job.mark_done()
