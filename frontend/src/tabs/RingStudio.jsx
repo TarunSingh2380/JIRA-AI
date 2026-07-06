@@ -105,13 +105,21 @@ export default function RingStudio() {
     if (!result) return;
     setRendering(true);
     setError("");
+    setViews(null);
     try {
+      // Rendering five views takes ~40–60s, so the API returns a job id and we
+      // poll for the result — this keeps each request short of proxy timeouts.
       // Pass the exact generated design (meta) so all five views match.
-      const data = await apiFetch("/ring-studio/image", {
+      const { job_id } = await apiFetch("/ring-studio/image", {
         method: "POST",
         body: { meta: result.meta, seed: result.seed },
       });
-      setViews(data);
+      const job = await pollRenderJob(job_id);
+      if (job.status === "failed") {
+        setError(job.error || "Rendering failed.");
+      } else {
+        setViews(job.result);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -309,6 +317,20 @@ export default function RingStudio() {
       </div>
     </div>
   );
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Poll a queued render until it finishes. Each GET is cheap and returns fast,
+// so it never hits the gateway timeout that blocked the old inline render.
+async function pollRenderJob(jobId, { intervalMs = 2500, timeoutMs = 5 * 60 * 1000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const job = await apiFetch(`/ring-studio/image/${jobId}`);
+    if (job.status === "completed" || job.status === "failed") return job;
+    await sleep(intervalMs);
+  }
+  throw new Error("Rendering timed out — the images may still be processing. Try again shortly.");
 }
 
 function ViewsGallery({ result }) {

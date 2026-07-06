@@ -22,9 +22,12 @@ import base64
 import json
 import logging
 import random
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -507,6 +510,80 @@ def render_ring_views(
                            views=views, message=message)
 
 
+# ─── Background render jobs ──────────────────────────────────────────────────
+# Rendering five images is a ~40–60s blocking call, which trips reverse-proxy /
+# gateway timeouts (504) when done in one request. Instead the API enqueues a
+# job, returns its id immediately, and the SPA polls for the result. The store
+# is an in-memory singleton (safe with the single-worker uvicorn deployment),
+# mirroring the graph/doc job pattern used elsewhere.
+
+@dataclass
+class RingRenderJob:
+    job_id: str
+    status: str = "pending"  # "pending" | "running" | "completed" | "failed"
+    result: Optional[RingViewsResult] = None
+    error: Optional[str] = None
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = None
+
+
+class RingJobStore:
+    """Thread-safe in-memory store for recent ring render jobs (capped)."""
+
+    def __init__(self, max_jobs: int = 50) -> None:
+        self._jobs: dict[str, RingRenderJob] = {}
+        self._order: list[str] = []
+        self._max = max_jobs
+        self._lock = threading.Lock()
+
+    def create(self) -> RingRenderJob:
+        with self._lock:
+            job = RingRenderJob(job_id=uuid.uuid4().hex)
+            self._jobs[job.job_id] = job
+            self._order.append(job.job_id)
+            if len(self._order) > self._max:
+                oldest = self._order.pop(0)
+                self._jobs.pop(oldest, None)
+        log.info("Created ring render job %s", job.job_id)
+        return job
+
+    def get(self, job_id: str) -> Optional[RingRenderJob]:
+        with self._lock:
+            return self._jobs.get(job_id)
+
+
+ring_job_store = RingJobStore()
+
+
+def run_render_job(
+    job_id: str,
+    settings: Settings,
+    meta: dict[str, Any],
+    seed: Optional[int] = None,
+    *,
+    model: str = "gpt-image-1",
+) -> None:
+    """Execute a queued render, updating the job in place. Runs in a worker
+    thread (via FastAPI BackgroundTasks); never raises — failures are recorded
+    on the job so the poller can surface them."""
+    job = ring_job_store.get(job_id)
+    if job is None:  # evicted before it ran (store is capped)
+        log.warning("Ring render job %s vanished before start", job_id)
+        return
+    job.status = "running"
+    log.info("Ring render job %s started", job_id)
+    try:
+        job.result = render_ring_views(settings, meta, seed=seed, model=model)
+        job.status = "completed"
+        log.info("Ring render job %s completed (%s)", job_id, job.result.status)
+    except Exception as exc:  # noqa: BLE001 - record, don't crash the worker
+        log.exception("Ring render job %s failed", job_id)
+        job.error = str(exc)[:1000]
+        job.status = "failed"
+    finally:
+        job.completed_at = datetime.now(timezone.utc)
+
+
 # ─── Pydantic request/response models ────────────────────────────────────────
 
 class PromptRequest(BaseModel):
@@ -531,3 +608,16 @@ class ImageRequest(BaseModel):
     meta: Optional[dict[str, Any]] = None
     seed: Optional[int] = None
     overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class RingJobRef(BaseModel):
+    """Returned when a render is enqueued — poll /ring-studio/image/{job_id}."""
+    job_id: str
+    status: str
+
+
+class RingJobStatus(BaseModel):
+    job_id: str
+    status: str  # "pending" | "running" | "completed" | "failed"
+    result: Optional[RingViewsResult] = None
+    error: Optional[str] = None

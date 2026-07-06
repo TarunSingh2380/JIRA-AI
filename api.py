@@ -973,23 +973,47 @@ def ring_studio_batch_download(
     )
 
 
-@app.post("/ring-studio/image", response_model=ring_studio.RingViewsResult)
+@app.post("/ring-studio/image", response_model=ring_studio.RingJobRef)
 def ring_studio_image(
     request: ring_studio.ImageRequest,
+    background_tasks: BackgroundTasks,
     _user: CurrentUser = Depends(require_tab("rings")),
-) -> ring_studio.RingViewsResult:
-    """Render the FIVE per-view images (hero, top, side, front, detail) for one
-    ring design, all depicting the exact same ring.
+) -> ring_studio.RingJobRef:
+    """Enqueue a render of the FIVE per-view images (hero, top, side, front,
+    detail) for one ring design, all depicting the exact same ring.
+
+    Rendering takes ~40–60s (five OpenAI image calls), which would trip
+    reverse-proxy timeouts if done inline, so this returns a ``job_id``
+    immediately; poll ``GET /ring-studio/image/{job_id}`` for the result.
 
     Pass the ``meta`` of an already-generated design to keep that exact ring, or
-    ``seed``/``overrides`` to assemble a fresh one first. Falls back to returning
-    the five view prompts when OPENAI_API_KEY is not configured.
+    ``seed``/``overrides`` to assemble a fresh one first. The render falls back
+    to returning the five view prompts when OPENAI_API_KEY is not configured.
     """
     if request.meta:
         meta = request.meta
     else:
         _, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
-    return ring_studio.render_ring_views(settings, meta, seed=request.seed)
+    job = ring_studio.ring_job_store.create()
+    background_tasks.add_task(
+        ring_studio.run_render_job, job.job_id, settings, meta, request.seed,
+    )
+    return ring_studio.RingJobRef(job_id=job.job_id, status=job.status)
+
+
+@app.get("/ring-studio/image/{job_id}", response_model=ring_studio.RingJobStatus)
+def ring_studio_image_status(
+    job_id: str,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> ring_studio.RingJobStatus:
+    """Poll a queued render. While ``status`` is pending/running the result is
+    null; on completion it carries the RingViewsResult, or ``error`` on failure."""
+    job = ring_studio.ring_job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Ring render job '{job_id}' not found")
+    return ring_studio.RingJobStatus(
+        job_id=job.job_id, status=job.status, result=job.result, error=job.error,
+    )
 
 
 @app.post("/graph-admin/code-analysis-report")
