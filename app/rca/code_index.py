@@ -181,7 +181,16 @@ def _upsert_chunks(
     failed = 0
     for i in range(0, len(chunks), _UPSERT_BATCH):
         batch = chunks[i : i + _UPSERT_BATCH]
-        vectors = embedder.embed_batch([c.embed_text() for c in batch])
+        # Report progress per embedding sub-batch (every few chunks) rather than
+        # once per 256-chunk upsert — otherwise the counter looks frozen at 0 for
+        # minutes while a whole batch embeds on CPU.
+        emb_cb = None
+        if progress:
+            def emb_cb(done: int, _batch_total: int, _base: int = i) -> None:
+                progress(min(_base + done, total), total)
+        vectors = embedder.embed_batch(
+            [c.embed_text() for c in batch], progress_callback=emb_cb
+        )
         points = []
         for chunk, vec in zip(batch, vectors):
             if not vec:

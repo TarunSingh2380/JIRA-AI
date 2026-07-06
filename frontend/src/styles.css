@@ -240,6 +240,50 @@ section.dash-main { padding: 26px 28px; min-width: 0; }
   font-size: 11px; color: var(--muted); margin-top: 2px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* RCA semantic code index card */
+.ci-card {
+  border: 1px solid var(--line); background: var(--card);
+  border-radius: var(--r); padding: 14px 16px; margin: 4px 0 18px;
+  box-shadow: var(--shadow-xs);
+}
+.ci-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.ci-title-wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ci-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+.ci-sub { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ci-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ci-controls select, .ci-controls input {
+  font: inherit; font-size: 12.5px; padding: 5px 8px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink);
+}
+.ci-controls input { width: 150px; }
+.ci-controls select:focus, .ci-controls input:focus {
+  outline: none; box-shadow: var(--ring); border-color: var(--accent);
+}
+.ci-btn {
+  font-size: 12.5px; font-weight: 600; padding: 5px 16px; border: 0;
+  border-radius: var(--r-sm); background: var(--accent-grad-strong); color: #fff;
+  cursor: pointer; box-shadow: var(--shadow-xs);
+}
+.ci-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.ci-btn:disabled { opacity: 0.55; cursor: default; }
+.ci-progress { margin-top: 13px; }
+.ci-bar { height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+.ci-bar-fill {
+  height: 100%; border-radius: var(--r-pill); background: var(--accent-grad);
+  transition: width 0.4s var(--ease); min-width: 4px;
+}
+.ci-progress-meta {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  margin-top: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+.ci-progress-repo { color: var(--accent-strong); font-weight: 600; }
+.ci-note { margin-top: 10px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 .embed-bar {
   height: 4px; border-radius: var(--r-pill); background: var(--line-strong);
   overflow: hidden; margin: 5px 0 1px;

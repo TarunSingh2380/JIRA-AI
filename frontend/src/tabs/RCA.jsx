@@ -218,50 +218,72 @@ function CodeIndexPanel() {
   const points = live?.points ?? status?.points;
   const ready = status?.exists;
 
+  const badge = updating
+    ? { cls: "run", text: "Building" }
+    : ready
+      ? { cls: "ok", text: "Ready" }
+      : { cls: "warn", text: "Not built" };
+
   return (
-    <div className="rca-code-index muted" style={{ fontSize: 13, margin: "4px 0 12px" }}>
-      Semantic code index:{" "}
-      {updating ? (
-        <span style={{ color: "var(--accent-strong)", fontWeight: 700 }}>
-          indexing… {p?.detail || (p?.total ? `${p.done}/${p.total} ${p.unit}` : "")}
-          {p?.eta_seconds
-            ? ` · ~${fmtDuration(p.eta_seconds)} left${p.eta_scope === "repo" ? " (repo)" : ""}`
-            : ""}
-          {points != null ? ` · ${Number(points).toLocaleString()} chunks total` : ""}
-        </span>
-      ) : ready ? (
-        <span style={{ color: "#2e7d32" }}>
-          ready ({Number(points).toLocaleString()} chunks)
-        </span>
-      ) : (
-        <span style={{ color: "#b26a00" }}>not built — semantic retriever disabled</span>
-      )}{" "}
-      <select
-        value={scope}
-        onChange={(e) => setScope(e.target.value)}
-        disabled={building || updating}
-        title="Which repositories to index"
-        style={{ fontSize: 12, margin: "0 6px", padding: "1px 4px" }}
-      >
-        <option value="active">active repos</option>
-        <option value="all">all repos</option>
-      </select>
-      <input
-        type="text"
-        value={exclude}
-        onChange={(e) => {
-          excludeTouched.current = true;
-          setExclude(e.target.value);
-        }}
-        placeholder="skip repos (e.g. AWS)"
-        disabled={building || updating}
-        title="Comma-separated repo names to skip (large repos like AWS)"
-        style={{ fontSize: 12, marginRight: 6, padding: "1px 6px", width: 150 }}
-      />
-      <button className="link" onClick={build} disabled={building || updating}>
-        {building ? "starting…" : updating ? "building…" : ready ? "rebuild" : "build now"}
-      </button>
-      {msg ? <span> · {msg}</span> : null}
+    <div className="ci-card">
+      <div className="ci-head">
+        <div className="ci-title-wrap">
+          <span className="ci-title">Semantic code index</span>
+          <span className={`badge ${badge.cls}`}>{badge.text}</span>
+          {!updating && points != null ? (
+            <span className="ci-sub">{Number(points).toLocaleString()} chunks</span>
+          ) : null}
+        </div>
+        <div className="ci-controls">
+          <select
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+            disabled={building || updating}
+            title="Which repositories to index"
+          >
+            <option value="active">Active repos</option>
+            <option value="all">All repos</option>
+          </select>
+          <input
+            type="text"
+            value={exclude}
+            onChange={(e) => {
+              excludeTouched.current = true;
+              setExclude(e.target.value);
+            }}
+            placeholder="skip repos (e.g. AWS)"
+            disabled={building || updating}
+            title="Comma-separated repo names to skip (large repos like AWS)"
+          />
+          <button className="ci-btn" onClick={build} disabled={building || updating}>
+            {building ? "Starting…" : updating ? "Building…" : ready ? "Rebuild" : "Build now"}
+          </button>
+        </div>
+      </div>
+
+      {updating && p ? (
+        <div className="ci-progress">
+          <div className="ci-bar">
+            <div className="ci-bar-fill" style={{ width: `${p.percent ?? 0}%` }} />
+          </div>
+          <div className="ci-progress-meta">
+            <span className="ci-progress-repo">
+              {p.detail || (p.total ? `${p.done}/${p.total} ${p.unit}` : "indexing…")}
+            </span>
+            <span>
+              {p.eta_seconds
+                ? `~${fmtDuration(p.eta_seconds)} left${p.eta_scope === "repo" ? " (repo)" : ""} · `
+                : ""}
+              {points != null ? `${Number(points).toLocaleString()} chunks total` : ""}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {!updating && !ready ? (
+        <div className="ci-note">Semantic retriever disabled until the index is built.</div>
+      ) : null}
+      {msg ? <div className="ci-note">{msg}</div> : null}
     </div>
   );
 }
