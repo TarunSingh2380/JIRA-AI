@@ -41,6 +41,11 @@ location, the causal chain, and the key evidence. A separate step will format th
 final diagnosis — you only need the findings, not a template.
 """
 
+# System prompt as a cacheable block. Together with the (static) tool schemas this
+# forms a stable prefix that is written to the prompt cache once and read on every
+# subsequent turn, so the growing conversation is not re-billed each iteration.
+_SYSTEM_BLOCKS = [{"type": "text", "text": _SYSTEM, "cache_control": {"type": "ephemeral"}}]
+
 
 @dataclass
 class AgentResult:
@@ -49,20 +54,52 @@ class AgentResult:
     iterations: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
     stop_reason: str = ""
 
 
 def _seed_message(extracted: dict[str, Any], candidates: list[dict[str, Any]],
-                  ticket_summary: str) -> str:
+                  ticket_summary: str, ticket_description: str = "",
+                  ticket_comments: Optional[list[str]] = None) -> str:
+    description = (ticket_description or "").strip() or "(none)"
+    comments = ticket_comments or []
+    comments_block = "\n".join(
+        f"[{i}] {c}" for i, c in enumerate(comments[:10], 1)) or "(none)"
     return (
         "DEFECT TICKET\n"
         f"summary: {ticket_summary}\n\n"
+        "DESCRIPTION\n"
+        f"{description[:4000]}\n\n"
+        "COMMENTS\n"
+        f"{comments_block[:3000]}\n\n"
         "EXTRACTED SIGNALS\n"
         f"{json.dumps(extracted, indent=2)}\n\n"
         "SEEDED CANDIDATE LOCATIONS (from hybrid retrieval, most likely first)\n"
         f"{json.dumps(candidates, indent=2)}\n\n"
-        "Investigate and find the root cause. Use the tools; verify before you conclude."
+        "Investigate and find the root cause. Use the tools; verify before you "
+        "conclude. Ground your grep terms and symbols in identifiers that actually "
+        "appear in the ticket text or candidate code — do not invent names."
     )
+
+
+def _apply_prompt_caching(messages: list[dict[str, Any]]) -> None:
+    """Mark the latest turn as a rolling cache breakpoint so the growing
+    conversation prefix is served from cache instead of re-billed every turn.
+
+    Anthropic allows at most 4 breakpoints, so we keep only the most recent one
+    (plus the static system/tools breakpoint). On each turn the API reads the
+    longest previously-cached prefix, so removing the prior marker is safe.
+    """
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    block.pop("cache_control", None)
+    content = messages[-1].get("content") if messages else None
+    if isinstance(content, list) and content and isinstance(content[-1], dict):
+        content[-1]["cache_control"] = {"type": "ephemeral"}
 
 
 def run_investigation(
@@ -72,6 +109,8 @@ def run_investigation(
     extracted: dict[str, Any],
     candidates: list[dict[str, Any]],
     allowed_repos: list[str],
+    ticket_description: str = "",
+    ticket_comments: Optional[list[str]] = None,
     on_event: Optional[Callable[[dict[str, Any]], None]] = None,
     client: Any = None,
     tool_context: Any = None,
@@ -90,8 +129,10 @@ def run_investigation(
                            timeout=settings.llm_timeout_seconds)
     ctx = tool_context if tool_context is not None else ToolContext(settings, allowed_repos)
 
+    seed = _seed_message(extracted, candidates, ticket_summary,
+                         ticket_description, ticket_comments)
     messages: list[dict[str, Any]] = [
-        {"role": "user", "content": _seed_message(extracted, candidates, ticket_summary)}
+        {"role": "user", "content": [{"type": "text", "text": seed}]}
     ]
     trace: list[dict[str, Any]] = []
     result = AgentResult(summary="", agent_trace=trace)
@@ -103,10 +144,11 @@ def run_investigation(
             log.warning("RCA agent hit token cap at iteration %d", iteration + 1)
             break
 
+        _apply_prompt_caching(messages)
         resp = client.messages.create(
             model=settings.rca_agent_model,
             max_tokens=4096,
-            system=_SYSTEM,
+            system=_SYSTEM_BLOCKS,
             tools=TOOL_SCHEMAS,
             messages=messages,
         )
@@ -114,6 +156,8 @@ def run_investigation(
         if usage:
             result.input_tokens += getattr(usage, "input_tokens", 0) or 0
             result.output_tokens += getattr(usage, "output_tokens", 0) or 0
+            result.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
+            result.cache_creation_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
 
         # collect assistant text + any tool calls
         assistant_content: list[dict[str, Any]] = []
@@ -166,7 +210,9 @@ def run_investigation(
     else:
         result.stop_reason = result.stop_reason or "iteration_cap"
 
-    log.info("RCA agent done: iters=%d tools=%d stop=%s tokens=%d/%d",
+    log.info("RCA agent done: iters=%d tools=%d stop=%s tokens=%d/%d "
+             "cache_read=%d cache_write=%d",
              result.iterations, len(trace), result.stop_reason,
-             result.input_tokens, result.output_tokens)
+             result.input_tokens, result.output_tokens,
+             result.cache_read_tokens, result.cache_creation_tokens)
     return result

@@ -259,9 +259,13 @@ class Settings:
     rca_extract_model: str = os.getenv("RCA_EXTRACT_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-6"))
     rca_synthesis_model: str = os.getenv("RCA_SYNTHESIS_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-6"))
     rca_agent_model: str = os.getenv("RCA_AGENT_MODEL", os.getenv("LLM_MODEL", "claude-sonnet-4-6"))
-    # Hard caps for the agentic investigation loop (Phase F).
-    rca_agent_max_iterations: int = int(os.getenv("RCA_AGENT_MAX_ITERATIONS", "12"))
-    rca_agent_max_tokens: int = int(os.getenv("RCA_AGENT_MAX_TOKENS", "150000"))
+    # Hard caps for the agentic investigation loop (Phase F). The token cap counts
+    # cumulative *uncached* input+output; with prompt caching the re-sent context
+    # is billed as cache reads, so a full investigation fits comfortably. Keep the
+    # ceiling high enough that the agent concludes rather than being cut off mid-run
+    # (a cut-off investigation yields no evidence → "INSUFFICIENT DATA").
+    rca_agent_max_iterations: int = int(os.getenv("RCA_AGENT_MAX_ITERATIONS", "16"))
+    rca_agent_max_tokens: int = int(os.getenv("RCA_AGENT_MAX_TOKENS", "500000"))
     # Confidence at/above which a diagnosis is auto-delivered; below routes to
     # the human-review queue (Phase H).
     rca_confidence_threshold: float = float(os.getenv("RCA_CONFIDENCE_THRESHOLD", "0.6"))

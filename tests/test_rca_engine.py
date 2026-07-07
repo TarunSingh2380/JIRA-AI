@@ -160,6 +160,17 @@ class FakeToolCtx:
         return {"content": "line 1: bug"}
 
 
+class CapturingClient(ScriptedClient):
+    """Records the kwargs of each create() call for prompt-cache assertions."""
+    def __init__(self):
+        super().__init__()
+        self.seen_kwargs = []
+
+    def create(self, **kwargs):
+        self.seen_kwargs.append(kwargs)
+        return super().create(**kwargs)
+
+
 class AgentLoopTests(unittest.TestCase):
     def test_loop_runs_tool_then_summarizes(self):
         settings = make_settings(Path("/tmp"))
@@ -174,6 +185,31 @@ class AgentLoopTests(unittest.TestCase):
         self.assertEqual(res.agent_trace[0]["tool"], "read_file")
         self.assertEqual(len(events), 1)
         self.assertEqual(res.input_tokens, 20)  # two calls × 10
+
+    def test_prompt_caching_and_full_ticket_context(self):
+        settings = make_settings(Path("/tmp"))
+        client = CapturingClient()
+        agent.run_investigation(
+            settings, ticket_summary="bug",
+            ticket_description="Notional interest miscomputed for EMI product",
+            ticket_comments=["Repro: create EMI lead, observe wrong repayAmount"],
+            extracted={}, candidates=[], allowed_repos=["svc"],
+            client=client, tool_context=FakeToolCtx())
+
+        # every call caches the static system prefix …
+        first = client.seen_kwargs[0]
+        self.assertEqual(first["system"][0]["cache_control"], {"type": "ephemeral"})
+        # … and marks exactly one rolling breakpoint on the latest turn.
+        for kw in client.seen_kwargs:
+            marked = [b for m in kw["messages"] if isinstance(m["content"], list)
+                      for b in m["content"]
+                      if isinstance(b, dict) and "cache_control" in b]
+            self.assertEqual(len(marked), 1)
+
+        # the full ticket description + comments reach the agent's seed message.
+        seed_text = first["messages"][0]["content"][0]["text"]
+        self.assertIn("Notional interest miscomputed", seed_text)
+        self.assertIn("wrong repayAmount", seed_text)
 
 
 # ── Phase F: tool repo-scope enforcement ──────────────────────────────────────

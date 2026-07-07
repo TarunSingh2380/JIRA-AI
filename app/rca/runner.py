@@ -126,6 +126,8 @@ def run_pipeline(
         agent_res = agent.run_investigation(
             settings, ticket_summary=ticket_obj.summary, extracted=extracted,
             candidates=run.candidates, allowed_repos=repo_names,
+            ticket_description=ticket_obj.description,
+            ticket_comments=ticket_obj.comments,
             on_event=lambda ev: store.add_trace_event(run, ev),
         )
         run.agent_trace = agent_res.agent_trace
