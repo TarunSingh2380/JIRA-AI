@@ -71,7 +71,7 @@ BANKS: dict[str, list[str]] = {
         "Bezel Setting", "Cathedral Setting", "Halo Setting", "Double Halo", "Pavé Cathedral",
         "Trellis Setting", "Compass-Set (North-South-East-West)",
     ],
-    "background": ["ivory/cream", "warm off-white", "soft grey-white", "champagne-tinted white"],
+    "background": ["pure white"],
     "accent_color": ["soft gold", "rose-gold", "warm taupe", "muted bronze"],
     "ring_size": ["US 5 (15.7 mm)", "US 6 (16.5 mm)", "US 6.5 (16.9 mm)", "US 7 (17.3 mm)"],
     "motif": ["tulip", "rose", "lily", "orchid", "vine", "laurel"],
@@ -122,7 +122,7 @@ DESCRIPTIONS: list[str] = [
 
 TEMPLATE = """Create a single high-resolution luxury jewelry catalog spec-sheet image in landscape 4:3 for a women's engagement ring. ONE ring design shown from multiple angles — every view depicts the EXACT SAME ring with consistent proportions, metal, diamond shape and setting.
 
-STYLE: clean premium editorial. Soft {background} studio background, diffused lighting, realistic diamond fire and reflections. Thin {accent_color} hairline panel borders. Elegant serif headings, clean sans-serif body. Photorealistic 3D render, tack-sharp, no clutter.
+STYLE: clean premium editorial. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), diffused lighting, realistic diamond fire and reflections. Thin {accent_color} hairline panel borders. Elegant serif headings, clean sans-serif body. Photorealistic 3D render, tack-sharp, no clutter.
 
 LAYOUT (composite grid):
 - Header top-left: ring name "{ring_name}" in large elegant serif capitals; subtitle "{ring_subtitle}" in spaced small-caps beneath; small diamond glyph accent.
@@ -373,7 +373,7 @@ THE RING (this exact design will be reused for four more views, so make it disti
 
 VIEW: {view_instruction}.
 
-STYLE: luxury jewelry catalog. Soft {background} studio background, gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
+STYLE: luxury jewelry catalog. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
 
 # Prompt for the non-hero views. The hero image is supplied as a reference so the
 # model re-renders THE SAME ring rather than inventing a new one.
@@ -381,7 +381,7 @@ EDIT_TEMPLATE = """The reference image shows ONE women's engagement ring — the
 
 Now MOVE THE CAMERA to a completely different angle. NEW CAMERA VIEW: {view_instruction}. Physically reposition the camera as described — the composition and silhouette MUST clearly differ from the reference; do NOT copy the reference pose.
 
-Keep it photorealistic, luxury jewelry catalog quality, on a soft {background} studio background with the single ring centred and generous negative space. No text, no watermark, no hands, no other objects."""
+Keep it photorealistic, luxury jewelry catalog quality, on a clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint) with the single ring centred and generous negative space. No text, no watermark, no hands, no other objects."""
 
 
 def _rings_static_dir() -> Path:
