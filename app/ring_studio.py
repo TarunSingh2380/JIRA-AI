@@ -25,7 +25,6 @@ import random
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -320,39 +319,51 @@ def _usage_cost_usd(usage: Any) -> Optional[float]:
     ) / 1_000_000
     return round(cost, 6)
 
-# (view key, display label, camera/view instruction). {slots} are filled from meta.
-# Each instruction pins the camera with explicit, silhouette-based geometry so the
-# top (bird's-eye, band flat) and side (upright, band reads as an open "O") views
-# can never collapse into each other or into the hero pose.
-VIEWS: list[tuple[str, str, str]] = [
-    ("hero", "Hero 3/4 View",
+# (view key, display label, render mode, source view, camera/view instruction).
+# {slots} are filled from meta.
+#   mode "anchor" -> rendered fresh from text.
+#   mode "edit"   -> rendered by editing the ``src`` view's image, so the ring
+#                    (metal, stone, setting, proportions) is carried forward
+#                    unchanged rather than re-invented → no hallucination.
+#
+# Views are rendered SEQUENTIALLY in this order, and each ``src`` must appear
+# earlier in the list so its image already exists when the edit runs. Every edit
+# sources the HERO so it stays one generation from the anchor (minimal drift).
+#
+# TOP is the tricky one: a genuine looking-down shot. We reach it by EDITING the
+# hero (which is already framed looking gently downward) and asking the camera to
+# continue up and over — an incremental move that keeps the exact same ring,
+# instead of a fresh text render that can invent a different ring.
+VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
+    ("hero", "Hero 3/4 View", "anchor", None,
      "a dramatic three-quarter perspective: the ring stands upright and is turned "
-     "roughly 30 degrees so BOTH the front face of the setting AND one shoulder of "
-     "the band are visible at once, the centre stone catching the light; the band "
-     "subtly engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
-    ("top", "Top View (Plan)",
-     "a TRUE TOP-DOWN plan view. The camera is positioned DIRECTLY OVERHEAD, looking "
-     "straight down onto the ring as it lies flat on the surface. The face of the "
-     "setting and the centre stone point straight up into the lens and fill the centre "
-     "of the frame, encircled by the accent stones, while the metal band is "
-     "foreshortened FLAT into a symmetric closed loop around and below the head. This "
-     "is a bird's-eye plan view: NO setting height and NO band profile are visible — "
-     "it must NOT look like a side or three-quarter view"),
-    ("side", "Side Profile",
+     "roughly 30 degrees, and the camera is raised ABOVE the ring looking gently "
+     "DOWNWARD (about 30 degrees) so BOTH the front face of the setting AND one "
+     "shoulder of the band are clearly visible, the centre stone catching the light; "
+     "the band subtly engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
+    ("top", "Top View", "edit", "hero",
+     "keeping this exact ring, RAISE and TILT the camera further up and over the ring "
+     "until it hovers almost directly ABOVE the head, angled steeply DOWNWARD (about "
+     "80 degrees) so you look DOWN onto the crown and flat table of the centre diamond "
+     "and the top of the setting, the accent stones encircling it; the band foreshortens "
+     "and recedes downward beneath the head into soft focus. This is a high top-down view "
+     "of the FACE of the ring — the diamond's flat top faces the camera. It must NOT be a "
+     "side profile and NOT a level three-quarter view"),
+    ("side", "Side Profile", "edit", "hero",
      "a STRICT SIDE ELEVATION. The ring stands upright on the surface and the camera "
      "sits level with it, viewing the band edge-on from the side so the round band "
      "reads as a COMPLETE OPEN CIRCLE — a clean letter-'O' silhouette you can see "
      "straight through. The setting and centre stone rise from the TOP of that circle, "
      "revealing the full setting height, the prongs and the band taper in pure profile. "
      "This is a strict side profile: it must NOT be a top-down or three-quarter view"),
-    ("front", "Front Elevation",
+    ("front", "Front Elevation", "edit", "hero",
      "a straight-on FRONT elevation. The ring stands upright, the camera level with it, "
      "the flat face of the setting and the centre stone pointing directly at the viewer "
      "and centred in the frame, with the band descending symmetrically below the head"),
 ]
 
-# The HERO view is the ANCHOR: it is rendered first from text, then its image is
-# fed back as a reference so the other four views depict the identical ring.
+# The HERO view is the reference ANCHOR: it is rendered first from text, then its
+# image is fed to every EDIT view so they all depict the identical ring.
 VIEW_TEMPLATE = """Create a single high-resolution, photorealistic 3D product render of ONE women's engagement ring — the "{ring_name}" ({ring_subtitle}).
 
 THE RING (this exact design will be reused for four more views, so make it distinctive and consistent):
@@ -382,19 +393,19 @@ def _rings_static_dir() -> Path:
 def build_view_prompts(meta: dict[str, Any]) -> list[dict[str, str]]:
     """Build the four single-view prompts for one ring design (same meta).
 
-    The first item (hero) is the ``anchor`` (text→image); the rest are ``edit``
-    prompts that re-render the anchor image from a new angle.
+    Each view carries its render ``mode`` and its ``src`` (the view whose image an
+    ``edit`` re-renders from). The hero is the text ``anchor``; every other view
+    edits the hero so the ring stays identical while the camera moves.
     """
     out: list[dict[str, str]] = []
-    for idx, (view, label, instruction) in enumerate(VIEWS):
+    for view, label, mode, src, instruction in VIEWS:
         view_instruction = instruction.format(**meta)
-        if idx == 0:
+        if mode == "anchor":
             prompt = VIEW_TEMPLATE.format(view_instruction=view_instruction, **meta)
-            mode = "anchor"
         else:
             prompt = EDIT_TEMPLATE.format(view_instruction=view_instruction, **meta)
-            mode = "edit"
-        out.append({"view": view, "label": label, "prompt": prompt, "mode": mode})
+        out.append({"view": view, "label": label, "prompt": prompt, "mode": mode,
+                    "src": src or ""})
     return out
 
 
@@ -473,8 +484,11 @@ def _render_anchor(
 def _render_edit(
     settings: Settings, item: dict[str, str], ref_bytes: bytes, name_hint: str,
     model: str, quality: str
-) -> RingImageResult:
-    """Render a non-hero view by editing the anchor image (keeps the same ring)."""
+) -> tuple[Optional[bytes], RingImageResult]:
+    """Render a non-hero view by editing a reference image (keeps the same ring).
+
+    Returns (image_bytes, result) so the rendered frame can itself seed a later
+    view in the sequential chain."""
     view, label, prompt = item["view"], item["label"], item["prompt"]
     try:
         import io
@@ -488,13 +502,13 @@ def _render_edit(
                                    quality=quality, n=1)
         data = _image_bytes_from_response(resp)
         filename, url = _save_png(data, name_hint, view)
-        return RingImageResult(status="rendered", view=view, label=label, prompt=prompt,
-                               image_url=url, filename=filename,
-                               cost_usd=_usage_cost_usd(getattr(resp, "usage", None)))
+        return data, RingImageResult(status="rendered", view=view, label=label, prompt=prompt,
+                                     image_url=url, filename=filename,
+                                     cost_usd=_usage_cost_usd(getattr(resp, "usage", None)))
     except Exception as exc:  # noqa: BLE001 - surface per-view
         log.exception("Ring Studio edit (%s) render failed", view)
-        return RingImageResult(status="error", view=view, label=label, prompt=prompt,
-                               message=f"Render failed: {exc}")
+        return None, RingImageResult(status="error", view=view, label=label, prompt=prompt,
+                                     message=f"Render failed: {exc}")
 
 
 def render_ring_views(
@@ -507,12 +521,14 @@ def render_ring_views(
 ) -> RingViewsResult:
     """Render the four per-view images for one ring design, all the SAME ring.
 
-    The hero view is rendered first (text→image) and becomes the visual anchor;
-    the other three are rendered by editing that anchor image so they depict the
-    identical ring from a new angle. ``quality`` (low/medium/high) trades cost
-    for fidelity. If ``OPENAI_API_KEY`` is not configured this is a graceful
-    no-op returning the four prompts for manual use. Per-view errors are captured
-    so the dashboard can show whatever succeeded.
+    Views render SEQUENTIALLY: the hero renders first from text and becomes the
+    reference; each subsequent view is produced by editing its ``src`` view's
+    rendered image, so the ring (metal, stone, setting, proportions) is carried
+    forward unchanged instead of being re-invented — this is what stops the top
+    view from hallucinating into a different or side-on ring. ``quality``
+    (low/medium/high) trades cost for fidelity. If ``OPENAI_API_KEY`` is not
+    configured this is a graceful no-op returning the four prompts for manual use.
+    Per-view errors are captured so the dashboard can show whatever succeeded.
     """
     quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
     items = build_view_prompts(meta)
@@ -531,29 +547,29 @@ def render_ring_views(
         )
 
     name_hint = str(meta.get("ring_name", "ring"))
-    anchor_item, rest_items = items[0], items[1:]
 
-    # 1) Render the hero anchor from text.
-    ref_bytes, anchor_result = _render_anchor(settings, anchor_item, name_hint, model, quality)
-    views: list[RingImageResult] = [anchor_result]
+    # Render one view at a time, in list order (each view's ``src`` is guaranteed
+    # to appear earlier, so its image already exists when we reach the edit).
+    # We keep the rendered bytes per view so any later view can source it.
+    rendered_bytes: dict[str, Optional[bytes]] = {}
+    results: dict[str, RingImageResult] = {}
+    for it in items:
+        view, src = it["view"], it.get("src") or ""
+        if it["mode"] == "anchor":
+            data, result = _render_anchor(settings, it, name_hint, model, quality)
+        else:
+            ref = rendered_bytes.get(src)
+            if ref is None:
+                data, result = None, RingImageResult(
+                    status="error", view=view, label=it["label"], prompt=it["prompt"],
+                    message=f"The '{src}' reference view failed, so this view was skipped.")
+            else:
+                data, result = _render_edit(settings, it, ref, name_hint, model, quality)
+        rendered_bytes[view] = data
+        results[view] = result
 
-    # 2) Render the remaining views in parallel, each conditioned on the anchor
-    #    image so the ring stays identical. If the anchor failed, we cannot keep
-    #    context — mark the rest errored rather than inventing new rings.
-    if ref_bytes is not None:
-        with ThreadPoolExecutor(max_workers=len(rest_items)) as pool:
-            rest = list(pool.map(
-                lambda it: _render_edit(settings, it, ref_bytes, name_hint, model, quality),
-                rest_items,
-            ))
-    else:
-        rest = [
-            RingImageResult(status="error", view=it["view"], label=it["label"],
-                            prompt=it["prompt"],
-                            message="Hero view failed, so the reference ring is unavailable.")
-            for it in rest_items
-        ]
-    views.extend(rest)
+    # Preserve the authored display order (hero, top, side, front).
+    views: list[RingImageResult] = [results[it["view"]] for it in items]
 
     rendered = sum(1 for v in views if v.status == "rendered")
     if rendered == len(views):

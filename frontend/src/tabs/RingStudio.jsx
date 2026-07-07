@@ -334,8 +334,9 @@ export default function RingStudio() {
                 </button>
               </div>
               <span className="ring-render-hint muted">
-                Hero renders first, then Top · Side · Front re-render
-                from it — same ring across all four.
+                Rendered in sequence — Hero renders first, then Top · Side ·
+                Front each re-render from it, carrying the same ring forward so
+                nothing is re-invented.
               </span>
 
               {views ? <ViewsGallery result={views} onDownloadZip={downloadZip} /> : null}
