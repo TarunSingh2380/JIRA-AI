@@ -110,9 +110,9 @@ export default function RingStudio() {
     setViews(null);
     setRenderJobId(null);
     try {
-      // Rendering five views takes ~40–60s, so the API returns a job id and we
+      // Rendering four views takes ~40–60s, so the API returns a job id and we
       // poll for the result — this keeps each request short of proxy timeouts.
-      // Pass the exact generated design (meta) so all five views match.
+      // Pass the exact generated design (meta) so all four views match.
       const { job_id } = await apiFetch("/ring-studio/image", {
         method: "POST",
         body: { meta: result.meta, seed: result.seed, quality },
@@ -330,12 +330,12 @@ export default function RingStudio() {
                   </select>
                 </label>
                 <button onClick={renderImages} disabled={rendering}>
-                  {rendering ? "Rendering 5 views…" : "🖼️ Render 5 Views"}
+                  {rendering ? "Rendering 4 views…" : "🖼️ Render 4 Views"}
                 </button>
               </div>
               <span className="ring-render-hint muted">
-                Hero renders first, then Top · Side · Front · Detail re-render
-                from it — same ring across all five.
+                Hero renders first, then Top · Side · Front re-render
+                from it — same ring across all four.
               </span>
 
               {views ? <ViewsGallery result={views} onDownloadZip={downloadZip} /> : null}

@@ -276,9 +276,10 @@ def batch_to_jsonl(rows: list[dict[str, Any]]) -> str:
 
 
 # ─── Per-view image rendering (optional) ─────────────────────────────────────
-# Instead of one composite spec-sheet, we render FIVE separate images — one per
-# camera view — all depicting the EXACT SAME ring. Each view prompt restates the
-# full ring spec so the design stays identical across the five renders.
+# Instead of one composite spec-sheet, we render FOUR separate images — one per
+# camera view (hero 3/4, top, side, front) — all depicting the EXACT SAME ring.
+# Each view prompt restates the full ring spec so the design stays identical
+# across the four renders.
 
 # gpt-image-1 square size — one ring per frame reads best in a square crop.
 _IMAGE_SIZE = "1024x1024"
@@ -320,23 +321,34 @@ def _usage_cost_usd(usage: Any) -> Optional[float]:
     return round(cost, 6)
 
 # (view key, display label, camera/view instruction). {slots} are filled from meta.
+# Each instruction pins the camera with explicit, silhouette-based geometry so the
+# top (bird's-eye, band flat) and side (upright, band reads as an open "O") views
+# can never collapse into each other or into the hero pose.
 VIEWS: list[tuple[str, str, str]] = [
     ("hero", "Hero 3/4 View",
-     "a dramatic 3/4 perspective of the ring standing upright, the centre stone "
-     "catching the light and the band sweeping toward the viewer; the band subtly "
-     "engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
-    ("top", "Top View",
-     "the ring seen from directly above, the band curving symmetrically and the "
-     "centre stone centred and facing straight up"),
-    ("side", "Side View",
-     "a pure side profile of the ring showing the setting height, the prongs, and "
-     "the band taper"),
-    ("front", "Front View",
-     "an upright, straight-on front elevation of the ring, centre stone facing the "
-     "viewer"),
-    ("detail", "Detail View",
-     "an extreme macro close-up of the {detail_feature}, showing the fine metalwork "
-     "and hand-set micro-pavé"),
+     "a dramatic three-quarter perspective: the ring stands upright and is turned "
+     "roughly 30 degrees so BOTH the front face of the setting AND one shoulder of "
+     "the band are visible at once, the centre stone catching the light; the band "
+     "subtly engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
+    ("top", "Top View (Plan)",
+     "a TRUE TOP-DOWN plan view. The camera is positioned DIRECTLY OVERHEAD, looking "
+     "straight down onto the ring as it lies flat on the surface. The face of the "
+     "setting and the centre stone point straight up into the lens and fill the centre "
+     "of the frame, encircled by the accent stones, while the metal band is "
+     "foreshortened FLAT into a symmetric closed loop around and below the head. This "
+     "is a bird's-eye plan view: NO setting height and NO band profile are visible — "
+     "it must NOT look like a side or three-quarter view"),
+    ("side", "Side Profile",
+     "a STRICT SIDE ELEVATION. The ring stands upright on the surface and the camera "
+     "sits level with it, viewing the band edge-on from the side so the round band "
+     "reads as a COMPLETE OPEN CIRCLE — a clean letter-'O' silhouette you can see "
+     "straight through. The setting and centre stone rise from the TOP of that circle, "
+     "revealing the full setting height, the prongs and the band taper in pure profile. "
+     "This is a strict side profile: it must NOT be a top-down or three-quarter view"),
+    ("front", "Front Elevation",
+     "a straight-on FRONT elevation. The ring stands upright, the camera level with it, "
+     "the flat face of the setting and the centre stone pointing directly at the viewer "
+     "and centred in the frame, with the band descending symmetrically below the head"),
 ]
 
 # The HERO view is the ANCHOR: it is rendered first from text, then its image is
@@ -356,7 +368,7 @@ STYLE: luxury jewelry catalog. Soft {background} studio background, gentle diffu
 # model re-renders THE SAME ring rather than inventing a new one.
 EDIT_TEMPLATE = """The reference image shows ONE women's engagement ring — the "{ring_name}". Re-render THAT EXACT SAME ring — keep the identical {metal} metal, the identical {diamond_shape} centre diamond ({carat} ct), the identical {setting} and band, and the same proportions, colour and finish. Do NOT redesign the ring or change any detail.
 
-NEW CAMERA VIEW: {view_instruction}.
+Now MOVE THE CAMERA to a completely different angle. NEW CAMERA VIEW: {view_instruction}. Physically reposition the camera as described — the composition and silhouette MUST clearly differ from the reference; do NOT copy the reference pose.
 
 Keep it photorealistic, luxury jewelry catalog quality, on a soft {background} studio background with the single ring centred and generous negative space. No text, no watermark, no hands, no other objects."""
 
@@ -368,7 +380,7 @@ def _rings_static_dir() -> Path:
 
 
 def build_view_prompts(meta: dict[str, Any]) -> list[dict[str, str]]:
-    """Build the five single-view prompts for one ring design (same meta).
+    """Build the four single-view prompts for one ring design (same meta).
 
     The first item (hero) is the ``anchor`` (text→image); the rest are ``edit``
     prompts that re-render the anchor image from a new angle.
@@ -493,13 +505,13 @@ def render_ring_views(
     model: str = "gpt-image-1",
     quality: str = _DEFAULT_QUALITY,
 ) -> RingViewsResult:
-    """Render the five per-view images for one ring design, all the SAME ring.
+    """Render the four per-view images for one ring design, all the SAME ring.
 
     The hero view is rendered first (text→image) and becomes the visual anchor;
-    the other four are rendered by editing that anchor image so they depict the
+    the other three are rendered by editing that anchor image so they depict the
     identical ring from a new angle. ``quality`` (low/medium/high) trades cost
     for fidelity. If ``OPENAI_API_KEY`` is not configured this is a graceful
-    no-op returning the five prompts for manual use. Per-view errors are captured
+    no-op returning the four prompts for manual use. Per-view errors are captured
     so the dashboard can show whatever succeeded.
     """
     quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
@@ -560,7 +572,7 @@ def render_ring_views(
 
 
 # ─── Background render jobs ──────────────────────────────────────────────────
-# Rendering five images is a ~40–60s blocking call, which trips reverse-proxy /
+# Rendering four images is a ~40–60s blocking call, which trips reverse-proxy /
 # gateway timeouts (504) when done in one request. Instead the API enqueues a
 # job, returns its id immediately, and the SPA polls for the result. The store
 # is an in-memory singleton (safe with the single-worker uvicorn deployment),
