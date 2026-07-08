@@ -10,10 +10,14 @@ Read-only: it fetches Jira and calls the model; it touches no code.
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
+
+import requests
+from requests.auth import HTTPBasicAuth
 
 from app.config import Settings
 from app.jira_fetcher import _jira_get  # read-only GET with retry/backoff
@@ -21,6 +25,21 @@ from app.jira_graph import _adf_to_text
 from app.json_utils import parse_model_json
 
 log = logging.getLogger(__name__)
+
+# Screenshots pasted into a Jira ticket land as image attachments. We download
+# them and feed them to the extraction model (vision) so on-screen details that
+# never appear in the prose — the URL/route, UI labels, column headers, an error
+# shown in the UI — become searchable signals. Anthropic accepts png/jpeg/gif/webp.
+_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+_MAX_TICKET_IMAGES = 8          # cap how many screenshots we send per ticket
+_MAX_IMAGE_BYTES = 4_000_000    # per-image budget; skip anything larger
+
+# Tickets link a PRD / Tech-Doc (usually a Google Doc) describing the feature's
+# intended behavior. We read them via the existing Google Drive integration
+# (app.doc_review handles org-restricted OAuth / service-account auth) so the
+# extraction model has the spec, not just the bug report.
+_MAX_LINKED_DOCS = 4
+_MAX_DOC_CHARS = 8000           # per-doc char budget fed to extraction
 
 # Issue fields we need for diagnosis. Comments and attachments come back nested.
 _FIELDS = (
@@ -46,10 +65,18 @@ class TicketIntake:
     attachments: list[dict[str, Any]]
     linked_issues: list[dict[str, str]]
     raw: dict[str, Any] = field(default_factory=dict)
+    linked_docs: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d = dict(self.__dict__)
         d.pop("raw", None)
+        # Keep linked-doc metadata but drop the (potentially large) fetched text
+        # from the stored dict — its signal is already distilled into `extracted`.
+        d["linked_docs"] = [
+            {"label": x.get("label"), "url": x.get("url"),
+             "error": x.get("error"), "has_text": bool(x.get("text"))}
+            for x in self.linked_docs
+        ]
         return d
 
 
@@ -59,6 +86,7 @@ def fetch_ticket(settings: Settings, jira_key: str) -> TicketIntake:
         raise RuntimeError("JIRA_BASE_URL not configured")
     data = _jira_get(f"/rest/api/3/issue/{jira_key}", params={"fields": _FIELDS})
     fields = data.get("fields", {}) or {}
+    raw_description = fields.get("description")
 
     comments = [
         _adf_to_text(c.get("body"))
@@ -83,7 +111,7 @@ def fetch_ticket(settings: Settings, jira_key: str) -> TicketIntake:
     return TicketIntake(
         key=data.get("key", jira_key),
         summary=fields.get("summary") or "",
-        description=_adf_to_text(fields.get("description")),
+        description=_adf_to_text(raw_description),
         status=(fields.get("status") or {}).get("name", ""),
         issue_type=(fields.get("issuetype") or {}).get("name", ""),
         priority=(fields.get("priority") or {}).get("name", ""),
@@ -96,7 +124,32 @@ def fetch_ticket(settings: Settings, jira_key: str) -> TicketIntake:
         attachments=attachments,
         linked_issues=linked,
         raw=data,
+        linked_docs=_fetch_linked_docs(raw_description),
     )
+
+
+def _fetch_linked_docs(raw_description: Any) -> list[dict[str, Any]]:
+    """Fetch the text of PRD / Tech-Doc links in the ticket via the existing
+    Google Drive integration (app.doc_review, which handles org-restricted OAuth /
+    service-account auth). Best-effort: any extraction/auth/fetch failure is
+    recorded per-doc and never breaks intake.
+    """
+    try:
+        from app import doc_review
+        links = doc_review.extract_doc_links(raw_description)
+    except Exception as exc:  # import or parse failure — degrade to no docs
+        log.warning("RCA intake: linked-doc extraction failed: %s", exc)
+        return []
+    docs: list[dict[str, Any]] = []
+    for link in links[:_MAX_LINKED_DOCS]:
+        try:
+            text, err = doc_review.fetch_doc_text(link.url, limit_chars=_MAX_DOC_CHARS)
+        except Exception as exc:  # network/auth — record and continue
+            text, err = "", f"{type(exc).__name__}: {exc}"
+        if err:
+            log.info("RCA intake: linked doc %s not readable: %s", link.url, err)
+        docs.append({"label": link.label, "url": link.url, "text": text, "error": err})
+    return docs
 
 
 _EXTRACTION_SYSTEM = """\
@@ -119,6 +172,16 @@ Rules:
 - Include a stack frame only when the text actually contains trace-like content.
 - Use null for unknown file/line/symbol fields; never invent paths.
 - If a section has nothing, return an empty array (or "" for suspected_area).
+- Screenshots from the ticket may be attached as images. READ them: pull any
+  visible URL/route into mentioned_endpoints (e.g. a browser address bar showing
+  "/aml-leads"), any on-screen error text into error_messages verbatim, and use
+  visible page titles, menu/breadcrumb labels, column headers, and field labels to
+  sharpen suspected_area. Ignore decorative/boilerplate UI chrome.
+- A linked design doc (PRD / Tech Doc) may be included. Use it to understand the
+  feature's INTENDED behavior/spec and to sharpen suspected_area and
+  mentioned_endpoints (named modules, endpoints, procedures). The bug lives in the
+  code, not the doc — never treat doc prose as error output or invent a stack frame
+  from it.
 """
 
 
@@ -148,6 +211,12 @@ def _intake_user_message(intake: TicketIntake) -> str:
         parts += ["", "LINKED ISSUES:"]
         for li in intake.linked_issues:
             parts.append(f"- {li['relation']} {li['key']}: {li['summary']}")
+    readable_docs = [d for d in intake.linked_docs if d.get("text")]
+    if readable_docs:
+        parts += ["", "LINKED DESIGN DOCS (PRD / Tech Doc):"]
+        for d in readable_docs:
+            parts.append(f"--- {d.get('label') or 'DOC'} ({d.get('url')}) ---")
+            parts.append(d["text"])
     return "\n".join(parts)
 
 
@@ -160,6 +229,51 @@ _EMPTY_EXTRACTION = {
 }
 
 
+def _download_attachment(settings: Settings, url: str) -> bytes:
+    """Fetch a Jira attachment's bytes with the same basic auth used for the API."""
+    resp = requests.get(
+        url, headers={"Accept": "*/*"},
+        auth=HTTPBasicAuth(settings.jira_email, settings.jira_api_token), timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.content
+
+
+def _collect_ticket_images(settings: Settings, intake: TicketIntake) -> list[dict[str, Any]]:
+    """Download image attachments as Anthropic image blocks (base64). Best-effort:
+    any download/size failure is skipped so extraction never breaks on a bad file."""
+    if not (settings.jira_email and settings.jira_api_token):
+        return []  # no creds to authenticate the attachment download
+    blocks: list[dict[str, Any]] = []
+    for att in intake.attachments:
+        if len(blocks) >= _MAX_TICKET_IMAGES:
+            break
+        mime = (att.get("mime") or "").lower()
+        url = att.get("url") or ""
+        if mime not in _IMAGE_MIME_TYPES or not url:
+            continue
+        if att.get("size") and att["size"] > _MAX_IMAGE_BYTES:
+            log.info("RCA intake %s: skipping oversized image %s (%s bytes)",
+                     intake.key, att.get("filename"), att.get("size"))
+            continue
+        try:
+            data = _download_attachment(settings, url)
+        except Exception as exc:  # network/auth/HTTP — degrade, don't crash intake
+            log.warning("RCA intake %s: could not download attachment %s: %s",
+                        intake.key, att.get("filename"), exc)
+            continue
+        if not data or len(data) > _MAX_IMAGE_BYTES:
+            continue
+        blocks.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": mime,
+                       "data": base64.standard_b64encode(data).decode("ascii")},
+        })
+    if blocks:
+        log.info("RCA intake %s: attached %d screenshot(s) to extraction", intake.key, len(blocks))
+    return blocks
+
+
 def extract_signals(
     settings: Settings,
     intake: TicketIntake,
@@ -168,15 +282,21 @@ def extract_signals(
     """Run the LLM extraction call; return strict JSON (schema-guaranteed keys).
 
     Pass `llm_client` (anything with a `.complete(system, user, max_tokens=)`)
-    to inject a stub in tests; otherwise an Anthropic client is built.
+    to inject a stub in tests; otherwise an Anthropic client is built. Image
+    attachments (screenshots) are downloaded and sent with the call when present.
     """
     if llm_client is None:
         from app.llm_client import AnthropicLLMClient
         llm_client = AnthropicLLMClient(settings, timeout_override=settings.llm_timeout_seconds)
+    complete_kwargs: dict[str, Any] = {"max_tokens": 2000}
+    if intake.attachments:
+        images = _collect_ticket_images(settings, intake)
+        if images:
+            complete_kwargs["images"] = images
     raw = llm_client.complete(
         _EXTRACTION_SYSTEM,
         _intake_user_message(intake),
-        max_tokens=2000,
+        **complete_kwargs,
     )
     try:
         parsed = parse_model_json(raw)

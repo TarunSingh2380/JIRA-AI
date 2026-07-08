@@ -8,7 +8,7 @@ instructions, while the user message contains the ticket JSON.
 
 import json
 import logging
-from typing import Protocol
+from typing import Any, Optional, Protocol
 
 from app.config import Settings
 from app.exceptions import LLMConfigurationError
@@ -17,8 +17,14 @@ log = logging.getLogger(__name__)
 
 
 class LLMClient(Protocol):
-    def complete(self, system_prompt: str, user_message: str, *, max_tokens: int = 4096) -> str:
-        """Return the model output for a system prompt plus user message."""
+    def complete(self, system_prompt: str, user_message: str, *,
+                 max_tokens: int = 4096,
+                 images: Optional[list[dict[str, Any]]] = None) -> str:
+        """Return the model output for a system prompt plus user message.
+
+        `images`, when given, are provider-native image content blocks appended
+        to the user turn (multimodal). Text-only providers ignore them.
+        """
 
 
 class OpenAILLMClient:
@@ -40,7 +46,10 @@ class OpenAILLMClient:
             timeout=timeout_override if timeout_override is not None else settings.llm_timeout_seconds,
         )
 
-    def complete(self, system_prompt: str, user_message: str) -> str:
+    def complete(self, system_prompt: str, user_message: str, *,
+                 max_tokens: int = 4096,
+                 images: Optional[list[dict[str, Any]]] = None) -> str:
+        # Image blocks here are Anthropic-native; the OpenAI path stays text-only.
         log.info("OpenAI LLM call: model=%s input_chars=%d", self.settings.llm_model, len(user_message))
         response = self.client.chat.completions.create(
             model=self.settings.llm_model,
@@ -87,8 +96,17 @@ class AnthropicLLMClient:
             timeout=timeout_override if timeout_override is not None else settings.llm_timeout_seconds,
         )
 
-    def complete(self, system_prompt: str, user_message: str, *, max_tokens: int = 4096) -> str:
-        log.info("Anthropic LLM call: model=%s input_chars=%d max_tokens=%d", self.settings.llm_model, len(user_message), max_tokens)
+    def complete(self, system_prompt: str, user_message: str, *,
+                 max_tokens: int = 4096,
+                 images: Optional[list[dict[str, Any]]] = None) -> str:
+        # With images, the user turn becomes a multimodal content array: the text
+        # first, then each image block (base64). Without, it stays a plain string.
+        if images:
+            content: Any = [{"type": "text", "text": user_message}, *images]
+        else:
+            content = user_message
+        log.info("Anthropic LLM call: model=%s input_chars=%d max_tokens=%d images=%d",
+                 self.settings.llm_model, len(user_message), max_tokens, len(images or []))
         response = self.client.messages.create(
             model=self.settings.llm_model,
             max_tokens=max_tokens,
@@ -96,7 +114,7 @@ class AnthropicLLMClient:
             messages=[
                 {
                     "role": "user",
-                    "content": user_message,
+                    "content": content,
                 }
             ],
             temperature=0.1,
@@ -117,7 +135,9 @@ class AnthropicLLMClient:
 
 
 class MockLLMClient:
-    def complete(self, system_prompt: str, user_message: str) -> str:
+    def complete(self, system_prompt: str, user_message: str, *,
+                 max_tokens: int = 4096,
+                 images: Optional[list[dict[str, Any]]] = None) -> str:
         log.info("MockLLMClient.complete called (no external API call)")
         system_preview = system_prompt[:500]
         user_preview = user_message[:500]

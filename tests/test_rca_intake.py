@@ -1,6 +1,8 @@
 """Unit tests for app.rca.intake — extraction normalization + LLM injection."""
 from __future__ import annotations
 
+import base64
+import dataclasses
 import json
 import unittest
 from pathlib import Path
@@ -26,10 +28,12 @@ class FakeLLM:
     def __init__(self, payload):
         self._payload = payload
         self.calls = 0
+        self.last_images = None
 
-    def complete(self, system, user, *, max_tokens=4096):
+    def complete(self, system, user, *, max_tokens=4096, images=None):
         self.calls += 1
         self.last_user = user
+        self.last_images = images
         return self._payload
 
 
@@ -94,6 +98,118 @@ class ExtractionTests(unittest.TestCase):
         self.assertIn("COMMENTS:", msg)
         self.assertIn("LINKED ISSUES:", msg)
         self.assertIn("RFT-2", msg)
+
+
+class ScreenshotIntakeTests(unittest.TestCase):
+    def setUp(self):
+        # creds required so _collect_ticket_images attempts the download
+        self.settings = dataclasses.replace(
+            make_settings(Path("/tmp")), jira_email="u@x.com", jira_api_token="tok")
+
+    def test_collect_images_filters_and_base64_encodes(self):
+        ticket = _ticket(attachments=[
+            {"filename": "shot.png", "mime": "image/png", "size": 10, "url": "http://j/1"},
+            {"filename": "doc.pdf", "mime": "application/pdf", "size": 10, "url": "http://j/2"},
+            {"filename": "huge.png", "mime": "image/png",
+             "size": intake._MAX_IMAGE_BYTES + 1, "url": "http://j/3"},
+            {"filename": "nourl.jpg", "mime": "image/jpeg", "size": 10, "url": ""},
+        ])
+        orig = intake._download_attachment
+        intake._download_attachment = lambda s, url: b"\x89PNGbytes"
+        try:
+            blocks = intake._collect_ticket_images(self.settings, ticket)
+        finally:
+            intake._download_attachment = orig
+        # only the valid png survives (pdf, oversized, and no-url are dropped)
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]["type"], "image")
+        self.assertEqual(blocks[0]["source"]["media_type"], "image/png")
+        self.assertEqual(base64.b64decode(blocks[0]["source"]["data"]), b"\x89PNGbytes")
+
+    def test_collect_images_skips_when_no_credentials(self):
+        no_creds = dataclasses.replace(self.settings, jira_email="", jira_api_token="")
+        ticket = _ticket(attachments=[
+            {"filename": "s.png", "mime": "image/png", "size": 10, "url": "http://j/1"}])
+        self.assertEqual(intake._collect_ticket_images(no_creds, ticket), [])
+
+    def test_download_failure_degrades_gracefully(self):
+        ticket = _ticket(attachments=[
+            {"filename": "s.png", "mime": "image/png", "size": 10, "url": "http://j/1"}])
+        orig = intake._download_attachment
+        def boom(s, url):
+            raise RuntimeError("network down")
+        intake._download_attachment = boom
+        try:
+            self.assertEqual(intake._collect_ticket_images(self.settings, ticket), [])
+        finally:
+            intake._download_attachment = orig
+
+    def test_extract_signals_passes_images_to_llm(self):
+        ticket = _ticket(attachments=[
+            {"filename": "s.png", "mime": "image/png", "size": 10, "url": "http://j/1"}])
+        sentinel = [{"type": "image", "source": {"type": "base64",
+                     "media_type": "image/png", "data": "AAAA"}}]
+        orig = intake._collect_ticket_images
+        intake._collect_ticket_images = lambda s, t: sentinel
+        llm = FakeLLM(json.dumps({"mentioned_endpoints": ["/aml-leads"]}))
+        try:
+            out = intake.extract_signals(self.settings, ticket, llm_client=llm)
+        finally:
+            intake._collect_ticket_images = orig
+        self.assertEqual(llm.last_images, sentinel)
+        self.assertEqual(out["mentioned_endpoints"], ["/aml-leads"])
+
+    def test_extract_signals_no_attachments_sends_no_images(self):
+        llm = FakeLLM(json.dumps({}))
+        intake.extract_signals(self.settings, _ticket(attachments=[]), llm_client=llm)
+        self.assertIsNone(llm.last_images)
+
+
+class LinkedDocIntakeTests(unittest.TestCase):
+    def test_intake_message_includes_readable_docs_only(self):
+        t = _ticket(linked_docs=[
+            {"label": "PRD", "url": "http://d/1",
+             "text": "Expected: download a TXT file", "error": ""},
+            {"label": "TechDoc", "url": "http://d/2", "text": "", "error": "auth required"},
+        ])
+        msg = intake._intake_user_message(t)
+        self.assertIn("LINKED DESIGN DOCS", msg)
+        self.assertIn("Expected: download a TXT file", msg)
+        self.assertIn("http://d/1", msg)
+        self.assertNotIn("http://d/2", msg)  # errored/empty doc is omitted
+
+    def test_to_dict_strips_doc_text_keeps_metadata(self):
+        t = _ticket(linked_docs=[
+            {"label": "PRD", "url": "http://d/1", "text": "big spec text", "error": ""}])
+        doc = t.to_dict()["linked_docs"][0]
+        self.assertTrue(doc["has_text"])
+        self.assertNotIn("text", doc)            # heavy text not stored
+        self.assertEqual(doc["url"], "http://d/1")
+
+    def test_fetch_linked_docs_reads_via_doc_review(self):
+        from app import doc_review
+        orig_extract, orig_fetch = doc_review.extract_doc_links, doc_review.fetch_doc_text
+        doc_review.extract_doc_links = lambda desc: [
+            doc_review.DocLink(label="PRD", url="http://d/1")]
+        doc_review.fetch_doc_text = lambda url, limit_chars=60_000: ("spec text", "")
+        try:
+            docs = intake._fetch_linked_docs({"type": "doc"})
+        finally:
+            doc_review.extract_doc_links, doc_review.fetch_doc_text = orig_extract, orig_fetch
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0]["text"], "spec text")
+        self.assertEqual(docs[0]["url"], "http://d/1")
+
+    def test_fetch_linked_docs_degrades_on_extraction_error(self):
+        from app import doc_review
+        orig = doc_review.extract_doc_links
+        def boom(desc):
+            raise RuntimeError("adf parse failed")
+        doc_review.extract_doc_links = boom
+        try:
+            self.assertEqual(intake._fetch_linked_docs({"x": 1}), [])
+        finally:
+            doc_review.extract_doc_links = orig
 
 
 if __name__ == "__main__":
