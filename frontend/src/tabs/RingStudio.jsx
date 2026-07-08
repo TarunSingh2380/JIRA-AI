@@ -335,7 +335,7 @@ export default function RingStudio() {
               </div>
               <span className="ring-render-hint muted">
                 Rendered in sequence — Hero renders first, then Top · Side ·
-                Angle each re-render from it, carrying the same ring forward so
+                Laydown each re-render from it, carrying the same ring forward so
                 nothing is re-invented.
               </span>
 

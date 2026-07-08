@@ -356,14 +356,14 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
      "straight through. The setting and centre stone rise from the TOP of that circle, "
      "revealing the full setting height, the prongs and the band taper in pure profile. "
      "This is a strict side profile: it must NOT be a top-down or three-quarter view"),
-    ("angle", "Angle View", "edit", "hero",
-     "a SECOND three-quarter perspective from a clearly DIFFERENT angle than the hero. Rotate "
-     "the ring about 45 degrees the OTHER way and bring the camera nearer to eye level so the "
-     "setting is seen more from the side: emphasise the PROFILE and height of the head, the "
-     "prong basket / open gallery beneath the stone, and the pavé along the shoulder, while "
-     "the band sweeps away from the viewer at an angle. It is an angled three-quarter view — "
-     "both the side and a hint of the front of the setting are visible at once — NOT a flat "
-     "front elevation and NOT a pure side profile"),
+    ("laydown", "Laydown View", "edit", "hero",
+     "the ring LYING DOWN flat on a surface, resting on its side/back so the decorated FACE "
+     "of the setting and the centre stone tilt UP toward the camera. Shoot from a LOW angle "
+     "close to the surface, looking at the FRONT of the ring as it rests on a clean pure-white "
+     "matte tabletop, the band curving away behind the head; a soft contact shadow and a gentle "
+     "reflection sit beneath the ring on the surface. It is a relaxed laid-down product shot on "
+     "the tabletop with the face turned toward the viewer — the ring is NOT standing upright and "
+     "this is NOT a side profile or a straight top-down"),
 ]
 
 # The HERO view is the reference ANCHOR: it is rendered first from text, then its
