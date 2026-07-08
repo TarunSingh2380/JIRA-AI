@@ -350,14 +350,15 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
      "shoulder of the band are clearly visible, the centre stone catching the light; "
      "the band subtly engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
     ("top", "Top View", "anchor", None,
-     "a symmetric, straight-on FRONT-FACE catalog view. The ring STANDS UPRIGHT on its band and "
-     "the camera is directly in FRONT, elevated only about 15 degrees and moved in CLOSE so the "
-     "centre stone's FACE dominates and FILLS THE UPPER HALF of the frame, its prongs visible. "
-     "The pavé band is foreshortened, its two shoulders descending symmetrically below the head "
-     "so the left and right mirror each other. It is the classic face-forward hero shot of the "
-     "diamond: standing upright, perfectly symmetric, face-dominant — NOT lying flat on a "
-     "surface, NOT a full side profile with an open 'O' band, NOT a three-quarter angle, and "
-     "NOT an overhead top-down"),
+     "a symmetric, straight-on FRONT-FACE catalog view showing the COMPLETE ring. The ring "
+     "STANDS UPRIGHT on its band and the camera is directly in FRONT, elevated only about 15 "
+     "degrees. The centre stone's FACE points at the camera and is the focal point, its prongs "
+     "visible, while the pavé band descends symmetrically below the head with BOTH shoulders and "
+     "the full lower shank clearly in view. Frame the ENTIRE ring inside the picture with "
+     "comfortable margin and negative space on all sides — do NOT crop the band or let any part "
+     "of the ring run out of frame. Standing upright, perfectly symmetric, face-forward, whole "
+     "ring visible — NOT lying flat, NOT a full side profile with an open 'O' band, NOT a "
+     "three-quarter angle, NOT an overhead top-down, and NOT cropped"),
     ("side", "Side Profile", "edit", "hero",
      "a STRICT SIDE ELEVATION. The ring stands upright on the surface and the camera "
      "sits level with it, viewing the band edge-on from the side so the round band "
