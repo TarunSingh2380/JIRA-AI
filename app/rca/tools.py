@@ -110,7 +110,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     },
     {
         "name": "semantic_code_search",
-        "description": "Semantic search over function/class code chunks. Read-only.",
+        "description": "Semantic search over function/class code chunks. Omit `repo` to "
+                       "search ALL indexed repos — do this to discover where relevant "
+                       "code lives when the seeded repo yields nothing. Read-only.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -120,6 +122,13 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
             "required": ["query"],
         },
+    },
+    {
+        "name": "list_repos",
+        "description": "List the repositories available to investigate and which are in "
+                       "the current focus scope. Use this to find the right repo when the "
+                       "seeded repos come up empty. Read-only.",
+        "input_schema": {"type": "object", "properties": {}},
     },
 ]
 
@@ -134,9 +143,31 @@ class ToolContext:
 
     def _check_repo(self, repo: str) -> Optional[dict[str, Any]]:
         if self.allowed_repos and repo not in self.allowed_repos:
-            return {"error": f"repo '{repo}' is out of scope for this run; "
-                             f"allowed: {sorted(self.allowed_repos)}"}
+            return {"error": f"repo '{repo}' is out of scope for this run "
+                             f"(in scope: {sorted(self.allowed_repos)}). Run an unscoped "
+                             f"semantic_code_search or call list_repos to find where the "
+                             f"relevant code lives — repos a semantic search surfaces "
+                             f"become reachable automatically."}
         return None
+
+    def _expand_scope(self, repos: Any) -> None:
+        """Widen the focus scope to include repos surfaced by the evidence.
+
+        The run seeds `allowed_repos` with the localizer's candidates, but the
+        real code sometimes lives in a repo the localizer missed (e.g. a legacy
+        app). When a semantic search surfaces a repo, make it reachable for
+        follow-up grep/read so the agent can chase the lead instead of dead-ending
+        on an out-of-scope error. Every tool is read-only, so widening the scope
+        to already-indexed repos is safe. No-op when the run is unrestricted
+        (empty `allowed_repos`).
+        """
+        if not self.allowed_repos:
+            return
+        for repo in repos:
+            if repo and repo not in self.allowed_repos:
+                self.allowed_repos.add(repo)
+                log.info("RCA scope expanded to include repo '%s' "
+                         "(surfaced by semantic_code_search)", repo)
 
     # ── dispatch ──────────────────────────────────────────────────────────────
 
@@ -197,7 +228,17 @@ class ToolContext:
             return err
         hits = code_index.search(self.settings, a["query"], repo=repo,
                                  k=int(a.get("k", 8)))
+        # Follow the evidence: any repo the index surfaces becomes reachable for
+        # follow-up grep/read, even if the localizer didn't seed it.
+        self._expand_scope(h.get("repo", "") for h in hits)
         return {"results": hits}
+
+    def _t_list_repos(self, a: dict[str, Any]) -> dict[str, Any]:
+        available = repo_access.list_repos(self.settings)
+        return {
+            "repos": available,
+            "in_scope": sorted(self.allowed_repos) if self.allowed_repos else available,
+        }
 
 
 def find_references(settings: Settings, repo: str, symbol: str) -> dict[str, Any]:

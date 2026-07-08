@@ -29,6 +29,12 @@ must not invent file paths or line numbers — verify everything with a tool.
 
 Method:
 - Start from the seeded candidates and extracted error signals.
+- The seeded candidates and their repos are a starting HYPOTHESIS, not a boundary.
+  If grep_codebase / semantic_code_search in the seeded repo keeps coming up empty,
+  the code most likely lives in a different repo: run an UNSCOPED
+  semantic_code_search (omit `repo`) or call list_repos to find it, then continue
+  the investigation in that repo. Do not conclude "insufficient data" while you
+  still have repos left to search.
 - Use grep_codebase / read_file to confirm where the faulty logic lives.
 - Use find_references and git_blame/git_log to trace how the code is reached and
   when/why it changed.

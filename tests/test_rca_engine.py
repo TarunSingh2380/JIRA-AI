@@ -240,6 +240,36 @@ class ToolScopeTests(unittest.TestCase):
         ctx = tools.ToolContext(self.settings, allowed_repos=["svc"])
         self.assertIn("error", ctx.dispatch("rm_rf", {}))
 
+    def test_list_repos_reports_available_and_scope(self):
+        ctx = tools.ToolContext(self.settings, allowed_repos=["svc"])
+        out = ctx.dispatch("list_repos", {})
+        self.assertIn("svc", out["repos"])
+        self.assertEqual(out["in_scope"], ["svc"])
+
+    def test_semantic_search_expands_scope_to_surfaced_repo(self):
+        # A second repo the localizer never seeded, holding the real code.
+        init_repo(self.root, "legacy", {"b.py": "TARGET=1\n"})
+        commit(self.root / "legacy", "init")
+
+        ctx = tools.ToolContext(self.settings, allowed_repos=["svc"])
+        # grep on the out-of-scope repo is blocked before any lead surfaces it.
+        blocked = ctx.dispatch("grep_codebase", {"repo": "legacy", "pattern": "TARGET"})
+        self.assertIn("error", blocked)
+
+        # A semantic search surfaces the code living in 'legacy'…
+        original = tools.code_index.search
+        tools.code_index.search = lambda *a, **k: [{"repo": "legacy", "file_path": "b.py"}]
+        try:
+            hits = ctx.dispatch("semantic_code_search", {"query": "target"})
+        finally:
+            tools.code_index.search = original
+        self.assertEqual(hits["results"][0]["repo"], "legacy")
+
+        # …so the agent can now grep it to chase the lead.
+        self.assertIn("legacy", ctx.allowed_repos)
+        followup = ctx.dispatch("grep_codebase", {"repo": "legacy", "pattern": "TARGET"})
+        self.assertEqual(followup["count"], 1)
+
 
 # ── Phase H: store lifecycle (in-memory, no DB) ───────────────────────────────
 
