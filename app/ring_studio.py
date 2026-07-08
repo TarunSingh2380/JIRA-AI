@@ -280,17 +280,23 @@ def batch_to_jsonl(rows: list[dict[str, Any]]) -> str:
 # Each view prompt restates the full ring spec so the design stays identical
 # across the four renders.
 
-# gpt-image-1 square size — one ring per frame reads best in a square crop.
+# Image model. gpt-image-2 renders noticeably sharper diamonds, legible engraving
+# and cleaner white backgrounds than gpt-image-1, and holds the per-view poses more
+# reliably — so it is the default. Override per-call via the ``model`` argument.
+_DEFAULT_MODEL = "gpt-image-2"
+
+# Square size — one ring per frame reads best in a square crop.
 _IMAGE_SIZE = "1024x1024"
 
-# gpt-image-1 supports low/medium/high (higher = more output tokens = costlier
-# and sharper). Default medium. The UI exposes these three.
+# The model supports low/medium/high (higher = more output tokens = costlier and
+# sharper). Default medium. The UI exposes these three.
 _QUALITIES = ("low", "medium", "high")
 _DEFAULT_QUALITY = "medium"
 
-# gpt-image-1 token pricing, USD per 1M tokens (openai.com/api/pricing).
-# Cost is derived from the usage the API returns, so it tracks quality/size
-# exactly rather than relying on a hard-coded per-image table.
+# Token pricing, USD per 1M tokens (openai.com/api/pricing). Cost is derived from
+# the usage the API returns, so it tracks quality/size exactly rather than relying
+# on a hard-coded per-image table. NOTE: these are gpt-image-1 rates — the cost
+# figure shown for gpt-image-2 is an approximation until v2 rates are confirmed.
 _PRICE_PER_MTOK = {"text_input": 5.0, "image_input": 10.0, "image_output": 40.0}
 
 
@@ -526,7 +532,7 @@ def render_ring_views(
     meta: dict[str, Any],
     seed: Optional[int] = None,
     *,
-    model: str = "gpt-image-1",
+    model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
 ) -> RingViewsResult:
     """Render the four per-view images for one ring design, all the SAME ring.
@@ -648,7 +654,7 @@ def run_render_job(
     meta: dict[str, Any],
     seed: Optional[int] = None,
     *,
-    model: str = "gpt-image-1",
+    model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
 ) -> None:
     """Execute a queued render, updating the job in place. Runs in a worker
