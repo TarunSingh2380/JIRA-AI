@@ -327,13 +327,15 @@ def _usage_cost_usd(usage: Any) -> Optional[float]:
 #                    unchanged rather than re-invented → no hallucination.
 #
 # Views are rendered SEQUENTIALLY in this order, and each ``src`` must appear
-# earlier in the list so its image already exists when the edit runs. Every edit
-# sources the HERO so it stays one generation from the anchor (minimal drift).
+# earlier in the list so its image already exists when the edit runs. The SIDE and
+# LAYDOWN edits source the HERO so they stay one generation from the anchor and
+# keep the identical ring.
 #
-# TOP is the tricky one: a genuine looking-down shot. We reach it by EDITING the
-# hero (which is already framed looking gently downward) and asking the camera to
-# continue up and over — an incremental move that keeps the exact same ring,
-# instead of a fresh text render that can invent a different ring.
+# TOP is a text ANCHOR, not an edit. A face-forward catalog shot is a composition
+# gpt-image-1 renders very reliably from text, whereas ROTATING the standing hero
+# into a face-on top is a big camera move it does inconsistently — that instability
+# was what kept collapsing the top view into the laydown. Rendering top fresh (the
+# full spec is restated, so it is the same design) decouples it from the hero pose.
 VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
     ("hero", "Hero 3/4 View", "anchor", None,
      "a dramatic three-quarter perspective: the ring stands upright and is turned "
@@ -341,17 +343,15 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
      "DOWNWARD (about 30 degrees) so BOTH the front face of the setting AND one "
      "shoulder of the band are clearly visible, the centre stone catching the light; "
      "the band subtly engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
-    ("top", "Top View", "edit", "hero",
-     "a symmetric, straight-on FRONT view of the STANDING ring, framed CLOSE so the diamond's "
-     "FACE dominates the picture. The ring STANDS VERTICALLY UPRIGHT on its band (never lying "
-     "down); the camera is directly in FRONT and elevated about 15 to 20 degrees, moved in "
-     "CLOSE. The centre stone's FACE points at the camera and FILLS THE UPPER HALF of the frame "
-     "with its prongs, and the pavé band is FORESHORTENED — only its upper front and the two "
-     "shoulders descending below the head are visible, mirroring left-to-right. Do NOT show the "
-     "full open 'O' circle of the band and do NOT let the band read as an open loop you see "
-     "through (that is the SIDE view). Close, symmetric, face-dominant, STANDING upright — it "
-     "is NOT lying flat on a surface (that is the laydown), NOT a full side 'O', NOT a "
-     "three-quarter angle, and NOT seen from directly overhead"),
+    ("top", "Top View", "anchor", None,
+     "a symmetric, straight-on FRONT-FACE catalog view. The ring STANDS UPRIGHT on its band and "
+     "the camera is directly in FRONT, elevated only about 15 degrees and moved in CLOSE so the "
+     "centre stone's FACE dominates and FILLS THE UPPER HALF of the frame, its prongs visible. "
+     "The pavé band is foreshortened, its two shoulders descending symmetrically below the head "
+     "so the left and right mirror each other. It is the classic face-forward hero shot of the "
+     "diamond: standing upright, perfectly symmetric, face-dominant — NOT lying flat on a "
+     "surface, NOT a full side profile with an open 'O' band, NOT a three-quarter angle, and "
+     "NOT an overhead top-down"),
     ("side", "Side Profile", "edit", "hero",
      "a STRICT SIDE ELEVATION. The ring stands upright on the surface and the camera "
      "sits level with it, viewing the band edge-on from the side so the round band "
