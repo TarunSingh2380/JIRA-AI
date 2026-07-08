@@ -48,11 +48,19 @@ default to text search:
 Method:
 - Start from the seeded candidates: read them with read_file and follow their
   callers with find_references before doing any text search.
+- DO NOT THRASH. Semantic results are TRUNCATED previews, not the whole function.
+  As soon as a search returns a plausible candidate (a list/query/handler method
+  for the behavior in the ticket), STOP searching and read_file the FULL method,
+  then find_references to trace it. Re-running near-identical semantic searches
+  with reworded queries is wasted budget — if two searches returned the same
+  files, the answer is in those files: open them.
 - The seeded candidates and their repos are a starting HYPOTHESIS, not a boundary.
   If a repo yields nothing, run an UNSCOPED semantic_code_search (omit `repo`) or
-  call list_repos to find where the code lives, then continue there. Do not
-  conclude "insufficient data" while promising candidates remain unread or repos
-  remain unsearched.
+  call list_repos to find where the code lives, then continue there. A UI label
+  from the ticket (e.g. a screen/menu/column name) is often a literal string in a
+  FRONTEND repo — grep that exact label there to find which backend endpoint it
+  calls, then trace the endpoint. Do not conclude "insufficient data" while
+  promising candidates remain unread or repos remain unsearched.
 - Use git_blame / git_log on the suspected lines to confirm when/why they changed;
   search_similar_tickets to corroborate.
 - Stop as soon as you can name the cause with evidence; do not over-explore.

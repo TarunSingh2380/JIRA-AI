@@ -109,10 +109,13 @@ def run_pipeline(
             {"repo": c.repo, "score": round(c.score, 3), "reasons": c.reasons}
             for c in candidates_repos
         ]
-        repo_names = [c.repo for c in candidates_repos] or repo_access.list_repos(settings)[:3]
+        all_repos = repo_access.list_repos(settings)
+        repo_names = [c.repo for c in candidates_repos] or all_repos[:3]
         store.touch(run)
 
         # ── E: hybrid retrieval ─────────────────────────────────────────────
+        # Retrieval (and thus the seeded candidates) stays scoped to the localized
+        # repos so the agent starts focused where the defect most likely lives.
         candidates = retrieval.retrieve(
             settings, repos=repo_names,
             error_messages=extracted.get("error_messages", []),
@@ -123,9 +126,15 @@ def run_pipeline(
         store.touch(run)
 
         # ── F: agentic investigation (read-only) ────────────────────────────
+        # The agent may read ANY available repo, not just the localized ones: the
+        # feature under investigation often spans a repo the localizer missed (a
+        # legacy backend, or the frontend where a UI label like "AML Leads" lives).
+        # Every tool is read-only, so a broad scope adds no risk — only the seed
+        # focuses the agent, the scope must not wall it off. Falls back to the
+        # localized repos if the repo root can't be listed.
         agent_res = agent.run_investigation(
             settings, ticket_summary=ticket_obj.summary, extracted=extracted,
-            candidates=run.candidates, allowed_repos=repo_names,
+            candidates=run.candidates, allowed_repos=(all_repos or repo_names),
             ticket_description=ticket_obj.description,
             ticket_comments=ticket_obj.comments,
             on_event=lambda ev: store.add_trace_event(run, ev),
