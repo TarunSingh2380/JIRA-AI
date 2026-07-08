@@ -79,6 +79,31 @@ class RepoReadTests(unittest.TestCase):
         hits = repos.grep(self.settings, "svc", r"def .*\(\):", is_regex=True)
         self.assertTrue(any(h["path"] == "src/util.py" for h in hits))
 
+    def test_grep_excludes_vendored_and_generated_paths(self):
+        # "aml" hides inside "yaml"/"seamless"; only the app source line counts.
+        init_repo(self.root, "noisy", {
+            "app/lead.php": "real aml source\n",
+            "vendor/x.php": "yaml vendor noise\n",
+            "public/assets/y.js": "seamless public asset\n",
+            "third_party/z.php": "yaml third party\n",
+            "app/bundle.min.js": "aml minified\n",
+        })
+        commit(self.root / "noisy", "init")
+        hits = repos.grep(self.settings, "noisy", "aml")
+        self.assertEqual([h["path"] for h in hits], ["app/lead.php"])
+
+    def test_grep_skips_minified_and_base64_lines(self):
+        # A long generated line (base64 blob / minified bundle) is dropped even
+        # when it lives in an otherwise-searched source file.
+        init_repo(self.root, "blobby", {
+            "app/view.html": "aml short real line\n"
+            + "data:image/png;base64," + "a" * 800 + " aml\n",
+        })
+        commit(self.root / "blobby", "init")
+        hits = repos.grep(self.settings, "blobby", "aml")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["line"], 1)
+
     def test_head_and_log(self):
         self.assertEqual(repos.head_sha(self.settings, "svc"), self.sha)
         log = repos.git_log(self.settings, "svc", limit=5)

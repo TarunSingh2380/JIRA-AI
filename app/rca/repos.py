@@ -26,6 +26,23 @@ _MAX_READ_LINES = 400
 _MAX_GREP_MATCHES = 100
 _GIT_TIMEOUT_SECONDS = 30
 
+# A single matched line longer than this is almost always machine-generated —
+# minified JS/CSS, a base64-embedded image/font, or a lock-file hash — never
+# human-readable source. Such lines flood grep results with noise that starves
+# the agent's token budget, so we drop them from the output.
+_MAX_MATCH_LINE_LEN = 500
+
+# Vendored, generated, and asset paths that carry no application logic but match
+# short/common patterns (e.g. "aml" inside "yaml"/"seamless", base64 in bundled
+# assets). Excluding them keeps grep focused on real source. `git grep` pathspec
+# globs, applied as exclusions after the positive `.` pathspec.
+_GREP_EXCLUDE_GLOBS = [
+    "**/vendor/**", "**/node_modules/**", "**/third_party/**",
+    "**/dist/**", "**/build/**", "**/.git/**", "**/public/**",
+    "**/*.min.js", "**/*.min.css", "**/*.map",
+    "**/*.lock", "**/*-lock.json", "**/*.svg",
+]
+
 
 class RepoAccessError(RuntimeError):
     """Raised when a repo/path is invalid or a git command fails fatally."""
@@ -179,7 +196,11 @@ def grep(
     flags = ["-n", "-I"]  # line numbers, skip binary
     flags.append("-E" if is_regex else "-F")
     # `git grep` over the working tree (no rev) searches tracked files only.
-    out = _git(settings, repo, "grep", *flags, "-e", pattern)
+    # Restrict to real source: a positive `.` pathspec plus exclusion globs for
+    # vendored/generated/asset trees that only add noise. `:(exclude,glob)` lets
+    # the `**` globs span directories.
+    pathspecs = ["--", "."] + [f":(exclude,glob){g}" for g in _GREP_EXCLUDE_GLOBS]
+    out = _git(settings, repo, "grep", *flags, "-e", pattern, *pathspecs)
     matches: list[dict[str, Any]] = []
     for line in out.splitlines():
         # format: path:lineno:text
@@ -188,6 +209,9 @@ def grep(
             continue
         path, lineno, text = parts
         if not lineno.isdigit():
+            continue
+        # Skip minified/base64/lock-hash lines that survived the path filter.
+        if len(text) > _MAX_MATCH_LINE_LEN:
             continue
         matches.append({"path": path, "line": int(lineno), "text": text[:300]})
         if len(matches) >= max_matches:
