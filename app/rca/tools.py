@@ -188,7 +188,17 @@ class ToolContext:
             return err
         hits = repo_access.grep(self.settings, a["repo"], a["pattern"],
                                 bool(a.get("is_regex", False)))
-        return {"matches": hits, "count": len(hits)}
+        out: dict[str, Any] = {"matches": hits, "count": len(hits)}
+        # A capped result means the pattern is too broad to be evidence — steer the
+        # agent back to semantic discovery instead of letting it drown in matches.
+        if len(hits) >= repo_access._MAX_GREP_MATCHES:
+            out["hint"] = (
+                f"'{a['pattern']}' matched too many lines (capped at "
+                f"{repo_access._MAX_GREP_MATCHES}) — it is too broad to be evidence. "
+                "grep is for a specific identifier you already have; to find the "
+                "relevant code from a concept, use semantic_code_search instead."
+            )
+        return out
 
     def _t_read_file(self, a: dict[str, Any]) -> dict[str, Any]:
         if (err := self._check_repo(a.get("repo", ""))):

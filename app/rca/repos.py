@@ -32,15 +32,24 @@ _GIT_TIMEOUT_SECONDS = 30
 # the agent's token budget, so we drop them from the output.
 _MAX_MATCH_LINE_LEN = 500
 
-# Vendored, generated, and asset paths that carry no application logic but match
-# short/common patterns (e.g. "aml" inside "yaml"/"seamless", base64 in bundled
-# assets). Excluding them keeps grep focused on real source. `git grep` pathspec
-# globs, applied as exclusions after the positive `.` pathspec.
+# Vendored, generated, asset, and DATA paths that carry no application logic but
+# match short/common patterns — "aml" inside "yaml"/"seamless", base64 in bundled
+# assets, or the substring "AML" inside a name like "KAMLESH" in a committed CSV
+# data dump. Excluding them keeps grep focused on real source. Rather than chase
+# each new noise source, we block the two whole classes: (1) generated/vendored
+# trees, and (2) non-source file types (data, logs, docs, media). `git grep`
+# pathspec globs, applied as exclusions after the positive `.` pathspec.
 _GREP_EXCLUDE_GLOBS = [
+    # generated / vendored / asset trees
     "**/vendor/**", "**/node_modules/**", "**/third_party/**",
     "**/dist/**", "**/build/**", "**/.git/**", "**/public/**",
-    "**/*.min.js", "**/*.min.css", "**/*.map",
-    "**/*.lock", "**/*-lock.json", "**/*.svg",
+    "**/storage/**", "**/cache/**", "**/logs/**", "**/logres/**",
+    # generated / bundled source
+    "**/*.min.js", "**/*.min.css", "**/*.map", "**/*.lock", "**/*-lock.json",
+    # non-source data / log / doc / media file types (never application logic)
+    "**/*.csv", "**/*.tsv", "**/*.log", "**/*.svg",
+    "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif", "**/*.ico",
+    "**/*.pdf", "**/*.xls", "**/*.xlsx", "**/*.woff", "**/*.woff2", "**/*.ttf",
 ]
 
 

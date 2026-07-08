@@ -92,6 +92,18 @@ class RepoReadTests(unittest.TestCase):
         hits = repos.grep(self.settings, "noisy", "aml")
         self.assertEqual([h["path"] for h in hits], ["app/lead.php"])
 
+    def test_grep_excludes_data_and_log_files(self):
+        # "AML" hides inside the name "KAMLESH" in a committed CSV data dump;
+        # only real source should be returned.
+        init_repo(self.root, "data", {
+            "app/lead.php": "AML flag here\n",
+            "newcrm/logres/dump.csv": "1,HC1,KAMLESH ROY,999,x@x.com,25000\n",
+            "storage/app.log": "user KAMLESH did AML thing\n",
+        })
+        commit(self.root / "data", "init")
+        hits = repos.grep(self.settings, "data", "AML")
+        self.assertEqual([h["path"] for h in hits], ["app/lead.php"])
+
     def test_grep_skips_minified_and_base64_lines(self):
         # A long generated line (base64 blob / minified bundle) is dropped even
         # when it lives in an otherwise-searched source file.

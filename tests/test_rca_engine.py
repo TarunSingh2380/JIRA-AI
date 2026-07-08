@@ -240,6 +240,21 @@ class ToolScopeTests(unittest.TestCase):
         ctx = tools.ToolContext(self.settings, allowed_repos=["svc"])
         self.assertIn("error", ctx.dispatch("rm_rf", {}))
 
+    def test_grep_hint_when_pattern_too_broad(self):
+        # A pattern that hits the match cap is too broad to be evidence — the tool
+        # should say so and point back at semantic search.
+        from app.rca import repos as repo_access
+        n = repo_access._MAX_GREP_MATCHES + 5
+        init_repo(self.root, "broad", {
+            "app/x.php": "".join(f"line aml {i}\n" for i in range(n)),
+        })
+        commit(self.root / "broad", "init")
+        ctx = tools.ToolContext(self.settings, allowed_repos=["broad"])
+        out = ctx.dispatch("grep_codebase", {"repo": "broad", "pattern": "aml"})
+        self.assertEqual(out["count"], repo_access._MAX_GREP_MATCHES)
+        self.assertIn("hint", out)
+        self.assertIn("semantic_code_search", out["hint"])
+
     def test_list_repos_reports_available_and_scope(self):
         ctx = tools.ToolContext(self.settings, allowed_repos=["svc"])
         out = ctx.dispatch("list_repos", {})
