@@ -342,13 +342,14 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
      "shoulder of the band are clearly visible, the centre stone catching the light; "
      "the band subtly engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
     ("top", "Top View", "edit", "hero",
-     "an ELEVATED top-down three-quarter view. The ring lies flat on the surface and the "
-     "camera is raised HIGH above and slightly in front, looking DOWN at about 45 to 55 "
-     "degrees. The FACE of the setting and the centre stone are prominent, filling the "
-     "upper-centre of the frame and tilted up toward the lens, while the COMPLETE ROUND "
-     "BAND is clearly visible as an open loop resting flat on the surface behind and below "
-     "the head. Show BOTH the diamond's face AND the full round band together — this is NOT "
-     "a pure straight-down plan and NOT a level three-quarter view"),
+     "a symmetric, straight-on FRONT-FACE view. The ring stands upright with the camera "
+     "positioned directly in FRONT of it and only slightly elevated (about 10 to 20 degrees "
+     "above), looking squarely at the FACE of the setting. The centre diamond's face points "
+     "straight toward the camera and fills the upper-centre of the frame with its four corner "
+     "prongs clearly visible, and the pavé band descends SYMMETRICALLY straight down on both "
+     "sides below the head so the left and right mirror each other. Perfectly front-on and "
+     "symmetric — the ring is NOT turned to a three-quarter angle and shows NO side shoulder "
+     "(that is the hero view), it is NOT lying down, and it is NOT seen from directly overhead"),
     ("side", "Side Profile", "edit", "hero",
      "a STRICT SIDE ELEVATION. The ring stands upright on the surface and the camera "
      "sits level with it, viewing the band edge-on from the side so the round band "
@@ -359,12 +360,13 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
     ("laydown", "Laydown View", "edit", "hero",
      "a relaxed laid-down product shot: the ring rests on its side/back on the surface and is "
      "photographed from a LOW angle close to the tabletop — the camera sits only slightly above "
-     "the surface, about 15 to 25 degrees. The decorated FACE of the setting and the centre stone "
-     "turn toward the camera, and the round band is clearly visible as a loop resting on the clean "
-     "pure-white matte surface, sweeping back from the head; a soft contact shadow and a gentle "
-     "reflection sit beneath the ring. Low, intimate, on-the-table framing — the ring is LYING "
-     "DOWN (not standing upright) and the camera is LOW near the surface, which clearly DIFFERS "
-     "from the elevated top-down view above"),
+     "the surface, about 15 to 25 degrees. CRUCIAL: the main part of the ring — the head/setting "
+     "with the centre stone — is rotated to face the camera as DIRECTLY as possible, pointing "
+     "straight toward the viewer (not turned off to the side), rising toward us from the band. "
+     "The round band is clearly visible as a loop resting on the clean pure-white matte surface, "
+     "sweeping back from the head; a soft contact shadow and a gentle reflection sit beneath the "
+     "ring. Low, intimate, on-the-table framing with the setting facing us — the ring is LYING "
+     "DOWN (not standing upright) and the camera is LOW near the surface"),
 ]
 
 # The HERO view is the reference ANCHOR: it is rendered first from text, then its
