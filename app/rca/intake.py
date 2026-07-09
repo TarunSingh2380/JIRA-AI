@@ -154,34 +154,95 @@ def _fetch_linked_docs(raw_description: Any) -> list[dict[str, Any]]:
 
 _EXTRACTION_SYSTEM = """\
 You analyze a Jira defect ticket and extract structured diagnostic signals for an
-automated root-cause investigation. You DO NOT propose fixes. Return ONLY a JSON
-object (no prose, no markdown fences) with exactly these keys:
+automated root-cause investigation.
+
+You DO NOT propose fixes.
+
+Return ONLY a JSON object. No prose. No markdown fences. Use exactly these keys:
 
 {
-  "error_messages": [string],     // verbatim error/exception strings to grep for
-  "stack_frames": [               // parsed stack/trace frames, most-relevant first
-    {"file": string|null, "line": integer|null, "symbol": string|null, "raw": string}
+  "error_messages": [string],
+  "stack_frames": [
+    {
+      "file": string|null,
+      "line": integer|null,
+      "symbol": string|null,
+      "raw": string
+    }
   ],
-  "mentioned_endpoints": [string],// API paths/routes/URLs referenced
-  "repro_steps": [string],        // ordered reproduction steps if present
-  "suspected_area": string        // short phrase: feature/module/service implicated
+  "mentioned_endpoints": [string],
+  "repro_steps": [string],
+  "expected_behavior": string,
+  "actual_behavior": string,
+  "environment": [string],
+  "mentioned_code_refs": [string],
+  "linked_ticket_keys": [string],
+  "suspected_area": string
 }
 
 Rules:
-- Copy error strings exactly as written (they will be used for literal search).
-- Include a stack frame only when the text actually contains trace-like content.
-- Use null for unknown file/line/symbol fields; never invent paths.
-- If a section has nothing, return an empty array (or "" for suspected_area).
-- Screenshots from the ticket may be attached as images. READ them: pull any
-  visible URL/route into mentioned_endpoints (e.g. a browser address bar showing
-  "/aml-leads"), any on-screen error text into error_messages verbatim, and use
-  visible page titles, menu/breadcrumb labels, column headers, and field labels to
-  sharpen suspected_area. Ignore decorative/boilerplate UI chrome.
-- A linked design doc (PRD / Tech Doc) may be included. Use it to understand the
-  feature's INTENDED behavior/spec and to sharpen suspected_area and
-  mentioned_endpoints (named modules, endpoints, procedures). The bug lives in the
-  code, not the doc — never treat doc prose as error output or invent a stack frame
-  from it.
+
+- Copy error strings exactly as written. They may be used for literal search.
+
+- Include a stack frame only when the ticket actually contains trace-like content.
+
+- Use null for unknown file, line, or symbol fields. Never invent paths, symbols,
+  or line numbers.
+
+- repro_steps must preserve the reported order.
+
+- expected_behavior contains only explicitly stated or unambiguously documented
+  intended behaviour. Do not infer product intent.
+
+- actual_behavior contains only explicitly reported or directly visible behaviour.
+
+- environment contains explicitly mentioned environment information such as
+  production, staging, browser, operating system, app version, build, service, or
+  deployment environment.
+
+- mentioned_code_refs contains only explicitly mentioned PRs, commits,
+  repositories, files, classes, functions, symbols, procedures, routes, or config
+  keys.
+
+- linked_ticket_keys contains only explicitly referenced ticket identifiers.
+
+- suspected_area is a short phrase identifying the feature, module, screen, service,
+  or functional area implicated by the ticket. It is NOT a root-cause hypothesis.
+
+- If a section has no evidence, return:
+  - [] for arrays;
+  - "" for strings.
+
+- Screenshots from the ticket may be attached as images. READ them. Extract:
+  - visible URL or route into mentioned_endpoints;
+  - on-screen error text into error_messages verbatim;
+  - visible page titles, menu labels, breadcrumbs, button names, column headers,
+    and field labels to sharpen suspected_area;
+  - explicitly visible environment or version information into environment.
+
+  Ignore decorative or boilerplate UI chrome.
+
+- A linked design document, PRD, or Tech Doc may be included. Use it only to:
+  - understand explicitly documented intended behaviour;
+  - populate expected_behavior;
+  - sharpen suspected_area;
+  - extract explicitly named endpoints, procedures, modules, or code references.
+
+  The defect lives in the implementation or runtime system, not automatically in
+  the document.
+
+  Never treat document prose as:
+  - error output;
+  - runtime evidence;
+  - a stack frame;
+  - proof of root cause.
+
+- Do not classify the issue.
+- Do not identify a root cause.
+- Do not propose a fix.
+- Do not assign confidence.
+
+Your job is extraction only.
 """
 
 
@@ -225,6 +286,11 @@ _EMPTY_EXTRACTION = {
     "stack_frames": [],
     "mentioned_endpoints": [],
     "repro_steps": [],
+    "expected_behavior": "",
+    "actual_behavior": "",
+    "environment": [],
+    "mentioned_code_refs": [],
+    "linked_ticket_keys": [],
     "suspected_area": "",
 }
 
@@ -313,6 +379,11 @@ def extract_signals(
     result["mentioned_endpoints"] = [s for s in _as_str_list(result["mentioned_endpoints"]) if s]
     result["repro_steps"] = _as_str_list(result["repro_steps"])
     result["stack_frames"] = _normalize_frames(result["stack_frames"])
+    result["environment"] = _as_str_list(result.get("environment"))
+    result["mentioned_code_refs"] = _as_str_list(result.get("mentioned_code_refs"))
+    result["linked_ticket_keys"] = _as_str_list(result.get("linked_ticket_keys"))
+    result["expected_behavior"] = str(result.get("expected_behavior") or "")
+    result["actual_behavior"] = str(result.get("actual_behavior") or "")
     result["suspected_area"] = str(result.get("suspected_area") or "")
     return result
 

@@ -65,31 +65,42 @@ class SynthesisTests(unittest.TestCase):
         }
         return json.dumps(d)
 
-    def test_fix_dropped_below_high(self):
+    def test_confirmed_gives_high_and_fix(self):
         out = synthesis.synthesize(
             self.settings, ticket={}, extracted={}, candidates=[], investigation="",
-            trace=[], llm_client=FakeLLM(self._diag("Medium", with_fix=True)))
-        self.assertIsNone(out["recommended_fix"])  # only High gets a fix
-        self.assertEqual(out["confidence_label"], "Medium")
-
-    def test_fix_kept_at_high(self):
-        out = synthesis.synthesize(
-            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
-            trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True)))
+            trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True, confirmed=True)))
         self.assertIsNotNone(out["recommended_fix"])
         self.assertEqual(out["confidence_label"], "High")
         self.assertEqual(out["confidence"], 0.95)  # internal numeric for the gate
         self.assertEqual(out["root_cause_status"], "confirmed")
 
-    def test_unconfirmed_cause_is_most_likely_and_capped(self):
-        # RULE 5/6: a leading-but-unverified cause can't be High and can't carry a fix.
+    def test_unconfirmed_gives_medium_no_fix(self):
+        # RULE 5/6: a leading-but-unverified cause is Medium and carries no fix.
         out = synthesis.synthesize(
             self.settings, ticket={}, extracted={}, candidates=[], investigation="",
             trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True, confirmed=False)))
         self.assertEqual(out["root_cause_status"], "most_likely")
-        self.assertEqual(out["confidence_label"], "Medium")   # High capped to Medium
+        self.assertEqual(out["confidence_label"], "Medium")
         self.assertIsNone(out["recommended_fix"])
         self.assertNotEqual(out["root_cause"], "Undetermined.")  # candidate retained
+
+    def test_confidence_is_derived_not_taken_from_model(self):
+        # RULE 6: confirmed ⇒ High even if the model self-reports "Low".
+        out = synthesis.synthesize(
+            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
+            trace=[], llm_client=FakeLLM(self._diag("Low", with_fix=True, confirmed=True)))
+        self.assertEqual(out["confidence_label"], "High")
+        self.assertEqual(out["root_cause_status"], "confirmed")
+
+    def test_single_conclusive_evidence_can_confirm(self):
+        # RULE 5(b): one conclusive source is enough — no hard ≥2 gate anymore.
+        out = synthesis.synthesize(
+            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
+            trace=[], llm_client=FakeLLM(
+                self._diag("High", with_fix=True, confirmed=True, evidence_count=1)))
+        self.assertEqual(out["root_cause_status"], "confirmed")
+        self.assertEqual(out["confidence_label"], "High")
+        self.assertIsNotNone(out["recommended_fix"])
 
     def test_evidence_is_categorized(self):
         import json
@@ -117,11 +128,11 @@ class SynthesisTests(unittest.TestCase):
             trace=[], llm_client=FakeLLM(no_commit))
         self.assertIsNone(out["introduced_by"])  # a bare name is not authorship
 
-    def test_single_evidence_forces_undetermined(self):
-        # RULE 5: <2 independent evidence items → no asserted root cause.
+    def test_zero_evidence_forces_undetermined(self):
+        # A stated cause with no evidence at all collapses to Undetermined.
         out = synthesis.synthesize(
             self.settings, ticket={}, extracted={}, candidates=[], investigation="",
-            trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True, evidence_count=1)))
+            trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True, evidence_count=0)))
         self.assertEqual(out["root_cause"], "Undetermined.")
         self.assertEqual(out["confidence_label"], "Low")
         self.assertIsNone(out["recommended_fix"])
@@ -132,6 +143,7 @@ class SynthesisTests(unittest.TestCase):
             trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True, insufficient=True)))
         self.assertEqual(out["root_cause"], synthesis.INSUFFICIENT_DATA_MESSAGE)
         self.assertEqual(out["confidence_label"], "Low")
+        self.assertEqual(out["issue_classification"], "Cannot Determine")  # RULE 2
         self.assertIsNone(out["recommended_fix"])
 
     def test_classification_defaults_to_cannot_determine(self):

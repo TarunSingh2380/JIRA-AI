@@ -91,6 +91,21 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(out["error_messages"], ["boom"])
         self.assertEqual(out["mentioned_endpoints"], [])  # filled from schema default
 
+    def test_extract_signals_new_signal_keys(self):
+        payload = json.dumps({
+            "expected_behavior": "search by first name returns matches",
+            "actual_behavior": "no data found",
+            "environment": ["staging", "chrome"],
+            "mentioned_code_refs": ["QuickReportAPI.js", "get_failed_loan_retry_report"],
+            "linked_ticket_keys": ["RFT-1570"],
+        })
+        out = intake.extract_signals(self.settings, _ticket(), llm_client=FakeLLM(payload))
+        self.assertEqual(out["expected_behavior"], "search by first name returns matches")
+        self.assertEqual(out["actual_behavior"], "no data found")
+        self.assertEqual(out["environment"], ["staging", "chrome"])
+        self.assertIn("RFT-1570", out["linked_ticket_keys"])
+        self.assertIn("get_failed_loan_retry_report", out["mentioned_code_refs"])
+
     def test_intake_user_message_includes_sections(self):
         msg = intake._intake_user_message(_ticket(comments=["c1"], linked_issues=[
             {"key": "RFT-2", "relation": "blocks", "summary": "other"}]))
