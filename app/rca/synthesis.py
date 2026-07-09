@@ -8,10 +8,17 @@ CORRECT, not for producing a complete report:
 * facts, inferences and unknowns are kept separate;
 * a root cause is asserted ONLY with ≥2 independent pieces of evidence, else it
   stays "Undetermined";
+* a root cause is CONFIRMED (header "ROOT CAUSE") only when it explains every
+  symptom, has ≥2 independent evidence sources, and has no contradictory evidence;
+  otherwise it is reported as "MOST LIKELY ROOT CAUSE" with the evidence still
+  required to confirm it;
 * confidence is categorical (High/Medium/Low) — never an invented probability;
 * if the required evidence is unavailable, the whole run is flagged
   INSUFFICIENT DATA and nothing is speculated;
-* a concrete fix is proposed ONLY at High confidence; otherwise diagnosis-only.
+* the NEXT ACTION matches confidence — a fix at High, verification steps at
+  Medium, additional evidence required at Low;
+* authorship (introducing commit) is reported ONLY from git history, never
+  inferred, never framed as blame.
 
 Any suggested fix is advisory — never applied, never written to a worktree.
 """
@@ -36,6 +43,9 @@ ISSUE_CLASSES = (
 )
 
 CONFIDENCE_LEVELS = ("High", "Medium", "Low")
+
+# Evidence is grouped into these fixed buckets in the output (RULE 11).
+EVIDENCE_CATEGORIES = ("Code", "Git", "Logs", "Tests", "Configuration", "Ticket")
 
 # Categorical confidence → internal numeric, used ONLY for the existing delivery
 # gate (RCA_CONFIDENCE_THRESHOLD) and fix gate (RCA_CONFIDENCE_THRESHOLD_FOR_FIX).
@@ -68,10 +78,14 @@ gathered. Produce ONLY a JSON object (no prose, no fences) with EXACTLY:
   "inferences": [str, ...],         // logical conclusions supported by the facts
   "unknowns": [str, ...],           // evidence that is missing
   "root_cause": str,                // ONE concise paragraph, or exactly "Undetermined."
+  "root_cause_confirmed": bool,     // true ONLY if all three checks in RULE 5 hold
   "root_cause_location": {"repo": str, "file": str, "symbol": str|null, "lines": str|null},
-  "evidence": [{"type": str, "detail": str, "ref": str}],  // ref = file:line / commit / log / stack / ticket
-  "contributing_factors": [str, ...],   // optional; ONLY if supported by evidence
-  "recommended_fix": str|null       // non-null ONLY when confidence is High
+  "introduced_by": {"name": str|null, "commit": str|null, "date": str|null}|null,  // ONLY from git history (RULE 10)
+  "evidence": [{"category": "Code"|"Git"|"Logs"|"Tests"|"Configuration"|"Ticket", "detail": str, "ref": str}],
+  "contributing_factors": [str, ...],       // optional; ONLY if supported by evidence
+  "additional_evidence_required": [str, ...],  // what is still needed to confirm / before a fix
+  "verification_steps": [str, ...],            // checks to run before changing code (Medium confidence)
+  "recommended_fix": str|null       // the EXACT code change; non-null ONLY at High confidence (RULE 14)
 }
 
 Classification (choose exactly one): Runtime Bug, Missing Implementation,
@@ -91,14 +105,18 @@ Hard rules:
    (use "Missing Implementation"). Match the analysis to the class.
 4. FACTS ≠ INFERENCES — keep them in their separate arrays. unknowns lists what
    is missing.
-5. EVIDENCE THRESHOLD — do NOT assert a root cause unless it is supported by at
-   least TWO independent pieces of evidence (e.g. stack trace + code, git diff +
-   failing test, logs + config, ticket + implementation). One clue is never
-   enough; if you only have one, set root_cause to "Undetermined." and
-   confidence "Low".
-6. NO FAKE CERTAINTY — confidence is High only with direct evidence, Medium with
-   partial evidence, Low when the cause cannot be proven. Never output a numeric
-   percentage.
+5. ROOT CAUSE VERIFICATION — a root cause is CONFIRMED only when ALL THREE hold:
+   (a) it explains EVERY observed symptom; (b) it is supported by at least TWO
+   INDEPENDENT evidence sources (e.g. stack trace + code, git diff + failing
+   test, logs + config, ticket + implementation); (c) NO contradictory evidence
+   exists. If all three hold, set root_cause_confirmed=true. If you have a
+   leading candidate but any check fails, KEEP it in root_cause, set
+   root_cause_confirmed=false, and list exactly what would confirm it in
+   additional_evidence_required. If you have no evidence-backed candidate, set
+   root_cause="Undetermined." and root_cause_confirmed=false.
+6. NO FAKE CERTAINTY — confidence is High ONLY when the root cause is confirmed
+   (RULE 5) with direct evidence; Medium for a leading-but-unconfirmed cause; Low
+   when the cause cannot be established. Never output a numeric percentage.
 7. DYNAMIC SIZE — match depth to the defect. A trivial UI/CSS bug gets 1-2
    facts and a one-sentence root cause; a complex P1 gets more. Do not pad.
 8. ROOT CAUSE ONLY — missing tests, "QA missed it", "code review missed it",
@@ -106,11 +124,26 @@ Hard rules:
    own. Include them only under contributing_factors and only with evidence.
 9. GIT BLAME identifies who last changed a line, NOT who is responsible. Never
    attribute blame to a person based on git history.
-10. NO GENERIC RECOMMENDATIONS — recommended_fix must directly address THIS
-    defect. Never say "improve QA / testing / reviews / docs" unless the
-    evidence demonstrates that specific failure.
-11. recommended_fix is non-null ONLY when confidence is High AND root_cause is
-    not "Undetermined." It is an advisory proposal for a human — never applied.
+10. AUTHORSHIP — if the introducing (or last-modifying) commit for the
+    root-cause lines is identifiable from git history in the evidence or trace,
+    populate introduced_by {name, commit, date}. Report authorship ONLY when
+    supported by git history; never infer responsibility; never attribute blame
+    based solely on git blame. If the introducing commit cannot be determined,
+    set introduced_by to null.
+11. EVIDENCE CATEGORIES — every evidence item has a category: exactly one of
+    Code, Git, Logs, Tests, Configuration, Ticket. Put each item in its single
+    best-fitting category with a precise ref (file:line / commit / log line /
+    test name / config key / ticket field).
+12. NEXT ACTION MATCHES CONFIDENCE — High: recommended_fix = the exact code
+    change. Medium: verification_steps = the checks to run before any code change
+    (recommended_fix null). Low: additional_evidence_required = the specific
+    evidence still needed (recommended_fix null, verification_steps empty).
+13. NO GENERIC RECOMMENDATIONS — recommended_fix / verification_steps must
+    directly address THIS defect. Never say "improve QA / testing / reviews /
+    docs" unless the evidence demonstrates that specific failure.
+14. recommended_fix is non-null ONLY when confidence is High AND
+    root_cause_confirmed is true AND root_cause is not "Undetermined." It is an
+    advisory proposal for a human — never applied.
 
 It is better to return root_cause "Undetermined." than an incorrect one. Never
 reward completeness over correctness.
@@ -118,8 +151,9 @@ reward completeness over correctness.
 
 _SCHEMA_KEYS = (
     "insufficient_data", "issue_classification", "confidence", "facts",
-    "inferences", "unknowns", "root_cause", "root_cause_location", "evidence",
-    "contributing_factors", "recommended_fix",
+    "inferences", "unknowns", "root_cause", "root_cause_confirmed",
+    "root_cause_location", "introduced_by", "evidence", "contributing_factors",
+    "additional_evidence_required", "verification_steps", "recommended_fix",
 )
 
 
@@ -212,15 +246,19 @@ def _normalize(parsed: dict[str, Any], settings: Settings) -> dict[str, Any]:
     out["inferences"] = _str_list(out.get("inferences"))
     out["unknowns"] = _str_list(out.get("unknowns"))
     out["contributing_factors"] = _str_list(out.get("contributing_factors"))
+    out["additional_evidence_required"] = _str_list(out.get("additional_evidence_required"))
+    out["verification_steps"] = _str_list(out.get("verification_steps"))
     out["evidence"] = _evidence_list(out.get("evidence"))
+    out["introduced_by"] = _introduced_by(out.get("introduced_by"))
     out["root_cause"] = str(out.get("root_cause") or "").strip()
+    confirmed = bool(out.get("root_cause_confirmed"))
 
     insufficient = bool(out.get("insufficient_data"))
 
     # RULE 2 — no ghost data. An INSUFFICIENT DATA run states only that.
     if insufficient:
         out["root_cause"] = INSUFFICIENT_DATA_MESSAGE
-        label = "Low"
+        label, confirmed, status = "Low", False, "insufficient"
     else:
         # RULE 5 — a root cause needs ≥2 independent evidence items. Fewer than
         # that (or an empty/undetermined statement) collapses to Undetermined.
@@ -228,19 +266,49 @@ def _normalize(parsed: dict[str, Any], settings: Settings) -> dict[str, Any]:
                         or out["root_cause"].lower().startswith("undetermined"))
         if len(out["evidence"]) < 2 or undetermined:
             out["root_cause"] = "Undetermined."
-            label = "Low"
+            label, confirmed, status = "Low", False, "undetermined"
+        elif confirmed:
+            # Verified: explains the symptoms, ≥2 evidence, no contradiction.
+            status = "confirmed"
+        else:
+            # RULE 5 — a leading candidate that isn't fully verified is reported
+            # as MOST LIKELY, and (RULE 6) cannot be High confidence.
+            status = "most_likely"
+            if label == "High":
+                label = "Medium"
 
+    out["root_cause_confirmed"] = confirmed
+    out["root_cause_status"] = status
     out["confidence_label"] = label
     out["confidence"] = _CONFIDENCE_NUMERIC[label]  # internal gate only
 
-    # RULE 11 — a fix is offered ONLY at High confidence with a determined cause.
+    # RULE 12 — NEXT ACTION matches confidence. Keep only the fields for the tier
+    # so the renderer shows exactly one action.
     determined = out["root_cause"] not in ("Undetermined.", INSUFFICIENT_DATA_MESSAGE)
     fix = out.get("recommended_fix")
-    if label == "High" and determined and isinstance(fix, str) and fix.strip():
-        out["recommended_fix"] = fix.strip()
+    if label == "High" and confirmed and determined and isinstance(fix, str) and fix.strip():
+        out["recommended_fix"] = fix.strip()   # RULE 14
     else:
         out["recommended_fix"] = None
+    if label != "Medium":
+        out["verification_steps"] = []          # verification is the Medium action
+    if label == "High" and confirmed:
+        out["additional_evidence_required"] = []  # nothing left to confirm
     return out
+
+
+def _introduced_by(value: Any) -> Optional[dict[str, Optional[str]]]:
+    """Normalize authorship to {name, commit, date} or None (RULE 10). Only a
+    real commit reference counts; a bare name with no commit is dropped so we
+    never present unsupported authorship."""
+    if not isinstance(value, dict):
+        return None
+    commit = str(value.get("commit") or "").strip()
+    if not commit:
+        return None
+    name = str(value.get("name") or "").strip()
+    date = str(value.get("date") or "").strip()
+    return {"name": name or None, "commit": commit, "date": date or None}
 
 
 def _one_of(value: Any, allowed: tuple[str, ...], default: str) -> str:
@@ -264,9 +332,37 @@ def _evidence_list(value: Any) -> list[dict[str, str]]:
     if isinstance(value, list):
         for e in value:
             if isinstance(e, dict):
-                out.append({"type": str(e.get("type") or ""),
-                            "detail": str(e.get("detail") or ""),
-                            "ref": str(e.get("ref") or "")})
+                ref = str(e.get("ref") or "")
+                out.append({
+                    "category": _evidence_category(
+                        e.get("category") or e.get("type"), ref),
+                    "detail": str(e.get("detail") or ""),
+                    "ref": ref,
+                })
             elif isinstance(e, str) and e.strip():
-                out.append({"type": "note", "detail": e.strip(), "ref": ""})
+                out.append({"category": _evidence_category(None, ""),
+                            "detail": e.strip(), "ref": ""})
     return out
+
+
+# Legacy `type` keywords → the fixed category buckets (RULE 11). Anything that
+# doesn't match a non-code bucket is treated as Code.
+_CATEGORY_KEYWORDS = (
+    ("Git", ("git", "commit", "blame", "history", "diff", "pr ", "pull")),
+    ("Logs", ("log",)),
+    ("Tests", ("test", "spec", "assert")),
+    ("Configuration", ("config", "env", "setting", "yaml", ".env")),
+    ("Ticket", ("ticket", "repro", "jira", "comment")),
+)
+
+
+def _evidence_category(raw: Any, ref: str) -> str:
+    text = str(raw or "").strip()
+    for category in EVIDENCE_CATEGORIES:
+        if text.lower() == category.lower():
+            return category  # explicit, valid category
+    hay = f"{text} {ref}".lower()
+    for category, keywords in _CATEGORY_KEYWORDS:
+        if any(k in hay for k in keywords):
+            return category
+    return "Code"

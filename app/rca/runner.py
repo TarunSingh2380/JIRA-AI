@@ -66,10 +66,29 @@ def _append_blame_evidence(settings: Settings, diagnosis: dict[str, Any]) -> Non
     if not sha:
         return
     diagnosis.setdefault("evidence", []).append({
-        "type": "git_history",
+        "category": "Git",
         "detail": f"Suspected lines were last modified in commit {sha}",
         "ref": f"{path}:{s}-{e}",
     })
+    # Authorship (RULE 10): fill introduced_by from git history when synthesis
+    # didn't. This is the last-modifying commit for the suspected lines — factual
+    # git history, presented neutrally (never as blame).
+    existing = diagnosis.get("introduced_by")
+    if not (isinstance(existing, dict) and existing.get("commit")):
+        diagnosis["introduced_by"] = {
+            "name": (str(last.get("author") or "").strip() or None),
+            "commit": sha,
+            "date": _format_blame_date(last.get("date")),
+        }
+
+
+def _format_blame_date(raw: Any) -> Optional[str]:
+    """git blame author-time (epoch seconds) → YYYY-MM-DD, or None."""
+    try:
+        from datetime import datetime, timezone
+        return datetime.fromtimestamp(int(str(raw).strip()), tz=timezone.utc).strftime("%Y-%m-%d")
+    except (ValueError, TypeError, OSError):
+        return None
 
 
 def run_pipeline(

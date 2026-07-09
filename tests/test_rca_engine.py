@@ -45,7 +45,8 @@ class SynthesisTests(unittest.TestCase):
     def setUp(self):
         self.settings = make_settings(Path("/tmp"))
 
-    def _diag(self, confidence, with_fix, *, evidence_count=2, insufficient=False):
+    def _diag(self, confidence, with_fix, *, evidence_count=2, insufficient=False,
+             confirmed=True):
         import json
         d = {
             "insufficient_data": insufficient,
@@ -55,8 +56,9 @@ class SynthesisTests(unittest.TestCase):
             "inferences": ["i1"],
             "unknowns": ["u1"],
             "root_cause": "Null deref in a.py because f() returns None on empty input.",
+            "root_cause_confirmed": confirmed,
             "root_cause_location": {"repo": "svc", "file": "a.py", "symbol": "f", "lines": "1-9"},
-            "evidence": [{"type": "code", "detail": "d", "ref": f"a.py:{i}"}
+            "evidence": [{"category": "Code", "detail": "d", "ref": f"a.py:{i}"}
                          for i in range(evidence_count)],
             "contributing_factors": [],
             "recommended_fix": "Guard against a None return from f()." if with_fix else None,
@@ -77,6 +79,43 @@ class SynthesisTests(unittest.TestCase):
         self.assertIsNotNone(out["recommended_fix"])
         self.assertEqual(out["confidence_label"], "High")
         self.assertEqual(out["confidence"], 0.95)  # internal numeric for the gate
+        self.assertEqual(out["root_cause_status"], "confirmed")
+
+    def test_unconfirmed_cause_is_most_likely_and_capped(self):
+        # RULE 5/6: a leading-but-unverified cause can't be High and can't carry a fix.
+        out = synthesis.synthesize(
+            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
+            trace=[], llm_client=FakeLLM(self._diag("High", with_fix=True, confirmed=False)))
+        self.assertEqual(out["root_cause_status"], "most_likely")
+        self.assertEqual(out["confidence_label"], "Medium")   # High capped to Medium
+        self.assertIsNone(out["recommended_fix"])
+        self.assertNotEqual(out["root_cause"], "Undetermined.")  # candidate retained
+
+    def test_evidence_is_categorized(self):
+        import json
+        raw = json.dumps({
+            "confidence": "High", "root_cause_confirmed": True,
+            "root_cause": "cause", "evidence": [
+                {"category": "Logs", "detail": "timeout", "ref": "app.log:12"},
+                {"type": "git_history", "detail": "commit abc", "ref": "abc123"},
+            ]})
+        out = synthesis.synthesize(
+            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
+            trace=[], llm_client=FakeLLM(raw))
+        cats = [e["category"] for e in out["evidence"]]
+        self.assertEqual(cats, ["Logs", "Git"])  # explicit + mapped-from-legacy-type
+
+    def test_introduced_by_requires_a_commit(self):
+        import json
+        no_commit = json.dumps({
+            "confidence": "High", "root_cause_confirmed": True, "root_cause": "c",
+            "introduced_by": {"name": "Someone", "commit": None, "date": None},
+            "evidence": [{"category": "Code", "detail": "d", "ref": "a.py:1"},
+                         {"category": "Code", "detail": "e", "ref": "a.py:2"}]})
+        out = synthesis.synthesize(
+            self.settings, ticket={}, extracted={}, candidates=[], investigation="",
+            trace=[], llm_client=FakeLLM(no_commit))
+        self.assertIsNone(out["introduced_by"])  # a bare name is not authorship
 
     def test_single_evidence_forces_undetermined(self):
         # RULE 5: <2 independent evidence items → no asserted root cause.

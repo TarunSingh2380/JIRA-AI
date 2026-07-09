@@ -12,7 +12,14 @@ _NUMERIC = {"High": 0.95, "Medium": 0.75, "Low": 0.3}
 
 
 def _diag(confidence_label, recommended_fix=None, *, insufficient=False,
-          contributing_factors=None, evidence=None):
+          contributing_factors=None, evidence=None, status=None,
+          introduced_by=None, additional_evidence_required=None,
+          verification_steps=None):
+    if insufficient:
+        status = "insufficient"
+    elif status is None:
+        status = {"High": "confirmed", "Medium": "most_likely"}.get(
+            confidence_label, "undetermined")
     return {
         "insufficient_data": insufficient,
         "issue_classification": "Runtime Bug",
@@ -23,29 +30,48 @@ def _diag(confidence_label, recommended_fix=None, *, insufficient=False,
         "unknowns": ["u1"],
         "root_cause": (synthesis.INSUFFICIENT_DATA_MESSAGE if insufficient
                        else "Null deref in a.py because f() returns None."),
+        "root_cause_confirmed": status == "confirmed",
+        "root_cause_status": status,
         "root_cause_location": {"repo": "svc", "file": "a.py", "symbol": "f", "lines": "1-9"},
+        "introduced_by": introduced_by,
         "evidence": evidence if evidence is not None else [
-            {"type": "code", "detail": "d", "ref": "a.py:5"},
-            {"type": "log", "detail": "e", "ref": "log:1"},
+            {"category": "Code", "detail": "d", "ref": "a.py:5"},
+            {"category": "Logs", "detail": "e", "ref": "log:1"},
         ],
         "contributing_factors": contributing_factors or [],
+        "additional_evidence_required": additional_evidence_required or [],
+        "verification_steps": verification_steps or [],
         "recommended_fix": recommended_fix,
     }
 
 
 class DocumentTests(unittest.TestCase):
-    def test_diagnosis_only_when_no_fix(self):
-        doc = D.build_document({"key": "OPS-1", "summary": "s"}, {}, _diag("Medium"))
+    def test_medium_next_action_is_verification(self):
+        doc = D.build_document({"key": "OPS-1", "summary": "s"}, {},
+                               _diag("Medium", verification_steps=["Reproduce with empty input"]))
         md = D.render_markdown(doc)
-        self.assertIn("## RECOMMENDED FIX", md)
-        self.assertIn(synthesis.NO_FIX_MESSAGE, md)
+        self.assertIn("## NEXT ACTION", md)
+        self.assertIn("Verify before changing code", md)
+        self.assertIn("Reproduce with empty input", md)
+        self.assertNotIn("## RECOMMENDED FIX", md)
+        self.assertIn("## MOST LIKELY ROOT CAUSE", md)   # Medium ⇒ not confirmed
 
     def test_fix_rendered_at_high(self):
         doc = D.build_document({"key": "OPS-2", "summary": "s"}, {},
                                _diag("High", "Guard against a None return from f()."))
         md = D.render_markdown(doc)
+        self.assertIn("## NEXT ACTION", md)
         self.assertIn("Guard against a None return from f().", md)
-        self.assertNotIn(synthesis.NO_FIX_MESSAGE, md)
+        self.assertIn("## ROOT CAUSE", md)               # High + confirmed
+        self.assertNotIn("## MOST LIKELY ROOT CAUSE", md)
+
+    def test_low_next_action_is_additional_evidence(self):
+        doc = D.build_document({"key": "OPS-1c", "summary": "s"}, {},
+                               _diag("Low", additional_evidence_required=["Obtain the server log"]))
+        md = D.render_markdown(doc)
+        self.assertIn("## NEXT ACTION", md)
+        self.assertIn("Do not change code yet", md)
+        self.assertIn("Obtain the server log", md)
 
     def test_output_format_sections(self):
         doc = D.build_document({"key": "OPS-3", "summary": "s"}, {}, _diag("High"))
@@ -53,12 +79,33 @@ class DocumentTests(unittest.TestCase):
         self.assertIn("**Issue Classification:** Runtime Bug", md)
         self.assertIn("**Confidence:** High", md)
         for heading in ["## FACTS", "## INFERENCES", "## UNKNOWNS",
-                        "## ROOT CAUSE", "## EVIDENCE", "## RECOMMENDED FIX"]:
+                        "## ROOT CAUSE", "## INTRODUCED BY", "## EVIDENCE",
+                        "## NEXT ACTION"]:
             self.assertIn(heading, md)
-        # No supported contributing factors → section is omitted.
         self.assertNotIn("## CONTRIBUTING FACTORS", md)
-        # Evidence ref is surfaced.
         self.assertIn("a.py:5", md)
+
+    def test_evidence_grouped_into_fixed_categories(self):
+        doc = D.build_document({"key": "OPS-3e", "summary": "s"}, {}, _diag("High"))
+        md = D.render_markdown(doc)
+        # All six buckets are present; empty ones marked, populated ones listed.
+        for cat in ["**Code**", "**Git**", "**Logs**", "**Tests**",
+                    "**Configuration**", "**Ticket**"]:
+            self.assertIn(cat, md)
+        self.assertIn("_None available._", md)   # e.g. Tests bucket is empty
+
+    def test_introduced_by_from_git(self):
+        doc = D.build_document({"key": "OPS-3i", "summary": "s"}, {},
+                               _diag("High", introduced_by={
+                                   "name": "A. Dev", "commit": "368cb27a0a", "date": "2026-06-30"}))
+        md = D.render_markdown(doc)
+        self.assertIn("Introduced By: A. Dev", md)
+        self.assertIn("Commit: 368cb27a0a", md)
+
+    def test_introduced_by_undetermined(self):
+        doc = D.build_document({"key": "OPS-3j", "summary": "s"}, {}, _diag("High"))
+        md = D.render_markdown(doc)
+        self.assertIn("Introduced By: Undetermined", md)
 
     def test_contributing_factors_shown_when_present(self):
         doc = D.build_document({"key": "OPS-3b", "summary": "s"}, {},
@@ -72,7 +119,7 @@ class DocumentTests(unittest.TestCase):
         md = D.render_markdown(doc)
         self.assertIn(synthesis.INSUFFICIENT_DATA_MESSAGE, md)
         self.assertNotIn("## FACTS", md)          # no fabricated sections
-        self.assertNotIn("## RECOMMENDED FIX", md)
+        self.assertNotIn("## NEXT ACTION", md)
 
     def test_render_docx_bytes(self):
         try:

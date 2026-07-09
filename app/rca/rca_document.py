@@ -2,19 +2,25 @@
 
 build_document() shapes the structured diagnosis into the delivery model;
 render_markdown() produces the human/Jira text following the fixed OUTPUT FORMAT
-(Issue Classification → Confidence → FACTS → INFERENCES → UNKNOWNS → ROOT CAUSE
-→ EVIDENCE → CONTRIBUTING FACTORS → RECOMMENDED FIX); render_docx() produces the
-Word version.
+(Issue Classification → Confidence → FACTS → INFERENCES → UNKNOWNS → ROOT CAUSE /
+MOST LIKELY ROOT CAUSE → INTRODUCED BY → EVIDENCE → CONTRIBUTING FACTORS →
+NEXT ACTION); render_docx() produces the Word version.
 
-An INSUFFICIENT DATA run (RULE 2) renders ONLY that single line — no facts,
-inferences or fabricated sections. A fix is shown ONLY at High confidence; every
-other run states "Diagnosis only. Insufficient evidence to recommend a safe fix."
+A root cause is headed "ROOT CAUSE" only when confirmed (explains every symptom,
+≥2 independent evidence sources, no contradiction); otherwise it is headed
+"MOST LIKELY ROOT CAUSE" and lists the evidence still required. EVIDENCE is
+grouped into Code / Git / Logs / Tests / Configuration / Ticket. NEXT ACTION
+matches confidence: the exact fix at High, verification steps at Medium, the
+additional evidence required at Low. An INSUFFICIENT DATA run renders ONLY that
+single line.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from app.rca.synthesis import INSUFFICIENT_DATA_MESSAGE, NO_FIX_MESSAGE
+from app.rca.synthesis import (
+    EVIDENCE_CATEGORIES, INSUFFICIENT_DATA_MESSAGE, _evidence_category,
+)
 
 
 def build_document(ticket: dict[str, Any], extracted: dict[str, Any],
@@ -29,12 +35,16 @@ def build_document(ticket: dict[str, Any], extracted: dict[str, Any],
         "issue_classification": diagnosis.get("issue_classification", "Cannot Determine"),
         "confidence_label": diagnosis.get("confidence_label", "Low"),
         "root_cause": root_cause,
+        "root_cause_status": diagnosis.get("root_cause_status", "undetermined"),
         "root_cause_location": loc,
+        "introduced_by": diagnosis.get("introduced_by"),
         "facts": diagnosis.get("facts", []),
         "inferences": diagnosis.get("inferences", []),
         "unknowns": diagnosis.get("unknowns", []),
         "evidence": diagnosis.get("evidence", []),
         "contributing_factors": diagnosis.get("contributing_factors", []),
+        "additional_evidence_required": diagnosis.get("additional_evidence_required", []),
+        "verification_steps": diagnosis.get("verification_steps", []),
         "recommended_fix": diagnosis.get("recommended_fix"),
         "agent_meta": agent_meta or {},
     }
@@ -79,32 +89,84 @@ def render_markdown(document: dict[str, Any]) -> str:
     _bullets(out, "INFERENCES", document.get("inferences", []))
     _bullets(out, "UNKNOWNS", document.get("unknowns", []))
 
-    out.append("## ROOT CAUSE")
+    # Confirmed cause → "ROOT CAUSE"; a leading-but-unverified cause →
+    # "MOST LIKELY ROOT CAUSE" with the evidence still needed to confirm it.
+    status = document.get("root_cause_status", "undetermined")
+    most_likely = status == "most_likely"
+    out.append("## MOST LIKELY ROOT CAUSE" if most_likely else "## ROOT CAUSE")
     out.append(document.get("root_cause", "Undetermined.") + "\n")
+    if most_likely:
+        extra = [str(x).strip() for x in document.get("additional_evidence_required", []) if str(x).strip()]
+        out.append("**Additional evidence required:**")
+        out.extend(f"- {x}" for x in (extra or ["(not specified)"]))
+        out.append("")
 
-    out.append("## EVIDENCE")
-    ev = document.get("evidence", [])
-    if ev:
-        for e in ev:
-            ref = f" — `{e.get('ref')}`" if e.get("ref") else ""
-            label = e.get("type") or "evidence"
-            out.append(f"- **{label}:** {e.get('detail','')}{ref}")
-    else:
-        out.append("- None available.")
-    out.append("")
+    _render_introduced_by(out, document.get("introduced_by"))
+    _render_evidence(out, document.get("evidence", []))
 
     cf = document.get("contributing_factors", [])
     if cf:
         _bullets(out, "CONTRIBUTING FACTORS", cf)
 
-    out.append("## RECOMMENDED FIX")
-    fix = document.get("recommended_fix")
-    if fix:
-        out.append(fix)
-    else:
-        out.append(NO_FIX_MESSAGE)
-
+    _render_next_action(out, document)
     return "\n".join(out)
+
+
+def _render_introduced_by(out: list[str], introduced: Any) -> None:
+    """Authorship block from git history only (RULE 10). Undetermined when the
+    introducing commit is unknown; never inferred, never framed as blame."""
+    out.append("## INTRODUCED BY")
+    if isinstance(introduced, dict) and introduced.get("commit"):
+        out.append(f"Introduced By: {introduced.get('name') or 'Unknown author'}")
+        out.append(f"Commit: {introduced['commit']}")
+        if introduced.get("date"):
+            out.append(f"Date: {introduced['date']}")
+    else:
+        out.append("Introduced By: Undetermined")
+    out.append("")
+
+
+def _render_evidence(out: list[str], evidence: list[dict[str, Any]]) -> None:
+    """Evidence grouped into the fixed buckets; empty categories are shown as
+    unavailable so the reader can see what was and wasn't found."""
+    out.append("## EVIDENCE")
+    by_cat: dict[str, list[dict[str, Any]]] = {c: [] for c in EVIDENCE_CATEGORIES}
+    for e in evidence:
+        cat = e.get("category")
+        if cat not in by_cat:  # legacy/blame items carry `type`, not `category`
+            cat = _evidence_category(e.get("category") or e.get("type"), e.get("ref", ""))
+        by_cat[cat].append(e)
+    for cat in EVIDENCE_CATEGORIES:
+        out.append(f"**{cat}**")
+        items = by_cat[cat]
+        if items:
+            for e in items:
+                ref = f" — `{e.get('ref')}`" if e.get("ref") else ""
+                out.append(f"- {e.get('detail','')}{ref}")
+        else:
+            out.append("- _None available._")
+        out.append("")
+
+
+def _render_next_action(out: list[str], document: dict[str, Any]) -> None:
+    """NEXT ACTION matches confidence (RULE 12): the exact fix at High,
+    verification steps at Medium, additional evidence required at Low."""
+    out.append("## NEXT ACTION")
+    confidence = document.get("confidence_label", "Low")
+    fix = document.get("recommended_fix")
+    if confidence == "High" and fix:
+        out.append(fix)
+    elif confidence == "Medium":
+        steps = [str(s).strip() for s in document.get("verification_steps", []) if str(s).strip()]
+        out.append("Verify before changing code:")
+        out.extend(f"- {s}" for s in (steps
+                   or ["Confirm the suspected cause against the affected code path before editing."]))
+    else:
+        needed = [str(x).strip() for x in document.get("additional_evidence_required", []) if str(x).strip()]
+        out.append("Do not change code yet. Additional evidence required:")
+        out.extend(f"- {x}" for x in (needed
+                   or ["Additional evidence is required to localize the root cause."]))
+    return
 
 
 def _bullets(out: list[str], heading: str, items: list[Any]) -> None:
