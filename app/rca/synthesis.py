@@ -59,6 +59,14 @@ INSUFFICIENT_DATA_MESSAGE = (
 
 NO_FIX_MESSAGE = "Diagnosis only. Insufficient evidence to recommend a safe fix."
 
+# How much of the investigation trace to hand synthesis. The trace holds the
+# read_file/grep observations that become the cited EVIDENCE, so these caps are
+# deliberately generous — an under-fed trace makes the model unable to cite
+# file:line and collapse to "insufficient data" with empty evidence.
+_MAX_TRACE_ENTRIES = 40      # most recent tool observations to include
+_MAX_OBS_CHARS = 4000        # per-observation char budget (fits a small file read)
+_MAX_TRACE_CHARS = 28000     # overall trace budget in the synthesis prompt
+
 _SYSTEM = """\
 You are an Enterprise Software Root Cause Analysis (RCA) Engine.
 
@@ -484,21 +492,23 @@ def _truncate_observation(observation: Any, limit: int) -> Any:
 def _user_message(ticket: dict[str, Any], extracted: dict[str, Any],
                   candidates: list[dict[str, Any]], investigation: str,
                   trace: list[dict[str, Any]]) -> str:
-    # trim the trace to the observations that carry signal. Truncate each
-    # observation as a STRING (slicing the JSON text and re-parsing would yield
-    # invalid JSON); keep it as a plain string so the outer dumps stays valid.
+    # The trace is the evidence synthesis cites in EVIDENCE — starving it makes the
+    # model unable to point to file:line and fall back to "none available". Keep a
+    # generous window: the read_file / grep observations carry the actual proof.
+    # Truncate each observation as a STRING (slicing serialized JSON and re-parsing
+    # would be invalid); keep it a plain string so the outer dumps stays valid.
     trimmed = [
         {"tool": t.get("tool"), "input": t.get("input"),
-         "observation": _truncate_observation(t.get("observation"), 1500)}
-        for t in trace[-20:]
+         "observation": _truncate_observation(t.get("observation"), _MAX_OBS_CHARS)}
+        for t in trace[-_MAX_TRACE_ENTRIES:]
     ]
     return (
-        "TICKET\n" + json.dumps(ticket, indent=2)[:3000] + "\n\n"
+        "TICKET\n" + json.dumps(ticket, indent=2)[:4000] + "\n\n"
         "EXTRACTED SIGNALS\n" + json.dumps(extracted, indent=2) + "\n\n"
-        "RETRIEVAL CANDIDATES\n" + json.dumps(candidates, indent=2)[:3000] + "\n\n"
+        "RETRIEVAL CANDIDATES\n" + json.dumps(candidates, indent=2)[:4000] + "\n\n"
         "INVESTIGATION SUMMARY (read-only agent)\n" + (investigation or "(none)") + "\n\n"
         "INVESTIGATION TRACE (recent tool observations)\n"
-        + json.dumps(trimmed, indent=2)[:6000]
+        + json.dumps(trimmed, indent=2)[:_MAX_TRACE_CHARS]
     )
 
 
