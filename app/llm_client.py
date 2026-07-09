@@ -6,6 +6,7 @@ client based on application settings. The system prompt contains stable
 instructions, while the user message contains the ticket JSON.
 """
 
+import dataclasses
 import json
 import logging
 import re
@@ -15,6 +16,13 @@ from app.config import Settings
 from app.exceptions import LLMConfigurationError
 
 log = logging.getLogger(__name__)
+
+# OpenAI reasoning models (o-series, gpt-5) drop `temperature` and use
+# `max_completion_tokens` instead of `max_tokens`; standard chat models
+# (gpt-4.1, gpt-4o, …) take the classic params.
+_OPENAI_REASONING = re.compile(r"^(o[1-9]|gpt-5)")
+# Model ids that should route to the OpenAI client rather than Anthropic.
+_OPENAI_MODEL = re.compile(r"^(gpt|o[1-9]|chatgpt)", re.I)
 
 # Claude 5 models reject the `temperature` parameter (it is deprecated for them).
 # Match the Claude 5 family — "claude-<family>-5" optionally followed by a date —
@@ -61,21 +69,22 @@ class OpenAILLMClient:
                  max_tokens: int = 4096,
                  images: Optional[list[dict[str, Any]]] = None) -> str:
         # Image blocks here are Anthropic-native; the OpenAI path stays text-only.
-        log.info("OpenAI LLM call: model=%s input_chars=%d", self.settings.llm_model, len(user_message))
-        response = self.client.chat.completions.create(
-            model=self.settings.llm_model,
+        model = self.settings.llm_model
+        log.info("OpenAI LLM call: model=%s input_chars=%d max_tokens=%d",
+                 model, len(user_message), max_tokens)
+        kwargs: dict[str, Any] = dict(
+            model=model,
             messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt,
-                },
-                {
-                    "role": "user",
-                    "content": user_message,
-                }
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
             ],
-            temperature=0.1,
         )
+        if _OPENAI_REASONING.match(model or ""):
+            kwargs["max_completion_tokens"] = max_tokens  # reasoning: no temperature
+        else:
+            kwargs["max_tokens"] = max_tokens
+            kwargs["temperature"] = 0.1
+        response = self.client.chat.completions.create(**kwargs)
 
         message = response.choices[0].message.content
         usage = getattr(response, "usage", None)
@@ -178,3 +187,20 @@ def build_llm_client(settings: Settings, *, timeout_override: int | None = None)
         return MockLLMClient()
 
     raise LLMConfigurationError(f"Unsupported LLM_PROVIDER: {settings.llm_provider}")
+
+
+def build_client_for_model(
+    settings: Settings, model: str, *, timeout_override: int | None = None
+) -> LLMClient:
+    """Build the provider client that owns a specific model id, and pin it.
+
+    Lets a phase pick a model independent of the global LLM_PROVIDER — e.g. RCA
+    synthesis on a GPT model while the rest of the app stays on Anthropic. Routes
+    gpt-*/o-series ids to OpenAI, everything else to Anthropic.
+    """
+    scoped = dataclasses.replace(settings, llm_model=model)
+    if _OPENAI_MODEL.match(model or ""):
+        log.info("Per-model client: OpenAI model=%s", model)
+        return OpenAILLMClient(scoped, timeout_override=timeout_override)
+    log.info("Per-model client: Anthropic model=%s", model)
+    return AnthropicLLMClient(scoped, timeout_override=timeout_override)

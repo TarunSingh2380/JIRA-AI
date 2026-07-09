@@ -524,12 +524,14 @@ def synthesize(
 ) -> dict[str, Any]:
     """Produce the structured diagnosis dict. Injectable client for tests."""
     if llm_client is None:
-        from app.llm_client import AnthropicLLMClient
-        llm_client = AnthropicLLMClient(
-            settings,
+        from app.llm_client import build_client_for_model
+        # Synthesis picks its own model (settings.rca_synthesis_model) and the
+        # matching provider — a GPT model routes to OpenAI, Claude to Anthropic —
+        # independent of the global LLM_PROVIDER.
+        llm_client = build_client_for_model(
+            settings, settings.rca_synthesis_model,
             timeout_override=settings.llm_test_case_timeout_seconds,
         )
-        llm_client.settings = _with_model(settings, settings.rca_synthesis_model)
 
     raw = llm_client.complete(
         _SYSTEM,
