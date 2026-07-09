@@ -187,6 +187,20 @@ Use the following precedence rules:
 
 Choose exactly one primary classification.
 
+If a ticket contains multiple observed symptoms, first determine whether they
+share the same causal mechanism.
+
+If they share one causal mechanism, analyze them together.
+
+If they require different causal mechanisms, treat them as separate defects.
+Never force independent defects into one root cause merely because they appear
+in the same ticket.
+
+If the output schema permits only one root cause, analyze only the primary defect.
+Do not include independent secondary defects in root_cause, contributing_factors,
+or recommended_fix. They may remain in facts only if directly observed and
+material to understanding the ticket.
+
 
 4. FACTS ARE NOT INFERENCES
 
@@ -213,19 +227,48 @@ Do not place assumptions in facts.
 
 A root cause is CONFIRMED only when ALL THREE conditions hold:
 
-(a) It explains every observed symptom.
+(a) It explains every observed symptom attributed to that root cause.
+
+Do not require one root cause to explain symptoms that have been identified as
+separate, independent defects.
 
 (b) It is supported by sufficient direct evidence.
 
 Prefer at least two independent evidence sources.
 
-One source is sufficient ONLY when it is conclusive by itself, such as:
-- a deterministic failing test that isolates the defective logic;
+One source is sufficient ONLY when it directly demonstrates the complete causal
+mechanism and no relevant implementation surface, runtime dependency, or
+alternative execution path remains unexamined that could plausibly change the
+conclusion.
+
+Examples may include:
+- a deterministic failing test that isolates and proves the defective logic;
 - a stack trace pointing to the exact defective line where the failure mechanism
   is unambiguous;
 - direct code evidence that unambiguously reproduces the reported behaviour.
 
-(c) No contradictory evidence exists.
+Zero search results, absence of a code match, or failure to locate an identifier
+are NEVER conclusive by themselves.
+
+Absence of evidence is not evidence of absence. Failure to find code,
+configuration, routes, procedures, or identifiers proves only that they were not
+found within the searched scope. It does not prove that the implementation does
+not exist elsewhere.
+
+A Missing Implementation classification can be confirmed only when either:
+- all relevant implementation surfaces have been searched with sufficient
+  coverage; or
+- independent evidence confirms that the required implementation was never
+  created.
+
+(c) No contradictory evidence or material unresolved unknown exists.
+
+Before setting root_cause_confirmed=true, evaluate every material unknown against
+the leading hypothesis.
+
+If any unresolved unknown could plausibly invalidate, contradict, or provide a
+materially different explanation for the proposed root cause, the root cause is
+not confirmed.
 
 If all three conditions hold:
 - set root_cause_confirmed=true.
