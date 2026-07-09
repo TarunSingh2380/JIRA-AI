@@ -8,12 +8,23 @@ instructions, while the user message contains the ticket JSON.
 
 import json
 import logging
+import re
 from typing import Any, Optional, Protocol
 
 from app.config import Settings
 from app.exceptions import LLMConfigurationError
 
 log = logging.getLogger(__name__)
+
+# Claude 5 models reject the `temperature` parameter (it is deprecated for them).
+# Match the Claude 5 family — "claude-<family>-5" optionally followed by a date —
+# so we omit temperature for them but keep it for 4.x models. Note that
+# "claude-haiku-4-5-…" is Haiku 4.5, NOT a 5 model, and must not match.
+_CLAUDE_5_MODEL = re.compile(r"^claude-[a-z]+-5(?:$|-)")
+
+
+def _supports_temperature(model: Optional[str]) -> bool:
+    return not _CLAUDE_5_MODEL.match(model or "")
 
 
 class LLMClient(Protocol):
@@ -107,18 +118,15 @@ class AnthropicLLMClient:
             content = user_message
         log.info("Anthropic LLM call: model=%s input_chars=%d max_tokens=%d images=%d",
                  self.settings.llm_model, len(user_message), max_tokens, len(images or []))
-        response = self.client.messages.create(
+        create_kwargs: dict[str, Any] = dict(
             model=self.settings.llm_model,
             max_tokens=max_tokens,
             system=system_prompt,
-            messages=[
-                {
-                    "role": "user",
-                    "content": content,
-                }
-            ],
-            temperature=0.1,
+            messages=[{"role": "user", "content": content}],
         )
+        if _supports_temperature(self.settings.llm_model):
+            create_kwargs["temperature"] = 0.1  # deprecated on Claude 5 — omit there
+        response = self.client.messages.create(**create_kwargs)
 
         usage = getattr(response, "usage", None)
         if usage:
