@@ -1013,6 +1013,32 @@ def ring_studio_banks(
     return ring_studio.list_banks()
 
 
+@app.get("/ring-studio/base-images")
+def ring_studio_base_images(
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> dict[str, Any]:
+    """List scraped base designs (from scraper.py output) available to seed a
+    render. Each item's ``id`` is passed back as ``base_image_id`` on /image."""
+    images = ring_studio.list_base_images()
+    return {"count": len(images), "images": images}
+
+
+@app.get("/ring-studio/base-image")
+def ring_studio_base_image_raw(
+    id: str,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> Response:
+    """Serve the raw bytes of one scraped base image so the SPA can preview it."""
+    try:
+        data = ring_studio.load_base_image(id)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    ext = id.rsplit(".", 1)[-1].lower()
+    media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+             "webp": "image/webp"}.get(ext, "application/octet-stream")
+    return Response(content=data, media_type=media)
+
+
 @app.post("/ring-studio/prompt", response_model=ring_studio.PromptResponse)
 def ring_studio_prompt(
     request: ring_studio.PromptRequest,
@@ -1069,10 +1095,20 @@ def ring_studio_image(
         meta = request.meta
     else:
         _, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
+
+    # Optionally seed the hero from a scraped base design; the ring is then
+    # reinterpreted in the meta's global design_tradition.
+    base_image: bytes | None = None
+    if request.base_image_id:
+        try:
+            base_image = ring_studio.load_base_image(request.base_image_id)
+        except (ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid base_image_id: {exc}")
+
     job = ring_studio.ring_job_store.create()
     background_tasks.add_task(
         ring_studio.run_render_job, job.job_id, settings, meta, request.seed,
-        quality=request.quality,
+        quality=request.quality, base_image=base_image,
     )
     return ring_studio.RingJobRef(job_id=job.job_id, status=job.status)
 

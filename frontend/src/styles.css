@@ -741,6 +741,16 @@ pre {
   display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px;
 }
 .ring-quality { min-width: 220px; }
+.ring-base { min-width: 240px; }
+
+/* Selected scraped base design preview */
+.ring-base-preview {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px;
+}
+.ring-base-preview img {
+  width: 88px; height: 88px; object-fit: cover; border-radius: var(--r);
+  border: 1px solid var(--line); box-shadow: var(--shadow-sm); flex: none;
+}
 
 /* Cost + download-all toolbar above the gallery */
 .ring-views-toolbar {

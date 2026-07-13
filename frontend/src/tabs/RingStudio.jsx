@@ -5,12 +5,13 @@
 // reproducible designs, preview the master prompt + spec, optionally render an
 // image, and batch-export prompts as JSONL for a 1000-image run.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch, apiDownload } from "../api.js";
+import { apiFetch, apiDownload, apiObjectUrl } from "../api.js";
 
 // The dropdown fields we expose, in display order. Each maps to a bank key.
 const FORM_FIELDS = [
   ["ring_name", "Ring Name"],
   ["ring_subtitle", "Subtitle"],
+  ["design_tradition", "Design Tradition"],
   ["diamond_shape", "Diamond Shape"],
   ["carat", "Carat"],
   ["color", "Color"],
@@ -27,6 +28,7 @@ const FORM_FIELDS = [
 
 // Meta keys shown in the spec summary, in catalog order.
 const SPEC_ROWS = [
+  ["design_tradition", "Design Tradition"],
   ["diamond_shape", "Center Diamond"],
   ["carat", "Carat"],
   ["color", "Color"],
@@ -50,6 +52,9 @@ export default function RingStudio() {
   const [views, setViews] = useState(null); // RingViewsResult { status, views[], cost_usd, message }
   const [renderJobId, setRenderJobId] = useState(null); // for ZIP download
   const [quality, setQuality] = useState("medium"); // low | medium | high
+  const [baseImages, setBaseImages] = useState([]); // scraped base designs
+  const [baseImageId, setBaseImageId] = useState(""); // "" = generate from text
+  const [basePreviewUrl, setBasePreviewUrl] = useState(""); // auth'd object URL
   const [busy, setBusy] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -64,7 +69,36 @@ export default function RingStudio() {
     apiFetch("/ring-studio/banks")
       .then(setBanks)
       .catch((e) => setError(e.message));
+    // Scraped base designs (from scraper.py) available to seed a render.
+    apiFetch("/ring-studio/base-images")
+      .then((d) => setBaseImages(d.images || []))
+      .catch(() => {}); // optional — absence just hides the picker
   }, []);
+
+  // Load an auth'd preview of the selected base design (an <img> can't send the
+  // JWT the endpoint requires, so we fetch the bytes and hold an object URL).
+  useEffect(() => {
+    if (!baseImageId) {
+      setBasePreviewUrl("");
+      return;
+    }
+    let objUrl;
+    let alive = true;
+    apiObjectUrl(`/ring-studio/base-image?id=${encodeURIComponent(baseImageId)}`)
+      .then((u) => {
+        if (alive) {
+          objUrl = u;
+          setBasePreviewUrl(u);
+        } else {
+          URL.revokeObjectURL(u);
+        }
+      })
+      .catch(() => setBasePreviewUrl(""));
+    return () => {
+      alive = false;
+      if (objUrl) URL.revokeObjectURL(objUrl);
+    };
+  }, [baseImageId]);
 
   const setField = (key, value) =>
     setOverrides((o) => {
@@ -115,7 +149,12 @@ export default function RingStudio() {
       // Pass the exact generated design (meta) so all four views match.
       const { job_id } = await apiFetch("/ring-studio/image", {
         method: "POST",
-        body: { meta: result.meta, seed: result.seed, quality },
+        body: {
+          meta: result.meta,
+          seed: result.seed,
+          quality,
+          base_image_id: baseImageId || null,
+        },
       });
       setRenderJobId(job_id);
       const job = await pollRenderJob(job_id);
@@ -329,14 +368,46 @@ export default function RingStudio() {
                     <option value="low">Low (fastest · cheapest)</option>
                   </select>
                 </label>
+                {baseImages.length > 0 ? (
+                  <label className="ring-field ring-base">
+                    <span>Base design</span>
+                    <select
+                      className="tc-select"
+                      value={baseImageId}
+                      onChange={(e) => setBaseImageId(e.target.value)}
+                      disabled={rendering}
+                    >
+                      <option value="">None — generate from text</option>
+                      {baseImages.map((img) => (
+                        <option key={img.id} value={img.id}>
+                          {[img.gender, img.product, img.filename]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <button onClick={renderImages} disabled={rendering}>
                   {rendering ? "Rendering 4 views…" : "🖼️ Render 4 Views"}
                 </button>
               </div>
+              {baseImageId && basePreviewUrl ? (
+                <div className="ring-base-preview">
+                  <img src={basePreviewUrl} alt="Selected base design" />
+                  <span className="muted">
+                    Base silhouette — reinterpreted in the{" "}
+                    {meta?.design_tradition
+                      ? meta.design_tradition.split(" (")[0]
+                      : "selected"}{" "}
+                    tradition.
+                  </span>
+                </div>
+              ) : null}
               <span className="ring-render-hint muted">
-                Rendered in sequence — Hero renders first, then Top · Side ·
-                Laydown each re-render from it, carrying the same ring forward so
-                nothing is re-invented.
+                {baseImageId
+                  ? "Hero re-renders the chosen base design in a global tradition; Top · Side · Laydown then carry that same new ring forward."
+                  : "Rendered in sequence — Hero renders first, then Top · Side · Laydown each re-render from it, carrying the same ring forward so nothing is re-invented."}
               </span>
 
               {views ? <ViewsGallery result={views} onDownloadZip={downloadZip} /> : null}

@@ -89,6 +89,19 @@ export async function apiDownload(path, { method = "GET", body, fallbackName } =
   triggerBlobDownload(blob, match ? match[1] : fallbackName || "download");
 }
 
+// Fetch a binary resource (e.g. an image) with auth and return an object URL.
+// The caller owns the URL and must URL.revokeObjectURL it when done.
+export async function apiObjectUrl(path) {
+  const res = await fetch(path, { headers: authHeaders() });
+  if (res.status === 401) {
+    notifyUnauthorized();
+    throw new Error(await parseError(res));
+  }
+  if (!res.ok) throw new Error(await parseError(res));
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export function triggerBlobDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

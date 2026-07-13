@@ -21,6 +21,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import random
 import threading
 import time
@@ -75,6 +76,24 @@ BANKS: dict[str, list[str]] = {
     "accent_color": ["soft gold", "rose-gold", "warm taupe", "muted bronze"],
     "ring_size": ["US 5 (15.7 mm)", "US 6 (16.5 mm)", "US 6.5 (16.9 mm)", "US 7 (17.3 mm)"],
     "motif": ["tulip", "rose", "lily", "orchid", "vine", "laurel"],
+    # Global jewelry design traditions — the style axis that lets generation draw
+    # on worldwide design heritage instead of staying anchored to the (Indian)
+    # base designs the scraper collects. Each entry names the tradition and its
+    # defining visual language so the image model has something concrete to render.
+    "design_tradition": [
+        "Art Deco (bold geometry, stepped symmetry, calibré-cut accents, crisp lines)",
+        "Victorian (romantic, ornate filigree, scrollwork, old-mine cuts)",
+        "Edwardian / Belle Époque (lacy platinum, fine milgrain, garland and bow motifs)",
+        "French Bombé (rounded voluptuous volumes, dense pavé, sculptural gold)",
+        "Italian Renaissance-inspired (sculptural high-polish gold, engraved scrollwork)",
+        "Mid-Century Modernist (clean bold forms, sculptural negative space)",
+        "Scandinavian Minimalist (understated, architectural restraint, matte finishes)",
+        "Contemporary Minimalist (thin bands, floating solitaire, tension-set clarity)",
+        "Japanese-inspired (organic asymmetry, nature motifs, delicate hammered texture)",
+        "Retro Hollywood (bold cocktail glamour, oversized centre, sweeping curves)",
+        "Nature-Organic (twig, vine and petal forms, textured branch bands)",
+        "Old Hollywood Vintage (milgrain edges, hand-engraving, illusion halos)",
+    ],
 }
 
 # (total_diamonds, accent_carat) pairs — paired sensibly.
@@ -122,6 +141,8 @@ DESCRIPTIONS: list[str] = [
 
 TEMPLATE = """Create a single high-resolution luxury jewelry catalog spec-sheet image in landscape 4:3 for a women's engagement ring. ONE ring design shown from multiple angles — every view depicts the EXACT SAME ring with consistent proportions, metal, diamond shape and setting.
 
+DESIGN LANGUAGE: {design_tradition}. Interpret the whole ring in this global design tradition — draw on worldwide jewelry heritage, not a single regional style.
+
 STYLE: clean premium editorial. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), diffused lighting, realistic diamond fire and reflections. Thin {accent_color} hairline panel borders. Elegant serif headings, clean sans-serif body. Photorealistic 3D render, tack-sharp, no clutter.
 
 LAYOUT (composite grid):
@@ -153,7 +174,7 @@ META_KEYS = [
     "clarity", "cut", "metal", "band_width", "setting", "total_diamonds", "accent_carat",
     "detail_label", "detail_feature", "background", "accent_color", "inspiration",
     "mood_image", "ring_size", "highlight_1", "highlight_2", "highlight_3", "highlight_4",
-    "motif",
+    "motif", "design_tradition",
 ]
 
 
@@ -251,6 +272,7 @@ def build_prompt(
         "highlight_3": hi[2],
         "highlight_4": hi[3],
         "motif": pick("motif"),
+        "design_tradition": pick("design_tradition"),
     }
     return TEMPLATE.format(**fields), fields
 
@@ -272,6 +294,66 @@ def generate_batch(count: int, start_seed: int = 0) -> list[dict[str, Any]]:
 
 def batch_to_jsonl(rows: list[dict[str, Any]]) -> str:
     return "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n"
+
+
+# ─── Scraped base designs ────────────────────────────────────────────────────
+# The scraper (repo-root ``scraper.py``) downloads real catalog rings into
+# ``images/<gender>/<product>/*.jpg``. Those are used as BASE designs: a chosen
+# base image is fed to the image model as the reference for the hero render, and
+# the prompt reinterprets it in a global {design_tradition} rather than copying
+# the original regional styling. Set ``RING_BASE_IMAGES_DIR`` to point elsewhere.
+
+_BASE_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+_BASE_IMAGES_DIR_ENV = "RING_BASE_IMAGES_DIR"
+
+
+def _base_images_dir() -> Path:
+    """Root folder of scraped base designs. Defaults to ``<repo>/images`` (the
+    scraper's OUTPUT_DIR), overridable via ``RING_BASE_IMAGES_DIR``."""
+    override = os.environ.get(_BASE_IMAGES_DIR_ENV)
+    if override:
+        return Path(override).expanduser()
+    # ring_studio.py -> app -> JIRA-AI -> repo root, where scraper.py writes images/.
+    return Path(__file__).resolve().parents[2] / "images"
+
+
+def list_base_images() -> list[dict[str, str]]:
+    """Enumerate scraped base ring images so the UI can offer them for selection.
+
+    Each entry: ``{id, gender, product, filename}`` where ``id`` is the path
+    relative to the base dir (used to load the bytes later)."""
+    root = _base_images_dir()
+    out: list[dict[str, str]] = []
+    if not root.exists():
+        return out
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in _BASE_IMAGE_EXTS:
+            continue
+        rel = path.relative_to(root)
+        parts = rel.parts
+        gender = parts[0] if parts and parts[0] in ("women", "men") else ""
+        product = parts[-2] if len(parts) >= 2 else ""
+        out.append({
+            "id": rel.as_posix(),
+            "gender": gender,
+            "product": product,
+            "filename": path.name,
+        })
+    return out
+
+
+def load_base_image(image_id: str) -> bytes:
+    """Read the bytes of a scraped base image by its relative ``id``.
+
+    The id is confined to the base-images dir — any path that resolves outside it
+    (traversal) is rejected."""
+    root = _base_images_dir().resolve()
+    path = (root / image_id).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError("Invalid base image id")
+    if path.suffix.lower() not in _BASE_IMAGE_EXTS or not path.is_file():
+        raise FileNotFoundError(f"Base image not found: {image_id}")
+    return path.read_bytes()
 
 
 # ─── Per-view image rendering (optional) ─────────────────────────────────────
@@ -383,7 +465,26 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
 # image is fed to every EDIT view so they all depict the identical ring.
 VIEW_TEMPLATE = """Create a single high-resolution, photorealistic 3D product render of ONE women's engagement ring — the "{ring_name}" ({ring_subtitle}).
 
+DESIGN LANGUAGE: {design_tradition}. Interpret the ring in this global design tradition, drawing on worldwide jewelry heritage rather than a single regional style.
+
 THE RING (this exact design will be reused for four more views, so make it distinctive and consistent):
+- Centre diamond: {diamond_shape} cut, {carat} ct, {color} colour / {clarity} clarity / {cut} cut.
+- Metal: {metal}. Band width: {band_width}. Setting: {setting}.
+- Accent stones: {total_diamonds} diamonds (~{accent_carat} ct total), hand-set micro-pavé.
+
+VIEW: {view_instruction}.
+
+STYLE: luxury jewelry catalog. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
+
+# Hero prompt used when a scraped BASE design is supplied as the reference image.
+# The base is a loose starting point only — proportion and stone placement — and
+# the ring is re-styled into a global {design_tradition}, deliberately NOT copying
+# the base's regional (Indian-catalog) styling.
+BASE_HERO_TEMPLATE = """The reference image is a real catalog ring, provided ONLY as a loose starting silhouette — do NOT copy its styling.
+
+Design a NEW luxury engagement ring — the "{ring_name}" ({ring_subtitle}) — that reinterprets that base in the {design_tradition} design tradition. Keep only the broad proportion and the centre-stone placement of the reference as a starting point, then re-style the metalwork, gallery, shoulders, setting and accents in an authentic {design_tradition} idiom. Draw on global jewelry design heritage — do NOT reproduce the regional styling of the reference.
+
+THE RING (this exact NEW design will be reused for four more views, so make it distinctive and consistent):
 - Centre diamond: {diamond_shape} cut, {carat} ct, {color} colour / {clarity} clarity / {cut} cut.
 - Metal: {metal}. Band width: {band_width}. Setting: {setting}.
 - Accent stones: {total_diamonds} diamonds (~{accent_carat} ct total), hand-set micro-pavé.
@@ -407,18 +508,26 @@ def _rings_static_dir() -> Path:
     return d
 
 
-def build_view_prompts(meta: dict[str, Any]) -> list[dict[str, str]]:
+def build_view_prompts(meta: dict[str, Any], has_base: bool = False) -> list[dict[str, str]]:
     """Build the four single-view prompts for one ring design (same meta).
 
     Each view carries its render ``mode`` and its ``src`` (the view whose image an
-    ``edit`` re-renders from). The hero is the text ``anchor``; every other view
-    edits the hero so the ring stays identical while the camera moves.
+    ``edit`` re-renders from). The hero is the ``anchor``; every other view edits
+    the hero so the ring stays identical while the camera moves.
+
+    ``has_base`` = a scraped base image will seed the hero: the hero then uses
+    ``BASE_HERO_TEMPLATE`` (reinterpret the base in a global tradition) and its
+    ``src`` is set to ``"base"`` so the renderer feeds the base image in.
     """
     out: list[dict[str, str]] = []
     for view, label, mode, src, instruction in VIEWS:
         view_instruction = instruction.format(**meta)
         if mode == "anchor":
-            prompt = VIEW_TEMPLATE.format(view_instruction=view_instruction, **meta)
+            if has_base and view == "hero":
+                prompt = BASE_HERO_TEMPLATE.format(view_instruction=view_instruction, **meta)
+                src = "base"
+            else:
+                prompt = VIEW_TEMPLATE.format(view_instruction=view_instruction, **meta)
         else:
             prompt = EDIT_TEMPLATE.format(view_instruction=view_instruction, **meta)
         out.append({"view": view, "label": label, "prompt": prompt, "mode": mode,
@@ -535,20 +644,27 @@ def render_ring_views(
     *,
     model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
+    base_image: Optional[bytes] = None,
 ) -> RingViewsResult:
     """Render the four per-view images for one ring design, all the SAME ring.
 
-    Views render SEQUENTIALLY: the hero renders first from text and becomes the
-    reference; each subsequent view is produced by editing its ``src`` view's
-    rendered image, so the ring (metal, stone, setting, proportions) is carried
-    forward unchanged instead of being re-invented — this is what stops the top
-    view from hallucinating into a different or side-on ring. ``quality``
-    (low/medium/high) trades cost for fidelity. If ``OPENAI_API_KEY`` is not
-    configured this is a graceful no-op returning the four prompts for manual use.
-    Per-view errors are captured so the dashboard can show whatever succeeded.
+    Views render SEQUENTIALLY: the hero renders first and becomes the reference;
+    each subsequent view is produced by editing its ``src`` view's rendered image,
+    so the ring (metal, stone, setting, proportions) is carried forward unchanged
+    instead of being re-invented — this is what stops the top view from
+    hallucinating into a different or side-on ring. ``quality`` (low/medium/high)
+    trades cost for fidelity.
+
+    ``base_image`` = raw bytes of a scraped base design. When given, the hero is
+    rendered by EDITING that base (reinterpreting it in the meta's global
+    ``design_tradition``) instead of from text, so real catalog rings seed the
+    generation. If ``OPENAI_API_KEY`` is not configured this is a graceful no-op
+    returning the four prompts for manual use. Per-view errors are captured so the
+    dashboard can show whatever succeeded.
     """
     quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
-    items = build_view_prompts(meta)
+    has_base = base_image is not None
+    items = build_view_prompts(meta, has_base=has_base)
 
     if not settings.openai_api_key:
         views = [
@@ -567,12 +683,17 @@ def render_ring_views(
 
     # Render one view at a time, in list order (each view's ``src`` is guaranteed
     # to appear earlier, so its image already exists when we reach the edit).
-    # We keep the rendered bytes per view so any later view can source it.
+    # We keep the rendered bytes per view so any later view can source it. A
+    # supplied base image is pre-seeded under "base" so the hero can edit from it.
     rendered_bytes: dict[str, Optional[bytes]] = {}
+    if has_base:
+        rendered_bytes["base"] = base_image
     results: dict[str, RingImageResult] = {}
     for it in items:
-        view, src = it["view"], it.get("src") or ""
-        if it["mode"] == "anchor":
+        view, src, mode = it["view"], it.get("src") or "", it["mode"]
+        # An anchor with no src renders from text; anything with a src (edit views,
+        # or the hero when seeded by a base image) re-renders from that reference.
+        if mode == "anchor" and not src:
             data, result = _render_anchor(settings, it, name_hint, model, quality)
         else:
             ref = rendered_bytes.get(src)
@@ -657,10 +778,12 @@ def run_render_job(
     *,
     model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
+    base_image: Optional[bytes] = None,
 ) -> None:
     """Execute a queued render, updating the job in place. Runs in a worker
     thread (via FastAPI BackgroundTasks); never raises — failures are recorded
-    on the job so the poller can surface them."""
+    on the job so the poller can surface them. ``base_image`` seeds the hero from
+    a scraped base design when supplied."""
     job = ring_job_store.get(job_id)
     if job is None:  # evicted before it ran (store is capped)
         log.warning("Ring render job %s vanished before start", job_id)
@@ -668,7 +791,8 @@ def run_render_job(
     job.status = "running"
     log.info("Ring render job %s started (quality=%s)", job_id, quality)
     try:
-        job.result = render_ring_views(settings, meta, seed=seed, model=model, quality=quality)
+        job.result = render_ring_views(settings, meta, seed=seed, model=model,
+                                       quality=quality, base_image=base_image)
         job.status = "completed"
         log.info("Ring render job %s completed (%s)", job_id, job.result.status)
     except Exception as exc:  # noqa: BLE001 - record, don't crash the worker
@@ -727,6 +851,9 @@ class ImageRequest(BaseModel):
     seed: Optional[int] = None
     overrides: dict[str, Any] = Field(default_factory=dict)
     quality: str = _DEFAULT_QUALITY  # low | medium | high
+    # Optional: id (from list_base_images) of a scraped base design to seed the
+    # hero from — the ring is then reinterpreted in the meta's design_tradition.
+    base_image_id: Optional[str] = None
 
 
 class RingJobRef(BaseModel):
