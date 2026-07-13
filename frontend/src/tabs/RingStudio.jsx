@@ -357,10 +357,9 @@ export default function RingStudio() {
           <div className="ring-base-batch">
             <h4>Base designs → global styles</h4>
             <p className="muted">
-              Take every scraped product in the <code>images</code> folder as a
-              base and render a better global-style ring for each — one folder
-              per product, downloadable as a single ZIP. Uses the{" "}
-              <b>{quality}</b> quality above.
+              Take every scraped base product and render one better global-style
+              ring image for each — one folder per product, downloadable as a
+              single ZIP. Uses the <b>{quality}</b> quality above.
             </p>
             {(() => {
               const baseCount = new Set(
@@ -555,14 +554,13 @@ function BaseBatchProgress({ result, running }) {
       <ul className="ring-base-batch-list">
         {(result.items || []).map((it, i) => {
           const rendered = (it.result?.views || []).filter((v) => v.status === "rendered").length;
-          const total = it.result?.views?.length || 0;
           const ok = it.result && it.result.status !== "error" && !it.error;
           return (
             <li key={`${it.base_image_id}-${i}`} className={ok ? "" : "ring-base-batch-fail"}>
               <span className="ring-base-batch-name">{it.label || it.product}</span>
               <span className="muted">
                 {it.design_tradition ? it.design_tradition.split(" (")[0] : ""}
-                {total ? ` · ${rendered}/${total} views` : ""}
+                {it.result ? ` · ${rendered ? "✓ rendered" : "no image"}` : ""}
                 {it.error ? ` · ${it.error}` : ""}
               </span>
             </li>

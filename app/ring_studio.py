@@ -670,6 +670,7 @@ def render_ring_views(
     model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
     base_image: Optional[bytes] = None,
+    view_keys: Optional[set[str]] = None,
 ) -> RingViewsResult:
     """Render the four per-view images for one ring design, all the SAME ring.
 
@@ -683,13 +684,22 @@ def render_ring_views(
     ``base_image`` = raw bytes of a scraped base design. When given, the hero is
     rendered by EDITING that base (reinterpreting it in the meta's global
     ``design_tradition``) instead of from text, so real catalog rings seed the
-    generation. If ``OPENAI_API_KEY`` is not configured this is a graceful no-op
-    returning the four prompts for manual use. Per-view errors are captured so the
-    dashboard can show whatever succeeded.
+    generation.
+
+    ``view_keys`` = render only this subset of views (e.g. ``{"hero"}`` for the
+    batch, which wants one strong global-style image per product rather than four
+    — 6× fewer calls, so it finishes well within the poll window). Any kept view
+    whose ``src`` is dropped will error gracefully; ``{"hero"}`` has no such dep.
+
+    If ``OPENAI_API_KEY`` is not configured this is a graceful no-op returning the
+    prompts for manual use. Per-view errors are captured so the dashboard can show
+    whatever succeeded.
     """
     quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
     has_base = base_image is not None
     items = build_view_prompts(meta, has_base=has_base)
+    if view_keys:
+        items = [it for it in items if it["view"] in view_keys]
 
     if not settings.openai_api_key:
         views = [
@@ -934,8 +944,8 @@ def build_batch_zip(result: "RingBatchResult") -> Optional[tuple[str, bytes]]:
 # One button on the UI kicks off a job that walks every scraped PRODUCT, seeds a
 # render from it, rotates a different global design tradition per product, and
 # collects the results so they can be downloaded as a single ZIP (one folder per
-# product). Runs as a background job like the single render — 6 products × 4
-# views is a multi-minute call that must not block the request.
+# product). Each product renders ONE global-style image (the hero) so the whole
+# batch stays fast; runs as a background job so it never blocks the request.
 
 def run_batch_render_job(
     job_id: str,
@@ -979,8 +989,11 @@ def run_batch_render_job(
             )
             try:
                 base = load_base_image(product["image_id"])
+                # Hero-only: one strong global-style image per product. Keeps the
+                # whole batch to N calls (not N×4) so it finishes fast.
                 item.result = render_ring_views(settings, meta, seed=i, model=model,
-                                                quality=quality, base_image=base)
+                                                quality=quality, base_image=base,
+                                                view_keys={"hero"})
             except Exception as exc:  # noqa: BLE001 - record per product, keep going
                 log.exception("Ring batch job %s: product %s failed", job_id, product["label"])
                 item.error = str(exc)[:500]
