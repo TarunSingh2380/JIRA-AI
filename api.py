@@ -1190,7 +1190,7 @@ def ring_studio_render_base_designs_zip(
     job_id: str,
     _user: CurrentUser = Depends(require_tab("rings")),
 ) -> Response:
-    """Download the whole batch as one ZIP — a folder per scraped product."""
+    """Download the whole batch as a ZIP of per-product ZIPs (one per product)."""
     job = ring_studio.ring_batch_job_store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Ring batch job '{job_id}' not found")
@@ -1199,6 +1199,29 @@ def ring_studio_render_base_designs_zip(
     bundle = ring_studio.build_batch_zip(job.result)
     if bundle is None:
         raise HTTPException(status_code=404, detail="No rendered images to download.")
+    filename, data = bundle
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/ring-studio/render-base-designs/{job_id}/product/{index}/zip")
+def ring_studio_render_base_designs_product_zip(
+    job_id: str,
+    index: int,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> Response:
+    """Download ONE product's four views as its own ZIP."""
+    job = ring_studio.ring_batch_job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Ring batch job '{job_id}' not found")
+    if job.result is None or not (0 <= index < len(job.result.items)):
+        raise HTTPException(status_code=404, detail="Product not found in this batch.")
+    bundle = ring_studio.build_product_zip(job.result.items[index])
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="This product has no rendered images yet.")
     filename, data = bundle
     return Response(
         content=data,

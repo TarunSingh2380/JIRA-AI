@@ -750,9 +750,10 @@ pre {
 .ring-base-batch-head { font-weight: 600; }
 .ring-base-batch-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
 .ring-base-batch-list li {
-  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
   gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r);
 }
+.ring-base-batch-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ring-base-batch-list .ring-base-batch-name { font-weight: 600; }
 .ring-base-batch-list li.ring-base-batch-fail { border-color: var(--danger, #d9534f); }
 

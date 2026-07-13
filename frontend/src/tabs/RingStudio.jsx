@@ -248,6 +248,18 @@ export default function RingStudio() {
     }
   };
 
+  const downloadProductZip = async (index) => {
+    if (!baseBatchJobId) return;
+    try {
+      await apiDownload(
+        `/ring-studio/render-base-designs/${baseBatchJobId}/product/${index}/zip`,
+        { fallbackName: "ring-product.zip" },
+      );
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   const pinnedCount = useMemo(() => Object.keys(overrides).length, [overrides]);
   const meta = result?.meta;
 
@@ -357,9 +369,10 @@ export default function RingStudio() {
           <div className="ring-base-batch">
             <h4>Base designs → global styles</h4>
             <p className="muted">
-              Take every scraped base product and render one better global-style
-              ring image for each — one folder per product, downloadable as a
-              single ZIP. Uses the <b>{quality}</b> quality above.
+              Take every scraped base product and render a better global-style
+              ring (all 4 views) for each. Download each product as its own ZIP,
+              or grab them all at once (a separate ZIP per product). Uses the{" "}
+              <b>{quality}</b> quality above.
             </p>
             {(() => {
               const baseCount = new Set(
@@ -384,7 +397,7 @@ export default function RingStudio() {
                       (it.result?.views || []).some((v) => v.status === "rendered"),
                     ) ? (
                       <button className="secondary" onClick={downloadBaseBatchZip}>
-                        ⬇ Download all as ZIP
+                        ⬇ Download all (separate ZIPs)
                       </button>
                     ) : null}
                   </div>
@@ -396,7 +409,11 @@ export default function RingStudio() {
                     </p>
                   ) : null}
                   {baseBatch ? (
-                    <BaseBatchProgress result={baseBatch} running={baseBatchRunning} />
+                    <BaseBatchProgress
+                      result={baseBatch}
+                      running={baseBatchRunning}
+                      onDownloadProduct={downloadProductZip}
+                    />
                   ) : null}
                 </>
               );
@@ -524,7 +541,7 @@ async function pollRenderJob(jobId, { intervalMs = 2500, timeoutMs = 5 * 60 * 10
 
 // Poll the base-designs batch, surfacing per-product progress via onProgress.
 // The batch is long (products × views), so the timeout is generous.
-async function pollBatchJob(jobId, onProgress, { intervalMs = 3000, timeoutMs = 20 * 60 * 1000 } = {}) {
+async function pollBatchJob(jobId, onProgress, { intervalMs = 4000, timeoutMs = 40 * 60 * 1000 } = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const job = await apiFetch(`/ring-studio/render-base-designs/${jobId}`);
@@ -538,8 +555,9 @@ async function pollBatchJob(jobId, onProgress, { intervalMs = 3000, timeoutMs = 
 const fmtUsd = (n) =>
   typeof n === "number" ? `$${n.toFixed(n < 0.1 ? 4 : 3)}` : null;
 
-// Per-product progress + status for the base-designs batch.
-function BaseBatchProgress({ result, running }) {
+// Per-product progress + status for the base-designs batch, with a per-product
+// ZIP download once that product has rendered images.
+function BaseBatchProgress({ result, running, onDownloadProduct }) {
   const cost = fmtUsd(result.cost_usd);
   const pct = result.total ? Math.round((result.completed / result.total) * 100) : 0;
   return (
@@ -553,16 +571,24 @@ function BaseBatchProgress({ result, running }) {
       {result.message ? <div className="muted">{result.message}</div> : null}
       <ul className="ring-base-batch-list">
         {(result.items || []).map((it, i) => {
-          const rendered = (it.result?.views || []).filter((v) => v.status === "rendered").length;
+          const views = it.result?.views || [];
+          const rendered = views.filter((v) => v.status === "rendered").length;
           const ok = it.result && it.result.status !== "error" && !it.error;
           return (
             <li key={`${it.base_image_id}-${i}`} className={ok ? "" : "ring-base-batch-fail"}>
-              <span className="ring-base-batch-name">{it.label || it.product}</span>
-              <span className="muted">
-                {it.design_tradition ? it.design_tradition.split(" (")[0] : ""}
-                {it.result ? ` · ${rendered ? "✓ rendered" : "no image"}` : ""}
-                {it.error ? ` · ${it.error}` : ""}
-              </span>
+              <div className="ring-base-batch-info">
+                <span className="ring-base-batch-name">{it.label || it.product}</span>
+                <span className="muted">
+                  {it.design_tradition ? it.design_tradition.split(" (")[0] : ""}
+                  {views.length ? ` · ${rendered}/${views.length} views` : ""}
+                  {it.error ? ` · ${it.error}` : ""}
+                </span>
+              </div>
+              {rendered > 0 ? (
+                <button className="link" onClick={() => onDownloadProduct(i)}>
+                  ⬇ ZIP
+                </button>
+              ) : null}
             </li>
           );
         })}

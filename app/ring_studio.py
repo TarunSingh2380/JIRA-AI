@@ -906,34 +906,57 @@ def _safe_folder(*parts: str) -> str:
     return cleaned.strip("-").lower() or "ring"
 
 
-def build_batch_zip(result: "RingBatchResult") -> Optional[tuple[str, bytes]]:
-    """Bundle a whole base-designs batch into ONE ZIP with a folder per product.
-
-    Layout: ``<gender>-<product>/<view>.png`` — one folder for each scraped base
-    design, holding that ring's rendered global-style views. Files are read only
-    from the rings static dir by basename, so a tampered filename can't escape."""
+def build_product_zip(item: "RingBatchItem") -> Optional[tuple[str, bytes]]:
+    """ZIP ONE product's rendered views (``<view>.png``). Returns (filename,
+    bytes) or None when that product rendered nothing. Files are read only from
+    the rings static dir by basename, so a tampered filename can't escape."""
     import io
     import zipfile
 
+    if item.result is None:
+        return None
     rings_dir = _rings_static_dir()
+    name = _safe_folder(item.gender, item.product)
+    buf = io.BytesIO()
+    wrote_any = False
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for v in item.result.views:
+            if v.status == "rendered" and v.filename:
+                path = rings_dir / Path(v.filename).name  # basename only
+                if path.exists():
+                    zf.write(path, arcname=f"{v.view}.png")
+                    wrote_any = True
+    if not wrote_any:
+        return None
+    buf.seek(0)
+    return f"{name}.zip", buf.getvalue()
+
+
+def build_batch_zip(result: "RingBatchResult") -> Optional[tuple[str, bytes]]:
+    """Bundle a whole base-designs batch as a ZIP of per-product ZIPs.
+
+    The download contains one ``<gender>-<product>.zip`` per scraped design (each
+    holding that ring's four view PNGs), so unzipping yields a SEPARATE zip for
+    every product. Returns None when nothing rendered."""
+    import io
+    import zipfile
+
     buf = io.BytesIO()
     used: dict[str, int] = {}
     wrote_any = False
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:  # inner zips already compressed
         for item in result.items:
-            if item.result is None:
+            bundle = build_product_zip(item)
+            if bundle is None:
                 continue
-            folder = _safe_folder(item.gender, item.product)
-            n = used.get(folder, 0)
-            used[folder] = n + 1
+            fname, data = bundle
+            stem = fname[:-4]  # drop ".zip"
+            n = used.get(stem, 0)
+            used[stem] = n + 1
             if n:  # disambiguate duplicate product names
-                folder = f"{folder}-{n + 1}"
-            for v in item.result.views:
-                if v.status == "rendered" and v.filename:
-                    path = rings_dir / Path(v.filename).name  # basename only
-                    if path.exists():
-                        zf.write(path, arcname=f"{folder}/{v.view}.png")
-                        wrote_any = True
+                fname = f"{stem}-{n + 1}.zip"
+            zf.writestr(fname, data)
+            wrote_any = True
     if not wrote_any:
         return None
     buf.seek(0)
@@ -943,9 +966,17 @@ def build_batch_zip(result: "RingBatchResult") -> Optional[tuple[str, bytes]]:
 # ─── Batch: render one global-style ring from every scraped base design ───────
 # One button on the UI kicks off a job that walks every scraped PRODUCT, seeds a
 # render from it, rotates a different global design tradition per product, and
-# collects the results so they can be downloaded as a single ZIP (one folder per
-# product). Each product renders ONE global-style image (the hero) so the whole
-# batch stays fast; runs as a background job so it never blocks the request.
+# collects the results so each product can be downloaded as its OWN ZIP (all four
+# views), plus a combined "all" bundle. Each product renders the full 4-view set;
+# products run CONCURRENTLY (a product's own 4 views stay sequential) so the whole
+# batch finishes in roughly one product's time instead of N products' time — that
+# keeps 6×4 = 24 image calls inside the poll window. Runs as a background job.
+
+# How many products to render at once. Each product is 4 sequential image calls;
+# running a few products in parallel cuts wall-clock time without hammering the
+# image API's concurrency limits.
+_BATCH_CONCURRENCY = 3
+
 
 def run_batch_render_job(
     job_id: str,
@@ -954,8 +985,11 @@ def run_batch_render_job(
     model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
 ) -> None:
-    """Render one global-style ring per scraped base product, updating the job in
-    place after each product so the poller can show progress. Never raises."""
+    """Render the full 4-view set for every scraped base product, concurrently,
+    updating the job as each product finishes so the poller shows progress. Never
+    raises — per-product failures are recorded on that product's item."""
+    from concurrent.futures import ThreadPoolExecutor
+
     job = ring_batch_job_store.get(job_id)
     if job is None:
         log.warning("Ring batch job %s vanished before start", job_id)
@@ -975,42 +1009,61 @@ def run_batch_render_job(
         job.completed_at = datetime.now(timezone.utc)
         return
 
+    # One placeholder item per product, in order, so the ZIP index is stable and
+    # the poller can show each product's status as it lands.
     items: list[RingBatchItem] = []
-    # Seed a placeholder result immediately so the first poll shows the total.
-    job.result = RingBatchResult(status="running", total=len(products), completed=0, items=[])
-    try:
-        for i, product in enumerate(products):
-            tradition = traditions[i % len(traditions)]
-            _, meta = build_prompt(seed=i, overrides={"design_tradition": tradition})
-            item = RingBatchItem(
-                product=product["product"], gender=product["gender"],
-                base_image_id=product["image_id"], label=product["label"],
-                design_tradition=tradition, ring_name=str(meta.get("ring_name", "")),
-            )
-            try:
-                base = load_base_image(product["image_id"])
-                # Hero-only: one strong global-style image per product. Keeps the
-                # whole batch to N calls (not N×4) so it finishes fast.
-                item.result = render_ring_views(settings, meta, seed=i, model=model,
-                                                quality=quality, base_image=base,
-                                                view_keys={"hero"})
-            except Exception as exc:  # noqa: BLE001 - record per product, keep going
-                log.exception("Ring batch job %s: product %s failed", job_id, product["label"])
-                item.error = str(exc)[:500]
-            items.append(item)
-            job.result = RingBatchResult(status="running", total=len(products),
-                                         completed=len(items), items=list(items))
+    metas: list[dict[str, Any]] = []
+    for i, product in enumerate(products):
+        tradition = traditions[i % len(traditions)]
+        _, meta = build_prompt(seed=i, overrides={"design_tradition": tradition})
+        metas.append(meta)
+        items.append(RingBatchItem(
+            product=product["product"], gender=product["gender"],
+            base_image_id=product["image_id"], label=product["label"],
+            design_tradition=tradition, ring_name=str(meta.get("ring_name", "")),
+        ))
 
-        costs = [it.result.cost_usd for it in items if it.result and it.result.cost_usd is not None]
-        total_cost = round(sum(costs), 6) if costs else None
+    lock = threading.Lock()
+    done = 0
+
+    def publish(status: str = "running") -> None:
+        costs = [it.result.cost_usd for it in items
+                 if it.result and it.result.cost_usd is not None]
+        job.result = RingBatchResult(
+            status=status, total=len(items), completed=done,
+            items=[it.model_copy(deep=True) for it in items],
+            cost_usd=round(sum(costs), 6) if costs else None,
+        )
+
+    publish()  # seed total immediately
+
+    def render_one(idx: int) -> None:
+        nonlocal done
+        product, meta = products[idx], metas[idx]
+        try:
+            base = load_base_image(product["image_id"])
+            result = render_ring_views(settings, meta, seed=idx, model=model,
+                                       quality=quality, base_image=base)
+            with lock:
+                items[idx].result = result
+        except Exception as exc:  # noqa: BLE001 - record per product, keep going
+            log.exception("Ring batch job %s: product %s failed", job_id, product["label"])
+            with lock:
+                items[idx].error = str(exc)[:500]
+        with lock:
+            done += 1
+            publish()
+
+    try:
+        with ThreadPoolExecutor(max_workers=_BATCH_CONCURRENCY) as pool:
+            list(pool.map(render_one, range(len(products))))
+
         rendered = sum(1 for it in items
                        if it.result and it.result.status in ("rendered", "partial"))
-        message = None
-        if rendered == 0:
-            message = "No images were rendered — check that OPENAI_API_KEY is configured."
-        job.result = RingBatchResult(status="completed", total=len(products),
-                                     completed=len(items), items=items, cost_usd=total_cost,
-                                     message=message)
+        with lock:
+            publish(status="completed")
+            if rendered == 0:
+                job.result.message = "No images were rendered — check that OPENAI_API_KEY is configured."
         job.status = "completed"
         log.info("Ring batch job %s completed (%d/%d rendered)", job_id, rendered, len(products))
     except Exception as exc:  # noqa: BLE001 - record, don't crash the worker
