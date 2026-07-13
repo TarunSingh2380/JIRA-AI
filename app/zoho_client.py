@@ -5,6 +5,11 @@ This module powers the "Zoho Tickets" admin dashboard tab (capability key
 contact and lists that contact's tickets, so an operator can validate customer
 ticket visibility before the same APIs are wired into the customer portal.
 
+The OAuth refresh token must be granted the scopes
+``Desk.tickets.READ,Desk.contacts.READ,Desk.search.READ`` — the ``/search``
+endpoints below need ``Desk.search.READ`` specifically, and omitting it yields a
+403 ``SCOPE_MISMATCH``. Regenerate the token with ``scripts/zoho_oauth_setup.py``.
+
 It wraps four Zoho Desk API touch-points described in the design doc:
 
 1. OAuth token refresh (``/oauth/v2/token``) — an in-memory access token cached
