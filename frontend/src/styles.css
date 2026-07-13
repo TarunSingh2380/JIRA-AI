@@ -799,4 +799,19 @@ pre {
   margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
 }
 .zoho-contact-name { font-weight: 700; font-size: 15px; }
-.zoho-table-wrap { overflow-x: auto; }
+.zoho-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--surface);
+}
+.zoho-table-wrap table { table-layout: auto; }
+/* The global thead is sticky (top: 61px) for toolbar tabs, which floats it over
+   the rows here. Render it as a normal, static table header instead. */
+.zoho-table-wrap thead th {
+  position: static; top: auto; z-index: auto;
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+.zoho-table-wrap tbody td { font-size: 13.5px; }
+.zoho-table-wrap tbody tr:last-child td { border-bottom: none; }
+/* Ticket-number column: keep the long numeric id on one line. */
+.zoho-table-wrap td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }

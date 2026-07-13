@@ -51,15 +51,17 @@ class ZohoError(Exception):
 
 
 class ZohoTicket(BaseModel):
+    # Snake_case field names ARE the API contract: _ticket_from_row maps the raw
+    # Zoho camelCase keys in explicitly, and the React tab reads these names. (No
+    # aliases — FastAPI serializes response models by alias by default, which
+    # would otherwise emit createdTime/ticketNumber and blank the UI columns.)
     id: str
-    ticket_number: Optional[str] = Field(default=None, alias="ticketNumber")
+    ticket_number: Optional[str] = None
     subject: Optional[str] = None
     status: Optional[str] = None
     priority: Optional[str] = None
-    created_time: Optional[str] = Field(default=None, alias="createdTime")
-    modified_time: Optional[str] = Field(default=None, alias="modifiedTime")
-
-    model_config = {"populate_by_name": True}
+    created_time: Optional[str] = None
+    modified_time: Optional[str] = None
 
 
 class ZohoContact(BaseModel):
