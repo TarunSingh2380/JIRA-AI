@@ -47,7 +47,7 @@ log = logging.getLogger(__name__)
 # standalone Documentation portal; "users" gates the User Management page (no
 # full admin rights needed). "*" in a role grants every capability.
 # "rings" gates the Ring Studio (diamond-ring image-prompt generator) dashboard.
-ALL_TABS = ["repos", "jira", "insights", "logs", "testcases", "similar", "workflows", "channels", "utilization", "neo4j", "rca", "rings", "docs", "users"]
+ALL_TABS = ["repos", "jira", "insights", "logs", "testcases", "similar", "workflows", "channels", "utilization", "neo4j", "rca", "rings", "zoho", "docs", "users"]
 
 # Per-tab custom roles. Edit this map (or override with the AUTH_ROLE_TABS env
 # var as JSON) to change which role can reach which capability.
@@ -65,6 +65,9 @@ DEFAULT_ROLE_TABS: dict[str, list[str]] = {
     # Designer role: lands on (and only sees) the Ring Studio — the diamond-ring
     # image-prompt generator. Admin also has it via "*"; no other role does.
     "designer": ["rings"],
+    # Support role: lands on (and only sees) the Zoho Tickets tab — look a
+    # customer up and view their Zoho Desk tickets. Admin also has it via "*".
+    "support": ["zoho"],
 }
 
 

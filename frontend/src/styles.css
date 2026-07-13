@@ -773,3 +773,30 @@ pre {
   padding: 12px; font-size: 12px; background: var(--surface);
 }
 .ring-view-err { color: var(--danger); border-color: #fecaca; background: var(--danger-soft); }
+
+/* ── Zoho Tickets tab ─────────────────────────────────────────────────────── */
+.zoho-hero h2 { margin: 0 0 4px; font-size: 20px; }
+.zoho-hero .muted { margin: 0 0 16px; max-width: 620px; }
+.zoho-tab .error-banner {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: var(--r);
+  background: var(--danger-soft); color: var(--danger);
+  border: 1px solid #fecaca; font-size: 13px;
+}
+.zoho-form.card, .zoho-results.card {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 18px; box-shadow: var(--shadow-xs);
+}
+.zoho-form.card { margin-bottom: 18px; }
+.zoho-fields {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px;
+}
+.zoho-field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 220px; }
+.zoho-field span {
+  font-size: 12px; font-weight: 700; color: var(--ink-soft);
+}
+.zoho-fields button { flex: 0 0 auto; min-height: 40px; }
+.zoho-contact {
+  margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
+}
+.zoho-contact-name { font-weight: 700; font-size: 15px; }
+.zoho-table-wrap { overflow-x: auto; }

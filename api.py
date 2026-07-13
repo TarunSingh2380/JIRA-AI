@@ -52,6 +52,7 @@ from app.repository_discovery import active_repository_names, discover_graph_rep
 from app.rca import localize as rca_localize, rca_document, runner as rca_runner
 from app.rca.store import RCARunStore
 from app import ring_studio
+from app.zoho_client import ZohoClient, ZohoError, CustomerTicketsRequest, CustomerTicketsResponse
 from app.repo_doc_generator import (
     list_doc_repositories,
     list_document_types,
@@ -1113,6 +1114,37 @@ def ring_studio_image_zip(
     )
 
 
+# ── Zoho Desk — customer ticket visibility (capability key "zoho") ───────────
+# Look a customer up by email/phone against Zoho Desk and list their tickets.
+# A single shared client caches the OAuth access token across requests.
+
+zoho_client = ZohoClient(settings)
+
+
+@app.get("/zoho/status")
+def zoho_status(
+    _user: CurrentUser = Depends(require_tab("zoho")),
+) -> dict[str, Any]:
+    """Whether Zoho Desk credentials are configured (drives the tab's banner)."""
+    return {"configured": zoho_client.is_configured()}
+
+
+@app.post("/zoho/tickets", response_model=CustomerTicketsResponse)
+def zoho_customer_tickets(
+    request: CustomerTicketsRequest,
+    _user: CurrentUser = Depends(require_tab("zoho")),
+) -> CustomerTicketsResponse:
+    """Resolve a customer (email/phone) to their Zoho contact and list tickets."""
+    email = (request.email or "").strip() or None
+    phone = (request.phone or "").strip() or None
+    if not (email or phone):
+        raise HTTPException(status_code=400, detail="Provide a customer email or phone number.")
+    try:
+        return zoho_client.customer_tickets(email=email, phone=phone)
+    except ZohoError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.post("/graph-admin/code-analysis-report")
 async def download_code_analysis_report(
     request: CodeAnalysisReportRequest,
@@ -2099,7 +2131,7 @@ def _selected_repositories(
 _API_PATH_PREFIXES = (
     "api/", "graph-admin", "auth/", "static/", "assets/", "analyze-ticket",
     "workflow", "scan/", "repomix/", "testcases/", "jobs", "repo-tree",
-    "prompts", "chat", "health", "openapi.json", "ring-studio", "rca/",
+    "prompts", "chat", "health", "openapi.json", "ring-studio", "rca/", "zoho/",
 )
 
 

@@ -536,7 +536,9 @@ def synthesize(
     raw = llm_client.complete(
         _SYSTEM,
         _user_message(ticket, extracted, candidates, investigation, trace),
-        max_tokens=4000,
+        # Generous headroom: reasoning models (GPT-5) spend part of the completion
+        # budget on internal reasoning, so a tight cap can truncate the JSON.
+        max_tokens=8000,
     )
     try:
         parsed = parse_model_json(raw)

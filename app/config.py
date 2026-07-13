@@ -293,6 +293,18 @@ class Settings:
     # the current exchange rate.
     usd_to_inr: float = float(os.getenv("USD_TO_INR", "95.75"))
 
+    # ── Zoho Desk (customer ticket visibility) ───────────────────────────────
+    # OAuth self-client credentials + org id for the Zoho Desk REST API. The
+    # "zoho" tab looks a customer up by email/phone and lists their tickets.
+    # Data-center domains default to India (.in); switch to .com/.eu/etc. per
+    # deployment. Leaving credentials blank degrades the tab gracefully.
+    zoho_client_id: str = os.getenv("ZOHO_CLIENT_ID", "")
+    zoho_client_secret: str = os.getenv("ZOHO_CLIENT_SECRET", "")
+    zoho_refresh_token: str = os.getenv("ZOHO_REFRESH_TOKEN", "")
+    zoho_org_id: str = os.getenv("ZOHO_ORG_ID", "")
+    zoho_accounts_base: str = os.getenv("ZOHO_ACCOUNTS_BASE", "https://accounts.zoho.in").rstrip("/")
+    zoho_desk_base: str = os.getenv("ZOHO_DESK_BASE", "https://desk.zoho.in").rstrip("/")
+
     @property
     def database_url(self) -> str:
         if self.database_url_override:
