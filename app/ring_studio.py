@@ -298,23 +298,27 @@ def batch_to_jsonl(rows: list[dict[str, Any]]) -> str:
 
 # ─── Scraped base designs ────────────────────────────────────────────────────
 # The scraper (repo-root ``scraper.py``) downloads real catalog rings into
-# ``images/<gender>/<product>/*.jpg``. Those are used as BASE designs: a chosen
-# base image is fed to the image model as the reference for the hero render, and
-# the prompt reinterprets it in a global {design_tradition} rather than copying
-# the original regional styling. Set ``RING_BASE_IMAGES_DIR`` to point elsewhere.
+# ``app/static/rings/base/<gender>/<product>/*.jpg``. Those are used as BASE
+# designs: a chosen base image is fed to the image model as the reference for the
+# hero render, and the prompt reinterprets it in a global {design_tradition}
+# rather than copying the original regional styling.
+#
+# The default lives INSIDE the app package (not the repo root) so the images ship
+# with the Docker image (``COPY . .`` under WORKDIR /app) and the path resolves
+# the same locally and in the container. Override with ``RING_BASE_IMAGES_DIR``.
 
 _BASE_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 _BASE_IMAGES_DIR_ENV = "RING_BASE_IMAGES_DIR"
 
 
 def _base_images_dir() -> Path:
-    """Root folder of scraped base designs. Defaults to ``<repo>/images`` (the
-    scraper's OUTPUT_DIR), overridable via ``RING_BASE_IMAGES_DIR``."""
+    """Root folder of scraped base designs. Defaults to
+    ``app/static/rings/base`` (bundled with the app), overridable via
+    ``RING_BASE_IMAGES_DIR``."""
     override = os.environ.get(_BASE_IMAGES_DIR_ENV)
     if override:
         return Path(override).expanduser()
-    # ring_studio.py -> app -> JIRA-AI -> repo root, where scraper.py writes images/.
-    return Path(__file__).resolve().parents[2] / "images"
+    return Path(__file__).resolve().parent / "static" / "rings" / "base"
 
 
 def list_base_images() -> list[dict[str, str]]:
