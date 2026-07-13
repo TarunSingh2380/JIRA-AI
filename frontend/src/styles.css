@@ -743,6 +743,19 @@ pre {
 .ring-quality { min-width: 220px; }
 .ring-base { min-width: 240px; }
 
+/* Base designs → global styles batch */
+.ring-base-batch { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.ring-base-batch-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.ring-base-batch-status { margin-top: 12px; }
+.ring-base-batch-head { font-weight: 600; }
+.ring-base-batch-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.ring-base-batch-list li {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r);
+}
+.ring-base-batch-list .ring-base-batch-name { font-weight: 600; }
+.ring-base-batch-list li.ring-base-batch-fail { border-color: var(--danger, #d9534f); }
+
 /* Selected scraped base design preview */
 .ring-base-preview {
   display: flex; align-items: center; gap: 12px; margin-top: 12px;

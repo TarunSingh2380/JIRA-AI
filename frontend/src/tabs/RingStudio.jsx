@@ -65,6 +65,11 @@ export default function RingStudio() {
   const [batchStart, setBatchStart] = useState(0);
   const [batching, setBatching] = useState(false);
 
+  // Base-designs batch (render one global-style ring from every scraped product).
+  const [baseBatchJobId, setBaseBatchJobId] = useState(null);
+  const [baseBatch, setBaseBatch] = useState(null); // RingBatchResult (live + final)
+  const [baseBatchRunning, setBaseBatchRunning] = useState(false);
+
   useEffect(() => {
     apiFetch("/ring-studio/banks")
       .then(setBanks)
@@ -208,6 +213,41 @@ export default function RingStudio() {
     }
   };
 
+  const generateFromAllBases = async () => {
+    setBaseBatchRunning(true);
+    setError("");
+    setBaseBatch(null);
+    setBaseBatchJobId(null);
+    try {
+      const { job_id } = await apiFetch("/ring-studio/render-base-designs", {
+        method: "POST",
+        body: { quality },
+      });
+      setBaseBatchJobId(job_id);
+      const job = await pollBatchJob(job_id, (r) => setBaseBatch(r));
+      if (job.status === "failed") {
+        setError(job.error || "Base-designs batch failed.");
+      } else {
+        setBaseBatch(job.result);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBaseBatchRunning(false);
+    }
+  };
+
+  const downloadBaseBatchZip = async () => {
+    if (!baseBatchJobId) return;
+    try {
+      await apiDownload(`/ring-studio/render-base-designs/${baseBatchJobId}/zip`, {
+        fallbackName: "ring-base-designs.zip",
+      });
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   const pinnedCount = useMemo(() => Object.keys(overrides).length, [overrides]);
   const meta = result?.meta;
 
@@ -312,6 +352,46 @@ export default function RingStudio() {
                 {batching ? "Building…" : "Download JSONL"}
               </button>
             </div>
+          </div>
+
+          <div className="ring-base-batch">
+            <h4>Base designs → global styles</h4>
+            <p className="muted">
+              Take every scraped product in the <code>images</code> folder as a
+              base and render a better global-style ring for each — one folder
+              per product, downloadable as a single ZIP. Uses the{" "}
+              <b>{quality}</b> quality above.
+            </p>
+            {baseImages.length === 0 ? (
+              <p className="muted">
+                No scraped base designs found yet. Run <code>scraper.py</code> to
+                populate the <code>images</code> folder, then reload.
+              </p>
+            ) : (
+              <>
+                <div className="ring-base-batch-row">
+                  <button onClick={generateFromAllBases} disabled={baseBatchRunning}>
+                    {baseBatchRunning
+                      ? "Generating…"
+                      : `✨ Generate from all ${
+                          new Set(baseImages.map((i) => `${i.gender}/${i.product}`)).size
+                        } base designs`}
+                  </button>
+                  {baseBatch &&
+                  baseBatch.status === "completed" &&
+                  (baseBatch.items || []).some((it) =>
+                    (it.result?.views || []).some((v) => v.status === "rendered"),
+                  ) ? (
+                    <button className="secondary" onClick={downloadBaseBatchZip}>
+                      ⬇ Download all as ZIP
+                    </button>
+                  ) : null}
+                </div>
+                {baseBatch ? (
+                  <BaseBatchProgress result={baseBatch} running={baseBatchRunning} />
+                ) : null}
+              </>
+            )}
           </div>
         </section>
 
@@ -433,8 +513,55 @@ async function pollRenderJob(jobId, { intervalMs = 2500, timeoutMs = 5 * 60 * 10
   throw new Error("Rendering timed out — the images may still be processing. Try again shortly.");
 }
 
+// Poll the base-designs batch, surfacing per-product progress via onProgress.
+// The batch is long (products × views), so the timeout is generous.
+async function pollBatchJob(jobId, onProgress, { intervalMs = 3000, timeoutMs = 20 * 60 * 1000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const job = await apiFetch(`/ring-studio/render-base-designs/${jobId}`);
+    if (job.result && onProgress) onProgress(job.result);
+    if (job.status === "completed" || job.status === "failed") return job;
+    await sleep(intervalMs);
+  }
+  throw new Error("Batch timed out — it may still be processing. Try again shortly.");
+}
+
 const fmtUsd = (n) =>
   typeof n === "number" ? `$${n.toFixed(n < 0.1 ? 4 : 3)}` : null;
+
+// Per-product progress + status for the base-designs batch.
+function BaseBatchProgress({ result, running }) {
+  const cost = fmtUsd(result.cost_usd);
+  const pct = result.total ? Math.round((result.completed / result.total) * 100) : 0;
+  return (
+    <div className="ring-base-batch-status">
+      <div className="ring-base-batch-head muted">
+        {running
+          ? `Rendering ${result.completed}/${result.total} products… (${pct}%)`
+          : `Done — ${result.completed}/${result.total} products`}
+        {cost ? ` · ${cost}` : null}
+      </div>
+      {result.message ? <div className="muted">{result.message}</div> : null}
+      <ul className="ring-base-batch-list">
+        {(result.items || []).map((it, i) => {
+          const rendered = (it.result?.views || []).filter((v) => v.status === "rendered").length;
+          const total = it.result?.views?.length || 0;
+          const ok = it.result && it.result.status !== "error" && !it.error;
+          return (
+            <li key={`${it.base_image_id}-${i}`} className={ok ? "" : "ring-base-batch-fail"}>
+              <span className="ring-base-batch-name">{it.label || it.product}</span>
+              <span className="muted">
+                {it.design_tradition ? it.design_tradition.split(" (")[0] : ""}
+                {total ? ` · ${rendered}/${total} views` : ""}
+                {it.error ? ` · ${it.error}` : ""}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 function ViewsGallery({ result, onDownloadZip }) {
   const notConfigured = result.status === "not_configured";

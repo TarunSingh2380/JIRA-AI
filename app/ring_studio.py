@@ -356,6 +356,27 @@ def load_base_image(image_id: str) -> bytes:
     return path.read_bytes()
 
 
+def list_base_products() -> list[dict[str, str]]:
+    """Collapse the scraped base images to one entry PER PRODUCT.
+
+    A product folder holds several images of the same ring; batch generation uses
+    one representative (the first) per product so it renders one global-style ring
+    per scraped design. Each entry: ``{gender, product, image_id, label}``."""
+    seen: dict[tuple[str, str], dict[str, str]] = {}
+    for img in list_base_images():
+        key = (img["gender"], img["product"])
+        if key in seen:
+            continue
+        label = " · ".join(p for p in (img["gender"], img["product"]) if p) or img["filename"]
+        seen[key] = {
+            "gender": img["gender"],
+            "product": img["product"],
+            "image_id": img["id"],
+            "label": label,
+        }
+    return list(seen.values())
+
+
 # ─── Per-view image rendering (optional) ─────────────────────────────────────
 # Instead of one composite spec-sheet, we render FOUR separate images — one per
 # camera view (hero 3/4, top, side, front) — all depicting the EXACT SAME ring.
@@ -770,6 +791,44 @@ class RingJobStore:
 ring_job_store = RingJobStore()
 
 
+@dataclass
+class RingBatchRenderJob:
+    """A batch that renders one global-style ring from every scraped base design."""
+    job_id: str
+    status: str = "pending"  # "pending" | "running" | "completed" | "failed"
+    result: Optional["RingBatchResult"] = None
+    error: Optional[str] = None
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = None
+
+
+class RingBatchJobStore:
+    """Thread-safe in-memory store for base-designs batch jobs (capped)."""
+
+    def __init__(self, max_jobs: int = 20) -> None:
+        self._jobs: dict[str, RingBatchRenderJob] = {}
+        self._order: list[str] = []
+        self._max = max_jobs
+        self._lock = threading.Lock()
+
+    def create(self) -> RingBatchRenderJob:
+        with self._lock:
+            job = RingBatchRenderJob(job_id=uuid.uuid4().hex)
+            self._jobs[job.job_id] = job
+            self._order.append(job.job_id)
+            if len(self._order) > self._max:
+                self._jobs.pop(self._order.pop(0), None)
+        log.info("Created ring batch job %s", job.job_id)
+        return job
+
+    def get(self, job_id: str) -> Optional[RingBatchRenderJob]:
+        with self._lock:
+            return self._jobs.get(job_id)
+
+
+ring_batch_job_store = RingBatchJobStore()
+
+
 def run_render_job(
     job_id: str,
     settings: Settings,
@@ -826,6 +885,125 @@ def build_views_zip(result: RingViewsResult) -> Optional[tuple[str, bytes]]:
     return f"{name}-views.zip", buf.getvalue()
 
 
+def _safe_folder(*parts: str) -> str:
+    """A filesystem-safe lowercase folder name from label parts."""
+    base = "-".join(p for p in parts if p) or "ring"
+    cleaned = "".join(c if (c.isalnum() or c in "-_") else "-" for c in base)
+    return cleaned.strip("-").lower() or "ring"
+
+
+def build_batch_zip(result: "RingBatchResult") -> Optional[tuple[str, bytes]]:
+    """Bundle a whole base-designs batch into ONE ZIP with a folder per product.
+
+    Layout: ``<gender>-<product>/<view>.png`` — one folder for each scraped base
+    design, holding that ring's rendered global-style views. Files are read only
+    from the rings static dir by basename, so a tampered filename can't escape."""
+    import io
+    import zipfile
+
+    rings_dir = _rings_static_dir()
+    buf = io.BytesIO()
+    used: dict[str, int] = {}
+    wrote_any = False
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for item in result.items:
+            if item.result is None:
+                continue
+            folder = _safe_folder(item.gender, item.product)
+            n = used.get(folder, 0)
+            used[folder] = n + 1
+            if n:  # disambiguate duplicate product names
+                folder = f"{folder}-{n + 1}"
+            for v in item.result.views:
+                if v.status == "rendered" and v.filename:
+                    path = rings_dir / Path(v.filename).name  # basename only
+                    if path.exists():
+                        zf.write(path, arcname=f"{folder}/{v.view}.png")
+                        wrote_any = True
+    if not wrote_any:
+        return None
+    buf.seek(0)
+    return "ring-base-designs.zip", buf.getvalue()
+
+
+# ─── Batch: render one global-style ring from every scraped base design ───────
+# One button on the UI kicks off a job that walks every scraped PRODUCT, seeds a
+# render from it, rotates a different global design tradition per product, and
+# collects the results so they can be downloaded as a single ZIP (one folder per
+# product). Runs as a background job like the single render — 6 products × 4
+# views is a multi-minute call that must not block the request.
+
+def run_batch_render_job(
+    job_id: str,
+    settings: Settings,
+    *,
+    model: str = _DEFAULT_MODEL,
+    quality: str = _DEFAULT_QUALITY,
+) -> None:
+    """Render one global-style ring per scraped base product, updating the job in
+    place after each product so the poller can show progress. Never raises."""
+    job = ring_batch_job_store.get(job_id)
+    if job is None:
+        log.warning("Ring batch job %s vanished before start", job_id)
+        return
+    job.status = "running"
+    quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
+    products = list_base_products()
+    traditions = BANKS["design_tradition"]
+    log.info("Ring batch job %s started (%d products, quality=%s)", job_id, len(products), quality)
+
+    if not products:
+        job.result = RingBatchResult(
+            status="empty", total=0, completed=0, items=[],
+            message="No scraped base designs found. Run scraper.py to populate the images folder.",
+        )
+        job.status = "completed"
+        job.completed_at = datetime.now(timezone.utc)
+        return
+
+    items: list[RingBatchItem] = []
+    # Seed a placeholder result immediately so the first poll shows the total.
+    job.result = RingBatchResult(status="running", total=len(products), completed=0, items=[])
+    try:
+        for i, product in enumerate(products):
+            tradition = traditions[i % len(traditions)]
+            _, meta = build_prompt(seed=i, overrides={"design_tradition": tradition})
+            item = RingBatchItem(
+                product=product["product"], gender=product["gender"],
+                base_image_id=product["image_id"], label=product["label"],
+                design_tradition=tradition, ring_name=str(meta.get("ring_name", "")),
+            )
+            try:
+                base = load_base_image(product["image_id"])
+                item.result = render_ring_views(settings, meta, seed=i, model=model,
+                                                quality=quality, base_image=base)
+            except Exception as exc:  # noqa: BLE001 - record per product, keep going
+                log.exception("Ring batch job %s: product %s failed", job_id, product["label"])
+                item.error = str(exc)[:500]
+            items.append(item)
+            job.result = RingBatchResult(status="running", total=len(products),
+                                         completed=len(items), items=list(items))
+
+        costs = [it.result.cost_usd for it in items if it.result and it.result.cost_usd is not None]
+        total_cost = round(sum(costs), 6) if costs else None
+        rendered = sum(1 for it in items
+                       if it.result and it.result.status in ("rendered", "partial"))
+        message = None
+        if rendered == 0:
+            message = "No images were rendered — check that OPENAI_API_KEY is configured."
+        job.result = RingBatchResult(status="completed", total=len(products),
+                                     completed=len(items), items=items, cost_usd=total_cost,
+                                     message=message)
+        job.status = "completed"
+        log.info("Ring batch job %s completed (%d/%d rendered)", job_id, rendered, len(products))
+    except Exception as exc:  # noqa: BLE001 - record, don't crash the worker
+        log.exception("Ring batch job %s failed", job_id)
+        job.error = str(exc)[:1000]
+        job.status = "failed"
+    finally:
+        job.completed_at = datetime.now(timezone.utc)
+
+
 # ─── Pydantic request/response models ────────────────────────────────────────
 
 class PromptRequest(BaseModel):
@@ -866,4 +1044,36 @@ class RingJobStatus(BaseModel):
     job_id: str
     status: str  # "pending" | "running" | "completed" | "failed"
     result: Optional[RingViewsResult] = None
+    error: Optional[str] = None
+
+
+class RingBatchItem(BaseModel):
+    """One scraped base product's render inside a batch."""
+    product: str
+    gender: str = ""
+    base_image_id: str
+    label: str = ""
+    design_tradition: Optional[str] = None
+    ring_name: Optional[str] = None
+    result: Optional[RingViewsResult] = None
+    error: Optional[str] = None
+
+
+class RingBatchResult(BaseModel):
+    status: str  # "running" | "completed" | "empty"
+    total: int = 0
+    completed: int = 0
+    items: list[RingBatchItem] = Field(default_factory=list)
+    cost_usd: Optional[float] = None
+    message: Optional[str] = None
+
+
+class RingBatchRequest(BaseModel):
+    quality: str = _DEFAULT_QUALITY  # low | medium | high
+
+
+class RingBatchJobStatus(BaseModel):
+    job_id: str
+    status: str  # "pending" | "running" | "completed" | "failed"
+    result: Optional[RingBatchResult] = None
     error: Optional[str] = None

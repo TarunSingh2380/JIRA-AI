@@ -1150,6 +1150,63 @@ def ring_studio_image_zip(
     )
 
 
+@app.post("/ring-studio/render-base-designs", response_model=ring_studio.RingJobRef)
+def ring_studio_render_base_designs(
+    request: ring_studio.RingBatchRequest,
+    background_tasks: BackgroundTasks,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> ring_studio.RingJobRef:
+    """Enqueue a batch that renders one global-style ring from EVERY scraped base
+    design (one per product), each in a rotated global design tradition.
+
+    Long-running (products × views OpenAI calls), so it returns a ``job_id``
+    immediately; poll ``GET /ring-studio/render-base-designs/{job_id}`` and then
+    download the combined ZIP (one folder per product) from ``…/zip``."""
+    job = ring_studio.ring_batch_job_store.create()
+    background_tasks.add_task(
+        ring_studio.run_batch_render_job, job.job_id, settings, quality=request.quality,
+    )
+    return ring_studio.RingJobRef(job_id=job.job_id, status=job.status)
+
+
+@app.get("/ring-studio/render-base-designs/{job_id}",
+         response_model=ring_studio.RingBatchJobStatus)
+def ring_studio_render_base_designs_status(
+    job_id: str,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> ring_studio.RingBatchJobStatus:
+    """Poll a base-designs batch. ``result`` carries per-product progress while
+    running and the full set once completed."""
+    job = ring_studio.ring_batch_job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Ring batch job '{job_id}' not found")
+    return ring_studio.RingBatchJobStatus(
+        job_id=job.job_id, status=job.status, result=job.result, error=job.error,
+    )
+
+
+@app.get("/ring-studio/render-base-designs/{job_id}/zip")
+def ring_studio_render_base_designs_zip(
+    job_id: str,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> Response:
+    """Download the whole batch as one ZIP — a folder per scraped product."""
+    job = ring_studio.ring_batch_job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Ring batch job '{job_id}' not found")
+    if job.status != "completed" or job.result is None:
+        raise HTTPException(status_code=409, detail="Batch is not complete yet.")
+    bundle = ring_studio.build_batch_zip(job.result)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="No rendered images to download.")
+    filename, data = bundle
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ── Zoho Desk — customer ticket visibility (capability key "zoho") ───────────
 # Look a customer up by email/phone against Zoho Desk and list their tickets.
 # A single shared client caches the OAuth access token across requests.
