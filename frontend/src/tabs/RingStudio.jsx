@@ -362,36 +362,46 @@ export default function RingStudio() {
               per product, downloadable as a single ZIP. Uses the{" "}
               <b>{quality}</b> quality above.
             </p>
-            {baseImages.length === 0 ? (
-              <p className="muted">
-                No scraped base designs found yet. Run <code>scraper.py</code> to
-                populate the <code>images</code> folder, then reload.
-              </p>
-            ) : (
-              <>
-                <div className="ring-base-batch-row">
-                  <button onClick={generateFromAllBases} disabled={baseBatchRunning}>
-                    {baseBatchRunning
-                      ? "Generating…"
-                      : `✨ Generate from all ${
-                          new Set(baseImages.map((i) => `${i.gender}/${i.product}`)).size
-                        } base designs`}
-                  </button>
-                  {baseBatch &&
-                  baseBatch.status === "completed" &&
-                  (baseBatch.items || []).some((it) =>
-                    (it.result?.views || []).some((v) => v.status === "rendered"),
-                  ) ? (
-                    <button className="secondary" onClick={downloadBaseBatchZip}>
-                      ⬇ Download all as ZIP
+            {(() => {
+              const baseCount = new Set(
+                baseImages.map((i) => `${i.gender}/${i.product}`),
+              ).size;
+              return (
+                <>
+                  <div className="ring-base-batch-row">
+                    <button
+                      onClick={generateFromAllBases}
+                      disabled={baseBatchRunning || baseCount === 0}
+                    >
+                      {baseBatchRunning
+                        ? "Generating…"
+                        : baseCount === 0
+                          ? "✨ Generate from all base designs"
+                          : `✨ Generate from all ${baseCount} base designs`}
                     </button>
+                    {baseBatch &&
+                    baseBatch.status === "completed" &&
+                    (baseBatch.items || []).some((it) =>
+                      (it.result?.views || []).some((v) => v.status === "rendered"),
+                    ) ? (
+                      <button className="secondary" onClick={downloadBaseBatchZip}>
+                        ⬇ Download all as ZIP
+                      </button>
+                    ) : null}
+                  </div>
+                  {baseCount === 0 ? (
+                    <p className="muted">
+                      Button is disabled because no scraped base designs were
+                      found. Run <code>scraper.py</code> to populate them, then
+                      reload.
+                    </p>
                   ) : null}
-                </div>
-                {baseBatch ? (
-                  <BaseBatchProgress result={baseBatch} running={baseBatchRunning} />
-                ) : null}
-              </>
-            )}
+                  {baseBatch ? (
+                    <BaseBatchProgress result={baseBatch} running={baseBatchRunning} />
+                  ) : null}
+                </>
+              );
+            })()}
           </div>
         </section>
 
