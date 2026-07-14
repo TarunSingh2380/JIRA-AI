@@ -13,7 +13,6 @@ const MAX_UPLOADS = 4;
 const FORM_FIELDS = [
   ["ring_name", "Ring Name"],
   ["ring_subtitle", "Subtitle"],
-  ["design_tradition", "Design Tradition"],
   ["diamond_shape", "Diamond Shape"],
   ["carat", "Carat"],
   ["color", "Color"],
@@ -30,7 +29,6 @@ const FORM_FIELDS = [
 
 // Meta keys shown in the spec summary, in catalog order.
 const SPEC_ROWS = [
-  ["design_tradition", "Design Tradition"],
   ["diamond_shape", "Center Diamond"],
   ["carat", "Carat"],
   ["color", "Color"],
@@ -215,7 +213,8 @@ export default function RingStudio() {
           Generate CELESTE-style luxury jewelry designs for diamond / gold /
           solitaire rings. Pin any field below (blank = randomize) and hit
           Generate Prompt, then <b>upload up to 4 photos of your ring</b> and
-          render it re-styled in a global design tradition across all 4 views.
+          render it re-designed across all 4 views. When you upload references,
+          the design fields are ignored — only the prompt and your photos drive it.
         </p>
       </header>
 
@@ -358,13 +357,9 @@ export default function RingStudio() {
                 </div>
                 <p className="muted">
                   Upload photos of one ring from different angles. They're used
-                  together as the reference, and the ring is re-rendered in the{" "}
-                  <b>
-                    {meta?.design_tradition
-                      ? meta.design_tradition.split(" (")[0]
-                      : "selected"}
-                  </b>{" "}
-                  global tradition across all 4 views.
+                  together as the reference — the design fields above are ignored
+                  and the ring is re-designed from the raw prompt across all 4
+                  views.
                 </p>
                 <div className="ring-upload-grid">
                   {uploads.map((u, i) => (

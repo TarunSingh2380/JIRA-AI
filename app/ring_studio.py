@@ -75,10 +75,6 @@ BANKS: dict[str, list[str]] = {
     "accent_color": ["soft gold", "rose-gold", "warm taupe", "muted bronze"],
     "ring_size": ["US 5 (15.7 mm)", "US 6 (16.5 mm)", "US 6.5 (16.9 mm)", "US 7 (17.3 mm)"],
     "motif": ["tulip", "rose", "lily", "orchid", "vine", "laurel"],
-    # Global jewelry design traditions — the style axis that lets generation draw
-    # on worldwide design heritage instead of staying anchored to the (Indian)
-    # base designs the scraper collects. Each entry names the tradition and its
-    # defining visual language so the image model has something concrete to render.
 }
 
 # (total_diamonds, accent_carat) pairs — paired sensibly.
@@ -128,7 +124,7 @@ TEMPLATE = """Create a single high-resolution luxury jewelry catalog spec-sheet 
 
 MANDATORY INSTRUCTION (SUPERSEDES ANY CONFLICTING INSTRUCTIONS): Do not place any text, engraving, hallmark, logo or watermark on the jewelry itself. Catalog typography is allowed only in the layout panels.
 
-DESIGN LANGUAGE: {design_tradition}. Use the design tradition as inspiration — draw on the pan-Indian jewelry heritage. The uploaded reference image is a stylistic reference only. Create a new design by changing at least 30% of the visible design language, including motif geometry, silhouette, stone arrangement, gallery, proportions and metal flow, while preserving the overall aesthetic direction.. Avoid producing a near-copy.
+DESIGN LANGUAGE: Use the design tradition as inspiration — draw on the pan-Indian jewelry heritage. The uploaded reference image is a stylistic reference only. Create a new design by changing at least 30% of the visible design language, including motif geometry, silhouette, stone arrangement, gallery, proportions and metal flow, while preserving the overall aesthetic direction.. Avoid producing a near-copy.
 
 STYLE: clean premium editorial. Clean seamless {background} studio background (bright #FFFFFF — no cream, beige or grey tint), diffused lighting, realistic diamond fire and reflections. Thin {accent_color} hairline panel borders. Elegant serif headings, clean sans-serif body. Photorealistic 3D render, tack-sharp, no clutter.
 
@@ -155,7 +151,7 @@ META_KEYS = [
     "clarity", "cut", "metal", "band_width", "setting", "total_diamonds", "accent_carat",
     "detail_label", "detail_feature", "background", "accent_color", "inspiration",
     "mood_image", "ring_size", "highlight_1", "highlight_2", "highlight_3", "highlight_4",
-    "motif", "design_tradition",
+    "motif",
 ]
 
 
@@ -253,7 +249,6 @@ def build_prompt(
         "highlight_3": hi[2],
         "highlight_4": hi[3],
         "motif": pick("motif"),
-        "design_tradition": pick("design_tradition"),
     }
     return TEMPLATE.format(**fields), fields
 
@@ -385,7 +380,7 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
 # image is fed to every EDIT view so they all depict the identical ring.
 VIEW_TEMPLATE = """Create a single high-resolution, photorealistic 3D product render of ONE women's engagement ring — the "{ring_name}" ({ring_subtitle}).
 
-DESIGN LANGUAGE: {design_tradition}. Interpret the ring in this global design tradition, drawing on worldwide jewelry heritage rather than a single regional style.
+DESIGN LANGUAGE: Use the design tradition as inspiration — draw on the pan-Indian jewelry heritage.
 
 THE RING (this exact design will be reused for four more views, so make it distinctive and consistent):
 - Centre diamond: {diamond_shape} cut, {carat} ct, {color} colour / {clarity} clarity / {cut} cut.
@@ -397,16 +392,15 @@ VIEW: {view_instruction}.
 STYLE: luxury jewelry catalog. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
 
 # Hero prompt used when UPLOADED photos of one ring are supplied as reference.
-# Deliberately spec-FREE: no randomized design fields (metal, carat, shape,
-# setting, ring name…) are injected, because fabricated specs fight the reference
-# photos. The ring's material and construction come FROM the uploads; only the
-# prompt's design language ({design_tradition}) plus the reinterpretation rules
-# steer the restyle.
+# Deliberately field-FREE: no design fields (metal, carat, shape, setting, ring
+# name, design tradition…) are injected, because fabricated values fight the
+# reference photos. The ring's material and construction come FROM the uploads;
+# only the raw design-language text plus the reinterpretation rules steer it.
 BASE_HERO_TEMPLATE = """The reference image(s) show ONE ring from up to four different angles — the SAME ring each time. They are a stylistic reference ONLY.
 
 MANDATORY INSTRUCTION (SUPERSEDES ANY CONFLICTING INSTRUCTIONS): Do not place any text, engraving, hallmark, logo or watermark on the jewelry itself.
 
-DESIGN LANGUAGE: {design_tradition}. Use the design tradition as inspiration. Create a NEW design by changing at least 30% of the visible design language — motif geometry, silhouette, stone arrangement, gallery, proportions and metal flow — while preserving the overall aesthetic direction. Avoid producing a near-copy.
+DESIGN LANGUAGE: Use the design tradition as inspiration — draw on the pan-Indian jewelry heritage. The uploaded reference image is a stylistic reference only. Create a new design by changing at least 30% of the visible design language, including motif geometry, silhouette, stone arrangement, gallery, proportions and metal flow, while preserving the overall aesthetic direction. Avoid producing a near-copy.
 
 THE RING: take the metal, stones, setting, band and overall proportions FROM THE REFERENCE image(s). Do NOT invent a different specification and do NOT substitute a different metal colour, stone shape or setting type — restyle what is there rather than replacing it. This exact new design will be reused for the other views, so keep it distinctive and consistent.
 
@@ -597,9 +591,9 @@ def render_ring_views(
 
     ``base_images`` = raw bytes of up to four UPLOADED photos of one ring (its
     different angles). When given, the hero is rendered by EDITING all of them
-    together as a single multi-angle reference (reinterpreting the ring in the
-    meta's global ``design_tradition``) instead of from text, so the user's own
-    ring seeds the generation; the other views then chain off the rendered hero.
+    together as a single multi-angle reference — using the raw design-language
+    prompt only, with no design fields injected — instead of from text, so the
+    user's own ring seeds the generation; the other views chain off that hero.
 
     ``view_keys`` = render only this subset of views. Any kept view whose ``src``
     is dropped will error gracefully; ``{"hero"}`` has no such dep.

@@ -1134,11 +1134,12 @@ async def ring_studio_upload_render(
 ) -> ring_studio.RingJobRef:
     """Enqueue a render seeded from UPLOADED photos of one ring (up to 4 angles).
 
-    The uploads are fed to the model together as one multi-angle reference; the
-    hero is reinterpreted in the design's global ``design_tradition`` and the
-    other three views chain off it. Multipart: ``files`` (1–4 images), ``quality``
-    (low/medium/high), and optional ``meta_json`` (a design meta from
-    /ring-studio/prompt — if omitted a random design is assembled). Returns a
+    The uploads are fed to the model together as one multi-angle reference and
+    the ring is re-designed from the raw prompt alone — no design fields are
+    injected — with the other three views chaining off the hero. Multipart:
+    ``files`` (1–4 images), ``quality`` (low/medium/high), and optional
+    ``meta_json`` (a design meta from /ring-studio/prompt; unused by the
+    reference prompts, kept for the render's naming/metadata). Returns a
     ``job_id``; poll ``GET /ring-studio/image/{job_id}`` for the result."""
     images = [f for f in files if f.filename]
     if not images:
