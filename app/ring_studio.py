@@ -414,6 +414,13 @@ EDIT_TEMPLATE = """The reference image shows ONE ring. Re-render THAT EXACT SAME
 
 MANDATORY INSTRUCTION (SUPERSEDES ANY CONFLICTING INSTRUCTIONS): Do not place any text, engraving, hallmark, logo or watermark on the jewelry itself.
 
+PROPORTIONS ARE FIXED — this is the single most important requirement. Measure the reference and match it exactly:
+- The BAND must keep the identical width and thickness it has in the reference. Do NOT thin it into a wire, do NOT thicken it, do NOT taper it differently.
+- The HEAD/setting must keep the identical size, height and depth it has in the reference.
+- The RATIO between band thickness and head thickness must be identical to the reference, and the band must meet the shoulders of the head exactly as it does there.
+- The band's decoration (filigree, pavé, carving, texture) must continue across the whole band exactly as in the reference — never replace a decorated band with a plain or thinner one.
+If the reference shows a broad, chunky band, this render must show the SAME broad chunky band. Only the camera moves; the physical ring is unchanged.
+
 Now MOVE THE CAMERA to a completely different angle. NEW CAMERA VIEW: {view_instruction}. Physically reposition the camera as described — the composition and silhouette MUST clearly differ from the reference; do NOT copy the reference pose.
 
 Keep it photorealistic, luxury jewelry catalog quality, on a clean seamless {background} studio background (bright #FFFFFF — no cream, beige or grey tint) with the single ring centred and generous negative space. No text, no watermark, no hands, no other objects."""
