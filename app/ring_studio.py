@@ -331,31 +331,35 @@ def _usage_cost_usd(usage: Any) -> Optional[float]:
 #                    unchanged rather than re-invented → no hallucination.
 #
 # Views are rendered SEQUENTIALLY in this order, and each ``src`` must appear
-# earlier in the list so its image already exists when the edit runs. The SIDE and
-# LAYDOWN edits source the HERO so they stay one generation from the anchor and
-# keep the identical ring.
+# earlier in the list so its image already exists when the edit runs. TOP, SIDE and
+# LAYDOWN all source the HERO so they stay one generation from the anchor and keep
+# the identical ring.
 #
-# TOP is a text ANCHOR, not an edit. A face-forward catalog shot is a composition
-# gpt-image-1 renders very reliably from text, whereas ROTATING the standing hero
-# into a face-on top is a big camera move it does inconsistently — that instability
-# was what kept collapsing the top view into the laydown. Rendering top fresh (the
-# full spec is restated, so it is the same design) decouples it from the hero pose.
+# TOP used to be a text ANCHOR describing a face-forward elevation, on the theory
+# that it rendered more reliably from text than as a big camera move off the hero.
+# That was wrong twice over: a face-forward shot is a FRONT elevation, not a top
+# view (the head ended up staring at the viewer instead of pointing up), and a text
+# anchor rebuilds the ring from the spec fields, which in the upload flow ignores
+# the reference entirely. It is now an EDIT off the hero, like the other views.
 VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
     ("hero", "Hero 3/4 View", "anchor", None,
      "a dramatic three-quarter perspective: the ring stands upright and is turned "
      "roughly 30 degrees, and the camera is raised ABOVE the ring looking gently "
      "DOWNWARD (about 30 degrees) so BOTH the front face of the setting AND one "
      "shoulder of the band are clearly visible, the centre stone catching the light"),
-    ("top", "Top View", "anchor", None,
-     "a symmetric, straight-on FRONT-FACE catalog view showing the COMPLETE ring. The ring "
-     "STANDS UPRIGHT on its band and the camera is directly in FRONT, elevated only about 15 "
-     "degrees. The centre stone's FACE points at the camera and is the focal point, its prongs "
-     "visible, while the pavé band descends symmetrically below the head with BOTH shoulders and "
-     "the full lower shank clearly in view. Frame the ENTIRE ring inside the picture with "
-     "comfortable margin and negative space on all sides — do NOT crop the band or let any part "
-     "of the ring run out of frame. Standing upright, perfectly symmetric, face-forward, whole "
-     "ring visible — NOT lying flat, NOT a full side profile with an open 'O' band, NOT a "
-     "three-quarter angle, NOT an overhead top-down, and NOT cropped"),
+    ("top", "Top View", "edit", "hero",
+     "a true OVERHEAD TOP-DOWN view (bird's-eye / plan view). The ring rests with its band "
+     "flat and the head/setting pointing straight UP toward the sky, and the camera floats "
+     "DIRECTLY ABOVE the ring at 90 degrees looking straight DOWN onto it. You are looking at "
+     "the TOP FACE of the head: the centre stone's table faces straight UP into the lens, and "
+     "the whole setting reads as a flat, symmetric plan view — as if the ring were photographed "
+     "on a scanner from above. CRUCIAL: the head must NOT be facing the viewer horizontally and "
+     "the stone must NOT point sideways at the camera — the camera is in the sky looking DOWN, "
+     "so you see the top surface of the head, not its front. The band lies below the head, "
+     "foreshortened by the downward angle. This is a plan view from above — NOT the front "
+     "elevation, NOT a standing ring with the head facing you, NOT a three-quarter angle, NOT a "
+     "side profile with an open 'O' band, and NOT a low laydown shot. Frame the whole ring with "
+     "comfortable margin and negative space on all sides"),
     ("side", "Side Profile", "edit", "hero",
      "a STRICT SIDE ELEVATION. The ring stands upright on the surface and the camera "
      "sits level with it, viewing the band edge-on from the side so the round band "
