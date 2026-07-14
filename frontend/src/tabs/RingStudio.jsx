@@ -5,7 +5,9 @@
 // reproducible designs, preview the master prompt + spec, optionally render an
 // image, and batch-export prompts as JSONL for a 1000-image run.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch, apiDownload, apiObjectUrl } from "../api.js";
+import { apiFetch, apiDownload, apiUpload } from "../api.js";
+
+const MAX_UPLOADS = 4;
 
 // The dropdown fields we expose, in display order. Each maps to a bank key.
 const FORM_FIELDS = [
@@ -52,9 +54,8 @@ export default function RingStudio() {
   const [views, setViews] = useState(null); // RingViewsResult { status, views[], cost_usd, message }
   const [renderJobId, setRenderJobId] = useState(null); // for ZIP download
   const [quality, setQuality] = useState("medium"); // low | medium | high
-  const [baseImages, setBaseImages] = useState([]); // scraped base designs
-  const [baseImageId, setBaseImageId] = useState(""); // "" = generate from text
-  const [basePreviewUrl, setBasePreviewUrl] = useState(""); // auth'd object URL
+  // Uploaded reference photos (up to 4 angles of ONE ring) that seed the render.
+  const [uploads, setUploads] = useState([]); // [{ file, url }]
   const [busy, setBusy] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -65,45 +66,34 @@ export default function RingStudio() {
   const [batchStart, setBatchStart] = useState(0);
   const [batching, setBatching] = useState(false);
 
-  // Base-designs batch (render one global-style ring from every scraped product).
-  const [baseBatchJobId, setBaseBatchJobId] = useState(null);
-  const [baseBatch, setBaseBatch] = useState(null); // RingBatchResult (live + final)
-  const [baseBatchRunning, setBaseBatchRunning] = useState(false);
-
   useEffect(() => {
     apiFetch("/ring-studio/banks")
       .then(setBanks)
       .catch((e) => setError(e.message));
-    // Scraped base designs (from scraper.py) available to seed a render.
-    apiFetch("/ring-studio/base-images")
-      .then((d) => setBaseImages(d.images || []))
-      .catch(() => {}); // optional — absence just hides the picker
   }, []);
 
-  // Load an auth'd preview of the selected base design (an <img> can't send the
-  // JWT the endpoint requires, so we fetch the bytes and hold an object URL).
-  useEffect(() => {
-    if (!baseImageId) {
-      setBasePreviewUrl("");
-      return;
-    }
-    let objUrl;
-    let alive = true;
-    apiObjectUrl(`/ring-studio/base-image?id=${encodeURIComponent(baseImageId)}`)
-      .then((u) => {
-        if (alive) {
-          objUrl = u;
-          setBasePreviewUrl(u);
-        } else {
-          URL.revokeObjectURL(u);
-        }
-      })
-      .catch(() => setBasePreviewUrl(""));
-    return () => {
-      alive = false;
-      if (objUrl) URL.revokeObjectURL(objUrl);
-    };
-  }, [baseImageId]);
+  // Revoke object URLs for uploaded previews on unmount.
+  useEffect(() => () => uploads.forEach((u) => URL.revokeObjectURL(u.url)), [uploads]);
+
+  const addUploads = (fileList) => {
+    const picked = Array.from(fileList || []).filter((f) => f.type.startsWith("image/"));
+    if (!picked.length) return;
+    setUploads((prev) => {
+      const next = [...prev];
+      for (const f of picked) {
+        if (next.length >= MAX_UPLOADS) break;
+        next.push({ file: f, url: URL.createObjectURL(f) });
+      }
+      return next;
+    });
+  };
+
+  const removeUpload = (i) =>
+    setUploads((prev) => {
+      const u = prev[i];
+      if (u) URL.revokeObjectURL(u.url);
+      return prev.filter((_, idx) => idx !== i);
+    });
 
   const setField = (key, value) =>
     setOverrides((o) => {
@@ -143,24 +133,25 @@ export default function RingStudio() {
   };
 
   const renderImages = async () => {
-    if (!result) return;
+    if (!uploads.length) {
+      setError("Upload 1–4 reference photos of your ring first.");
+      return;
+    }
     setRendering(true);
     setError("");
     setViews(null);
     setRenderJobId(null);
     try {
-      // Rendering four views takes ~40–60s, so the API returns a job id and we
-      // poll for the result — this keeps each request short of proxy timeouts.
-      // Pass the exact generated design (meta) so all four views match.
-      const { job_id } = await apiFetch("/ring-studio/image", {
-        method: "POST",
-        body: {
-          meta: result.meta,
-          seed: result.seed,
-          quality,
-          base_image_id: baseImageId || null,
-        },
-      });
+      // Feed the uploaded photos (multipart) as the multi-angle reference. The
+      // render takes ~40–60s, so the API returns a job id we poll for — keeping
+      // each request short of proxy timeouts. If a design was generated, pass its
+      // meta so the global style/spec applies; otherwise the server picks one.
+      const form = new FormData();
+      uploads.forEach((u) => form.append("files", u.file, u.file.name));
+      form.append("quality", quality);
+      if (result?.meta) form.append("meta_json", JSON.stringify(result.meta));
+
+      const { job_id } = await apiUpload("/ring-studio/upload-render", form);
       setRenderJobId(job_id);
       const job = await pollRenderJob(job_id);
       if (job.status === "failed") {
@@ -213,53 +204,6 @@ export default function RingStudio() {
     }
   };
 
-  const generateFromAllBases = async () => {
-    setBaseBatchRunning(true);
-    setError("");
-    setBaseBatch(null);
-    setBaseBatchJobId(null);
-    try {
-      const { job_id } = await apiFetch("/ring-studio/render-base-designs", {
-        method: "POST",
-        body: { quality },
-      });
-      setBaseBatchJobId(job_id);
-      const job = await pollBatchJob(job_id, (r) => setBaseBatch(r));
-      if (job.status === "failed") {
-        setError(job.error || "Base-designs batch failed.");
-      } else {
-        setBaseBatch(job.result);
-      }
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBaseBatchRunning(false);
-    }
-  };
-
-  const downloadBaseBatchZip = async () => {
-    if (!baseBatchJobId) return;
-    try {
-      await apiDownload(`/ring-studio/render-base-designs/${baseBatchJobId}/zip`, {
-        fallbackName: "ring-base-designs.zip",
-      });
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const downloadProductZip = async (index) => {
-    if (!baseBatchJobId) return;
-    try {
-      await apiDownload(
-        `/ring-studio/render-base-designs/${baseBatchJobId}/product/${index}/zip`,
-        { fallbackName: "ring-product.zip" },
-      );
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
   const pinnedCount = useMemo(() => Object.keys(overrides).length, [overrides]);
   const meta = result?.meta;
 
@@ -268,10 +212,10 @@ export default function RingStudio() {
       <header className="ring-hero">
         <h2>💎 Ring Studio</h2>
         <p className="muted">
-          Generate CELESTE-style luxury jewelry spec-sheet prompts for
-          diamond / gold / solitaire rings. Pin any field below (blank =
-          randomize), set a seed for reproducible designs, then preview the
-          master prompt, render an image, or export a batch as JSONL.
+          Generate CELESTE-style luxury jewelry designs for diamond / gold /
+          solitaire rings. Pin any field below (blank = randomize) and hit
+          Generate Prompt, then <b>upload up to 4 photos of your ring</b> and
+          render it re-styled in a global design tradition across all 4 views.
         </p>
       </header>
 
@@ -366,59 +310,6 @@ export default function RingStudio() {
             </div>
           </div>
 
-          <div className="ring-base-batch">
-            <h4>Base designs → global styles</h4>
-            <p className="muted">
-              Take every scraped base product and render a better global-style
-              ring (all 4 views) for each. Download each product as its own ZIP,
-              or grab them all at once (a separate ZIP per product). Uses the{" "}
-              <b>{quality}</b> quality above.
-            </p>
-            {(() => {
-              const baseCount = new Set(
-                baseImages.map((i) => `${i.gender}/${i.product}`),
-              ).size;
-              return (
-                <>
-                  <div className="ring-base-batch-row">
-                    <button
-                      onClick={generateFromAllBases}
-                      disabled={baseBatchRunning || baseCount === 0}
-                    >
-                      {baseBatchRunning
-                        ? "Generating…"
-                        : baseCount === 0
-                          ? "✨ Generate from all base designs"
-                          : `✨ Generate from all ${baseCount} base designs`}
-                    </button>
-                    {baseBatch &&
-                    baseBatch.status === "completed" &&
-                    (baseBatch.items || []).some((it) =>
-                      (it.result?.views || []).some((v) => v.status === "rendered"),
-                    ) ? (
-                      <button className="secondary" onClick={downloadBaseBatchZip}>
-                        ⬇ Download all (separate ZIPs)
-                      </button>
-                    ) : null}
-                  </div>
-                  {baseCount === 0 ? (
-                    <p className="muted">
-                      Button is disabled because no scraped base designs were
-                      found. Run <code>scraper.py</code> to populate them, then
-                      reload.
-                    </p>
-                  ) : null}
-                  {baseBatch ? (
-                    <BaseBatchProgress
-                      result={baseBatch}
-                      running={baseBatchRunning}
-                      onDownloadProduct={downloadProductZip}
-                    />
-                  ) : null}
-                </>
-              );
-            })()}
-          </div>
         </section>
 
         {/* ── Preview ─────────────────────────────────────────────── */}
@@ -460,6 +351,54 @@ export default function RingStudio() {
               </div>
               <pre className="ring-prompt">{result.prompt}</pre>
 
+              <div className="ring-upload">
+                <div className="ring-upload-head">
+                  <h4>Reference photos (up to {MAX_UPLOADS} views of your ring)</h4>
+                  <span className="muted">{uploads.length}/{MAX_UPLOADS}</span>
+                </div>
+                <p className="muted">
+                  Upload photos of one ring from different angles. They're used
+                  together as the reference, and the ring is re-rendered in the{" "}
+                  <b>
+                    {meta?.design_tradition
+                      ? meta.design_tradition.split(" (")[0]
+                      : "selected"}
+                  </b>{" "}
+                  global tradition across all 4 views.
+                </p>
+                <div className="ring-upload-grid">
+                  {uploads.map((u, i) => (
+                    <div key={u.url} className="ring-upload-thumb">
+                      <img src={u.url} alt={`Reference ${i + 1}`} />
+                      <button
+                        type="button"
+                        className="ring-upload-remove"
+                        onClick={() => removeUpload(i)}
+                        disabled={rendering}
+                        aria-label="Remove"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {uploads.length < MAX_UPLOADS ? (
+                    <label className="ring-upload-add">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={rendering}
+                        onChange={(e) => {
+                          addUploads(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+                      <span>+ Add</span>
+                    </label>
+                  ) : null}
+                </div>
+              </div>
+
               <div className="ring-render-controls">
                 <label className="ring-field ring-quality">
                   <span>Quality</span>
@@ -474,46 +413,14 @@ export default function RingStudio() {
                     <option value="low">Low (fastest · cheapest)</option>
                   </select>
                 </label>
-                {baseImages.length > 0 ? (
-                  <label className="ring-field ring-base">
-                    <span>Base design</span>
-                    <select
-                      className="tc-select"
-                      value={baseImageId}
-                      onChange={(e) => setBaseImageId(e.target.value)}
-                      disabled={rendering}
-                    >
-                      <option value="">None — generate from text</option>
-                      {baseImages.map((img) => (
-                        <option key={img.id} value={img.id}>
-                          {[img.gender, img.product, img.filename]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-                <button onClick={renderImages} disabled={rendering}>
+                <button onClick={renderImages} disabled={rendering || !uploads.length}>
                   {rendering ? "Rendering 4 views…" : "🖼️ Render 4 Views"}
                 </button>
               </div>
-              {baseImageId && basePreviewUrl ? (
-                <div className="ring-base-preview">
-                  <img src={basePreviewUrl} alt="Selected base design" />
-                  <span className="muted">
-                    Base silhouette — reinterpreted in the{" "}
-                    {meta?.design_tradition
-                      ? meta.design_tradition.split(" (")[0]
-                      : "selected"}{" "}
-                    tradition.
-                  </span>
-                </div>
-              ) : null}
               <span className="ring-render-hint muted">
-                {baseImageId
-                  ? "Hero re-renders the chosen base design in a global tradition; Top · Side · Laydown then carry that same new ring forward."
-                  : "Rendered in sequence — Hero renders first, then Top · Side · Laydown each re-render from it, carrying the same ring forward so nothing is re-invented."}
+                {uploads.length
+                  ? "Hero re-renders your uploaded ring in the global tradition; Top · Side · Laydown then carry that same new ring forward."
+                  : "Upload at least one reference photo above to render."}
               </span>
 
               {views ? <ViewsGallery result={views} onDownloadZip={downloadZip} /> : null}
@@ -539,63 +446,8 @@ async function pollRenderJob(jobId, { intervalMs = 2500, timeoutMs = 5 * 60 * 10
   throw new Error("Rendering timed out — the images may still be processing. Try again shortly.");
 }
 
-// Poll the base-designs batch, surfacing per-product progress via onProgress.
-// The batch is long (products × views), so the timeout is generous.
-async function pollBatchJob(jobId, onProgress, { intervalMs = 4000, timeoutMs = 40 * 60 * 1000 } = {}) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const job = await apiFetch(`/ring-studio/render-base-designs/${jobId}`);
-    if (job.result && onProgress) onProgress(job.result);
-    if (job.status === "completed" || job.status === "failed") return job;
-    await sleep(intervalMs);
-  }
-  throw new Error("Batch timed out — it may still be processing. Try again shortly.");
-}
-
 const fmtUsd = (n) =>
   typeof n === "number" ? `$${n.toFixed(n < 0.1 ? 4 : 3)}` : null;
-
-// Per-product progress + status for the base-designs batch, with a per-product
-// ZIP download once that product has rendered images.
-function BaseBatchProgress({ result, running, onDownloadProduct }) {
-  const cost = fmtUsd(result.cost_usd);
-  const pct = result.total ? Math.round((result.completed / result.total) * 100) : 0;
-  return (
-    <div className="ring-base-batch-status">
-      <div className="ring-base-batch-head muted">
-        {running
-          ? `Rendering ${result.completed}/${result.total} products… (${pct}%)`
-          : `Done — ${result.completed}/${result.total} products`}
-        {cost ? ` · ${cost}` : null}
-      </div>
-      {result.message ? <div className="muted">{result.message}</div> : null}
-      <ul className="ring-base-batch-list">
-        {(result.items || []).map((it, i) => {
-          const views = it.result?.views || [];
-          const rendered = views.filter((v) => v.status === "rendered").length;
-          const ok = it.result && it.result.status !== "error" && !it.error;
-          return (
-            <li key={`${it.base_image_id}-${i}`} className={ok ? "" : "ring-base-batch-fail"}>
-              <div className="ring-base-batch-info">
-                <span className="ring-base-batch-name">{it.label || it.product}</span>
-                <span className="muted">
-                  {it.design_tradition ? it.design_tradition.split(" (")[0] : ""}
-                  {views.length ? ` · ${rendered}/${views.length} views` : ""}
-                  {it.error ? ` · ${it.error}` : ""}
-                </span>
-              </div>
-              {rendered > 0 ? (
-                <button className="link" onClick={() => onDownloadProduct(i)}>
-                  ⬇ ZIP
-                </button>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
 
 function ViewsGallery({ result, onDownloadZip }) {
   const notConfigured = result.status === "not_configured";

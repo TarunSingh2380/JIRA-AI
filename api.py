@@ -20,8 +20,11 @@ logging.basicConfig(
 )
 
 from pathlib import Path
-from typing import Any
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from typing import Any, Optional
+from fastapi import (
+    BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile,
+    WebSocket, WebSocketDisconnect,
+)
 
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -1013,32 +1016,6 @@ def ring_studio_banks(
     return ring_studio.list_banks()
 
 
-@app.get("/ring-studio/base-images")
-def ring_studio_base_images(
-    _user: CurrentUser = Depends(require_tab("rings")),
-) -> dict[str, Any]:
-    """List scraped base designs (from scraper.py output) available to seed a
-    render. Each item's ``id`` is passed back as ``base_image_id`` on /image."""
-    images = ring_studio.list_base_images()
-    return {"count": len(images), "images": images}
-
-
-@app.get("/ring-studio/base-image")
-def ring_studio_base_image_raw(
-    id: str,
-    _user: CurrentUser = Depends(require_tab("rings")),
-) -> Response:
-    """Serve the raw bytes of one scraped base image so the SPA can preview it."""
-    try:
-        data = ring_studio.load_base_image(id)
-    except (ValueError, FileNotFoundError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    ext = id.rsplit(".", 1)[-1].lower()
-    media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-             "webp": "image/webp"}.get(ext, "application/octet-stream")
-    return Response(content=data, media_type=media)
-
-
 @app.post("/ring-studio/prompt", response_model=ring_studio.PromptResponse)
 def ring_studio_prompt(
     request: ring_studio.PromptRequest,
@@ -1096,19 +1073,10 @@ def ring_studio_image(
     else:
         _, meta = ring_studio.build_prompt(seed=request.seed, overrides=request.overrides)
 
-    # Optionally seed the hero from a scraped base design; the ring is then
-    # reinterpreted in the meta's global design_tradition.
-    base_image: bytes | None = None
-    if request.base_image_id:
-        try:
-            base_image = ring_studio.load_base_image(request.base_image_id)
-        except (ValueError, FileNotFoundError) as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid base_image_id: {exc}")
-
     job = ring_studio.ring_job_store.create()
     background_tasks.add_task(
         ring_studio.run_render_job, job.job_id, settings, meta, request.seed,
-        quality=request.quality, base_image=base_image,
+        quality=request.quality,
     )
     return ring_studio.RingJobRef(job_id=job.job_id, status=job.status)
 
@@ -1150,84 +1118,57 @@ def ring_studio_image_zip(
     )
 
 
-@app.post("/ring-studio/render-base-designs", response_model=ring_studio.RingJobRef)
-def ring_studio_render_base_designs(
-    request: ring_studio.RingBatchRequest,
+@app.post("/ring-studio/upload-render", response_model=ring_studio.RingJobRef)
+async def ring_studio_upload_render(
     background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    quality: str = Form(ring_studio._DEFAULT_QUALITY),
+    meta_json: Optional[str] = Form(None),
     _user: CurrentUser = Depends(require_tab("rings")),
 ) -> ring_studio.RingJobRef:
-    """Enqueue a batch that renders one global-style ring from EVERY scraped base
-    design (one per product), each in a rotated global design tradition.
+    """Enqueue a render seeded from UPLOADED photos of one ring (up to 4 angles).
 
-    Long-running (products × views OpenAI calls), so it returns a ``job_id``
-    immediately; poll ``GET /ring-studio/render-base-designs/{job_id}`` and then
-    download the combined ZIP (one folder per product) from ``…/zip``."""
-    job = ring_studio.ring_batch_job_store.create()
+    The uploads are fed to the model together as one multi-angle reference; the
+    hero is reinterpreted in the design's global ``design_tradition`` and the
+    other three views chain off it. Multipart: ``files`` (1–4 images), ``quality``
+    (low/medium/high), and optional ``meta_json`` (a design meta from
+    /ring-studio/prompt — if omitted a random design is assembled). Returns a
+    ``job_id``; poll ``GET /ring-studio/image/{job_id}`` for the result."""
+    images = [f for f in files if f.filename]
+    if not images:
+        raise HTTPException(status_code=400, detail="Upload at least one image.")
+    if len(images) > 4:
+        raise HTTPException(status_code=400, detail="Upload at most 4 images.")
+
+    base_images: list[bytes] = []
+    for f in images:
+        data = await f.read()
+        if not data:
+            continue
+        if len(data) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail=f"'{f.filename}' exceeds 15 MB.")
+        if not (f.content_type or "").startswith("image/"):
+            raise HTTPException(status_code=400, detail=f"'{f.filename}' is not an image.")
+        base_images.append(data)
+    if not base_images:
+        raise HTTPException(status_code=400, detail="Uploaded files were empty.")
+
+    if meta_json:
+        try:
+            meta = json.loads(meta_json)
+            if not isinstance(meta, dict):
+                raise ValueError("meta must be an object")
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid meta_json: {exc}")
+    else:
+        _, meta = ring_studio.build_prompt()
+
+    job = ring_studio.ring_job_store.create()
     background_tasks.add_task(
-        ring_studio.run_batch_render_job, job.job_id, settings, quality=request.quality,
+        ring_studio.run_render_job, job.job_id, settings, meta, None,
+        quality=quality, base_images=base_images,
     )
     return ring_studio.RingJobRef(job_id=job.job_id, status=job.status)
-
-
-@app.get("/ring-studio/render-base-designs/{job_id}",
-         response_model=ring_studio.RingBatchJobStatus)
-def ring_studio_render_base_designs_status(
-    job_id: str,
-    _user: CurrentUser = Depends(require_tab("rings")),
-) -> ring_studio.RingBatchJobStatus:
-    """Poll a base-designs batch. ``result`` carries per-product progress while
-    running and the full set once completed."""
-    job = ring_studio.ring_batch_job_store.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail=f"Ring batch job '{job_id}' not found")
-    return ring_studio.RingBatchJobStatus(
-        job_id=job.job_id, status=job.status, result=job.result, error=job.error,
-    )
-
-
-@app.get("/ring-studio/render-base-designs/{job_id}/zip")
-def ring_studio_render_base_designs_zip(
-    job_id: str,
-    _user: CurrentUser = Depends(require_tab("rings")),
-) -> Response:
-    """Download the whole batch as a ZIP of per-product ZIPs (one per product)."""
-    job = ring_studio.ring_batch_job_store.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail=f"Ring batch job '{job_id}' not found")
-    if job.status != "completed" or job.result is None:
-        raise HTTPException(status_code=409, detail="Batch is not complete yet.")
-    bundle = ring_studio.build_batch_zip(job.result)
-    if bundle is None:
-        raise HTTPException(status_code=404, detail="No rendered images to download.")
-    filename, data = bundle
-    return Response(
-        content=data,
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@app.get("/ring-studio/render-base-designs/{job_id}/product/{index}/zip")
-def ring_studio_render_base_designs_product_zip(
-    job_id: str,
-    index: int,
-    _user: CurrentUser = Depends(require_tab("rings")),
-) -> Response:
-    """Download ONE product's four views as its own ZIP."""
-    job = ring_studio.ring_batch_job_store.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail=f"Ring batch job '{job_id}' not found")
-    if job.result is None or not (0 <= index < len(job.result.items)):
-        raise HTTPException(status_code=404, detail="Product not found in this batch.")
-    bundle = ring_studio.build_product_zip(job.result.items[index])
-    if bundle is None:
-        raise HTTPException(status_code=404, detail="This product has no rendered images yet.")
-    filename, data = bundle
-    return Response(
-        content=data,
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 # ── Zoho Desk — customer ticket visibility (capability key "zoho") ───────────

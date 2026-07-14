@@ -89,6 +89,19 @@ export async function apiDownload(path, { method = "GET", body, fallbackName } =
   triggerBlobDownload(blob, match ? match[1] : fallbackName || "download");
 }
 
+// Multipart upload helper. Sends a FormData body with auth (no Content-Type —
+// the browser sets the multipart boundary). Returns parsed JSON.
+export async function apiUpload(path, formData) {
+  const res = await fetch(path, { method: "POST", headers: authHeaders(), body: formData });
+  if (res.status === 401) {
+    notifyUnauthorized();
+    throw new Error(await parseError(res));
+  }
+  if (!res.ok) throw new Error(await parseError(res));
+  const text = await res.text();
+  return text ? JSON.parse(text) : {};
+}
+
 // Fetch a binary resource (e.g. an image) with auth and return an object URL.
 // The caller owns the URL and must URL.revokeObjectURL it when done.
 export async function apiObjectUrl(path) {

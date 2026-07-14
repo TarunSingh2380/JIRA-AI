@@ -21,7 +21,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import os
 import random
 import threading
 import time
@@ -296,91 +295,6 @@ def batch_to_jsonl(rows: list[dict[str, Any]]) -> str:
     return "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n"
 
 
-# ─── Scraped base designs ────────────────────────────────────────────────────
-# The scraper (repo-root ``scraper.py``) downloads real catalog rings into
-# ``app/static/rings/base/<gender>/<product>/*.jpg``. Those are used as BASE
-# designs: a chosen base image is fed to the image model as the reference for the
-# hero render, and the prompt reinterprets it in a global {design_tradition}
-# rather than copying the original regional styling.
-#
-# The default lives INSIDE the app package (not the repo root) so the images ship
-# with the Docker image (``COPY . .`` under WORKDIR /app) and the path resolves
-# the same locally and in the container. Override with ``RING_BASE_IMAGES_DIR``.
-
-_BASE_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
-_BASE_IMAGES_DIR_ENV = "RING_BASE_IMAGES_DIR"
-
-
-def _base_images_dir() -> Path:
-    """Root folder of scraped base designs. Defaults to
-    ``app/static/rings/base`` (bundled with the app), overridable via
-    ``RING_BASE_IMAGES_DIR``."""
-    override = os.environ.get(_BASE_IMAGES_DIR_ENV)
-    if override:
-        return Path(override).expanduser()
-    return Path(__file__).resolve().parent / "static" / "rings" / "base"
-
-
-def list_base_images() -> list[dict[str, str]]:
-    """Enumerate scraped base ring images so the UI can offer them for selection.
-
-    Each entry: ``{id, gender, product, filename}`` where ``id`` is the path
-    relative to the base dir (used to load the bytes later)."""
-    root = _base_images_dir()
-    out: list[dict[str, str]] = []
-    if not root.exists():
-        return out
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in _BASE_IMAGE_EXTS:
-            continue
-        rel = path.relative_to(root)
-        parts = rel.parts
-        gender = parts[0] if parts and parts[0] in ("women", "men") else ""
-        product = parts[-2] if len(parts) >= 2 else ""
-        out.append({
-            "id": rel.as_posix(),
-            "gender": gender,
-            "product": product,
-            "filename": path.name,
-        })
-    return out
-
-
-def load_base_image(image_id: str) -> bytes:
-    """Read the bytes of a scraped base image by its relative ``id``.
-
-    The id is confined to the base-images dir — any path that resolves outside it
-    (traversal) is rejected."""
-    root = _base_images_dir().resolve()
-    path = (root / image_id).resolve()
-    if not path.is_relative_to(root):
-        raise ValueError("Invalid base image id")
-    if path.suffix.lower() not in _BASE_IMAGE_EXTS or not path.is_file():
-        raise FileNotFoundError(f"Base image not found: {image_id}")
-    return path.read_bytes()
-
-
-def list_base_products() -> list[dict[str, str]]:
-    """Collapse the scraped base images to one entry PER PRODUCT.
-
-    A product folder holds several images of the same ring; batch generation uses
-    one representative (the first) per product so it renders one global-style ring
-    per scraped design. Each entry: ``{gender, product, image_id, label}``."""
-    seen: dict[tuple[str, str], dict[str, str]] = {}
-    for img in list_base_images():
-        key = (img["gender"], img["product"])
-        if key in seen:
-            continue
-        label = " · ".join(p for p in (img["gender"], img["product"]) if p) or img["filename"]
-        seen[key] = {
-            "gender": img["gender"],
-            "product": img["product"],
-            "image_id": img["id"],
-            "label": label,
-        }
-    return list(seen.values())
-
-
 # ─── Per-view image rendering (optional) ─────────────────────────────────────
 # Instead of one composite spec-sheet, we render FOUR separate images — one per
 # camera view (hero 3/4, top, side, front) — all depicting the EXACT SAME ring.
@@ -501,13 +415,13 @@ VIEW: {view_instruction}.
 
 STYLE: luxury jewelry catalog. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
 
-# Hero prompt used when a scraped BASE design is supplied as the reference image.
-# The base is a loose starting point only — proportion and stone placement — and
-# the ring is re-styled into a global {design_tradition}, deliberately NOT copying
-# the base's regional (Indian-catalog) styling.
-BASE_HERO_TEMPLATE = """The reference image is a real catalog ring, provided ONLY as a loose starting silhouette — do NOT copy its styling.
+# Hero prompt used when UPLOADED photos of one ring are supplied as reference.
+# The reference photos (up to four angles of the same ring) are a loose starting
+# point only — proportion and stone placement — and the ring is re-styled into a
+# global {design_tradition}, deliberately NOT copying the uploaded ring's styling.
+BASE_HERO_TEMPLATE = """The reference image(s) show ONE ring from up to four different angles — the SAME ring each time. Use them together only as a loose starting silhouette; do NOT copy its styling.
 
-Design a NEW luxury engagement ring — the "{ring_name}" ({ring_subtitle}) — that reinterprets that base in the {design_tradition} design tradition. Keep only the broad proportion and the centre-stone placement of the reference as a starting point, then re-style the metalwork, gallery, shoulders, setting and accents in an authentic {design_tradition} idiom. Draw on global jewelry design heritage — do NOT reproduce the regional styling of the reference.
+Design a NEW luxury engagement ring — the "{ring_name}" ({ring_subtitle}) — that reinterprets that ring in the {design_tradition} design tradition. Keep only the broad proportion and the centre-stone placement of the reference as a starting point, then re-style the metalwork, gallery, shoulders, setting and accents in an authentic {design_tradition} idiom. Draw on global jewelry design heritage — do NOT reproduce the styling of the reference.
 
 THE RING (this exact NEW design will be reused for four more views, so make it distinctive and consistent):
 - Centre diamond: {diamond_shape} cut, {carat} ct, {color} colour / {clarity} clarity / {cut} cut.
@@ -633,13 +547,15 @@ def _render_anchor(
 
 
 def _render_edit(
-    settings: Settings, item: dict[str, str], ref_bytes: bytes, name_hint: str,
-    model: str, quality: str
+    settings: Settings, item: dict[str, str], ref_bytes: "bytes | list[bytes]",
+    name_hint: str, model: str, quality: str
 ) -> tuple[Optional[bytes], RingImageResult]:
-    """Render a non-hero view by editing a reference image (keeps the same ring).
+    """Render a view by editing a reference image (keeps the same ring).
 
-    Returns (image_bytes, result) so the rendered frame can itself seed a later
-    view in the sequential chain."""
+    ``ref_bytes`` may be a single image's bytes, or a LIST of images — the latter
+    lets the hero be seeded by several uploaded views of one ring at once, which
+    the model uses together as one multi-angle reference. Returns (image_bytes,
+    result) so the rendered frame can itself seed a later view in the chain."""
     view, label, prompt = item["view"], item["label"], item["prompt"]
     try:
         import io
@@ -647,9 +563,16 @@ def _render_edit(
         from openai import OpenAI
 
         client = OpenAI(api_key=settings.openai_api_key)
-        ref = io.BytesIO(ref_bytes)
-        ref.name = "reference.png"  # SDK uses this for the multipart filename
-        resp = client.images.edit(model=model, image=ref, prompt=prompt, size=_IMAGE_SIZE,
+        if isinstance(ref_bytes, (list, tuple)):
+            image_arg: Any = []
+            for i, b in enumerate(ref_bytes):
+                bio = io.BytesIO(b)
+                bio.name = f"reference{i}.png"  # SDK uses this for the multipart filename
+                image_arg.append(bio)
+        else:
+            image_arg = io.BytesIO(ref_bytes)
+            image_arg.name = "reference.png"
+        resp = client.images.edit(model=model, image=image_arg, prompt=prompt, size=_IMAGE_SIZE,
                                    quality=quality, n=1)
         data = _image_bytes_from_response(resp)
         filename, url = _save_png(data, name_hint, view)
@@ -669,7 +592,7 @@ def render_ring_views(
     *,
     model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
-    base_image: Optional[bytes] = None,
+    base_images: Optional[list[bytes]] = None,
     view_keys: Optional[set[str]] = None,
 ) -> RingViewsResult:
     """Render the four per-view images for one ring design, all the SAME ring.
@@ -681,22 +604,21 @@ def render_ring_views(
     hallucinating into a different or side-on ring. ``quality`` (low/medium/high)
     trades cost for fidelity.
 
-    ``base_image`` = raw bytes of a scraped base design. When given, the hero is
-    rendered by EDITING that base (reinterpreting it in the meta's global
-    ``design_tradition``) instead of from text, so real catalog rings seed the
-    generation.
+    ``base_images`` = raw bytes of up to four UPLOADED photos of one ring (its
+    different angles). When given, the hero is rendered by EDITING all of them
+    together as a single multi-angle reference (reinterpreting the ring in the
+    meta's global ``design_tradition``) instead of from text, so the user's own
+    ring seeds the generation; the other views then chain off the rendered hero.
 
-    ``view_keys`` = render only this subset of views (e.g. ``{"hero"}`` for the
-    batch, which wants one strong global-style image per product rather than four
-    — 6× fewer calls, so it finishes well within the poll window). Any kept view
-    whose ``src`` is dropped will error gracefully; ``{"hero"}`` has no such dep.
+    ``view_keys`` = render only this subset of views. Any kept view whose ``src``
+    is dropped will error gracefully; ``{"hero"}`` has no such dep.
 
     If ``OPENAI_API_KEY`` is not configured this is a graceful no-op returning the
     prompts for manual use. Per-view errors are captured so the dashboard can show
     whatever succeeded.
     """
     quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
-    has_base = base_image is not None
+    has_base = bool(base_images)
     items = build_view_prompts(meta, has_base=has_base)
     if view_keys:
         items = [it for it in items if it["view"] in view_keys]
@@ -718,11 +640,12 @@ def render_ring_views(
 
     # Render one view at a time, in list order (each view's ``src`` is guaranteed
     # to appear earlier, so its image already exists when we reach the edit).
-    # We keep the rendered bytes per view so any later view can source it. A
-    # supplied base image is pre-seeded under "base" so the hero can edit from it.
-    rendered_bytes: dict[str, Optional[bytes]] = {}
+    # We keep the rendered bytes per view so any later view can source it. The
+    # uploaded base images are pre-seeded under "base" (as a list) so the hero can
+    # edit from all of them at once.
+    rendered_bytes: dict[str, Any] = {}
     if has_base:
-        rendered_bytes["base"] = base_image
+        rendered_bytes["base"] = list(base_images)
     results: dict[str, RingImageResult] = {}
     for it in items:
         view, src, mode = it["view"], it.get("src") or "", it["mode"]
@@ -805,44 +728,6 @@ class RingJobStore:
 ring_job_store = RingJobStore()
 
 
-@dataclass
-class RingBatchRenderJob:
-    """A batch that renders one global-style ring from every scraped base design."""
-    job_id: str
-    status: str = "pending"  # "pending" | "running" | "completed" | "failed"
-    result: Optional["RingBatchResult"] = None
-    error: Optional[str] = None
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    completed_at: Optional[datetime] = None
-
-
-class RingBatchJobStore:
-    """Thread-safe in-memory store for base-designs batch jobs (capped)."""
-
-    def __init__(self, max_jobs: int = 20) -> None:
-        self._jobs: dict[str, RingBatchRenderJob] = {}
-        self._order: list[str] = []
-        self._max = max_jobs
-        self._lock = threading.Lock()
-
-    def create(self) -> RingBatchRenderJob:
-        with self._lock:
-            job = RingBatchRenderJob(job_id=uuid.uuid4().hex)
-            self._jobs[job.job_id] = job
-            self._order.append(job.job_id)
-            if len(self._order) > self._max:
-                self._jobs.pop(self._order.pop(0), None)
-        log.info("Created ring batch job %s", job.job_id)
-        return job
-
-    def get(self, job_id: str) -> Optional[RingBatchRenderJob]:
-        with self._lock:
-            return self._jobs.get(job_id)
-
-
-ring_batch_job_store = RingBatchJobStore()
-
-
 def run_render_job(
     job_id: str,
     settings: Settings,
@@ -851,12 +736,12 @@ def run_render_job(
     *,
     model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
-    base_image: Optional[bytes] = None,
+    base_images: Optional[list[bytes]] = None,
 ) -> None:
     """Execute a queued render, updating the job in place. Runs in a worker
     thread (via FastAPI BackgroundTasks); never raises — failures are recorded
-    on the job so the poller can surface them. ``base_image`` seeds the hero from
-    a scraped base design when supplied."""
+    on the job so the poller can surface them. ``base_images`` seeds the hero from
+    the user's uploaded ring photos when supplied."""
     job = ring_job_store.get(job_id)
     if job is None:  # evicted before it ran (store is capped)
         log.warning("Ring render job %s vanished before start", job_id)
@@ -865,7 +750,7 @@ def run_render_job(
     log.info("Ring render job %s started (quality=%s)", job_id, quality)
     try:
         job.result = render_ring_views(settings, meta, seed=seed, model=model,
-                                       quality=quality, base_image=base_image)
+                                       quality=quality, base_images=base_images)
         job.status = "completed"
         log.info("Ring render job %s completed (%s)", job_id, job.result.status)
     except Exception as exc:  # noqa: BLE001 - record, don't crash the worker
@@ -899,181 +784,6 @@ def build_views_zip(result: RingViewsResult) -> Optional[tuple[str, bytes]]:
     return f"{name}-views.zip", buf.getvalue()
 
 
-def _safe_folder(*parts: str) -> str:
-    """A filesystem-safe lowercase folder name from label parts."""
-    base = "-".join(p for p in parts if p) or "ring"
-    cleaned = "".join(c if (c.isalnum() or c in "-_") else "-" for c in base)
-    return cleaned.strip("-").lower() or "ring"
-
-
-def build_product_zip(item: "RingBatchItem") -> Optional[tuple[str, bytes]]:
-    """ZIP ONE product's rendered views (``<view>.png``). Returns (filename,
-    bytes) or None when that product rendered nothing. Files are read only from
-    the rings static dir by basename, so a tampered filename can't escape."""
-    import io
-    import zipfile
-
-    if item.result is None:
-        return None
-    rings_dir = _rings_static_dir()
-    name = _safe_folder(item.gender, item.product)
-    buf = io.BytesIO()
-    wrote_any = False
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for v in item.result.views:
-            if v.status == "rendered" and v.filename:
-                path = rings_dir / Path(v.filename).name  # basename only
-                if path.exists():
-                    zf.write(path, arcname=f"{v.view}.png")
-                    wrote_any = True
-    if not wrote_any:
-        return None
-    buf.seek(0)
-    return f"{name}.zip", buf.getvalue()
-
-
-def build_batch_zip(result: "RingBatchResult") -> Optional[tuple[str, bytes]]:
-    """Bundle a whole base-designs batch as a ZIP of per-product ZIPs.
-
-    The download contains one ``<gender>-<product>.zip`` per scraped design (each
-    holding that ring's four view PNGs), so unzipping yields a SEPARATE zip for
-    every product. Returns None when nothing rendered."""
-    import io
-    import zipfile
-
-    buf = io.BytesIO()
-    used: dict[str, int] = {}
-    wrote_any = False
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:  # inner zips already compressed
-        for item in result.items:
-            bundle = build_product_zip(item)
-            if bundle is None:
-                continue
-            fname, data = bundle
-            stem = fname[:-4]  # drop ".zip"
-            n = used.get(stem, 0)
-            used[stem] = n + 1
-            if n:  # disambiguate duplicate product names
-                fname = f"{stem}-{n + 1}.zip"
-            zf.writestr(fname, data)
-            wrote_any = True
-    if not wrote_any:
-        return None
-    buf.seek(0)
-    return "ring-base-designs.zip", buf.getvalue()
-
-
-# ─── Batch: render one global-style ring from every scraped base design ───────
-# One button on the UI kicks off a job that walks every scraped PRODUCT, seeds a
-# render from it, rotates a different global design tradition per product, and
-# collects the results so each product can be downloaded as its OWN ZIP (all four
-# views), plus a combined "all" bundle. Each product renders the full 4-view set;
-# products run CONCURRENTLY (a product's own 4 views stay sequential) so the whole
-# batch finishes in roughly one product's time instead of N products' time — that
-# keeps 6×4 = 24 image calls inside the poll window. Runs as a background job.
-
-# How many products to render at once. Each product is 4 sequential image calls;
-# running a few products in parallel cuts wall-clock time without hammering the
-# image API's concurrency limits.
-_BATCH_CONCURRENCY = 3
-
-
-def run_batch_render_job(
-    job_id: str,
-    settings: Settings,
-    *,
-    model: str = _DEFAULT_MODEL,
-    quality: str = _DEFAULT_QUALITY,
-) -> None:
-    """Render the full 4-view set for every scraped base product, concurrently,
-    updating the job as each product finishes so the poller shows progress. Never
-    raises — per-product failures are recorded on that product's item."""
-    from concurrent.futures import ThreadPoolExecutor
-
-    job = ring_batch_job_store.get(job_id)
-    if job is None:
-        log.warning("Ring batch job %s vanished before start", job_id)
-        return
-    job.status = "running"
-    quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
-    products = list_base_products()
-    traditions = BANKS["design_tradition"]
-    log.info("Ring batch job %s started (%d products, quality=%s)", job_id, len(products), quality)
-
-    if not products:
-        job.result = RingBatchResult(
-            status="empty", total=0, completed=0, items=[],
-            message="No scraped base designs found. Run scraper.py to populate the images folder.",
-        )
-        job.status = "completed"
-        job.completed_at = datetime.now(timezone.utc)
-        return
-
-    # One placeholder item per product, in order, so the ZIP index is stable and
-    # the poller can show each product's status as it lands.
-    items: list[RingBatchItem] = []
-    metas: list[dict[str, Any]] = []
-    for i, product in enumerate(products):
-        tradition = traditions[i % len(traditions)]
-        _, meta = build_prompt(seed=i, overrides={"design_tradition": tradition})
-        metas.append(meta)
-        items.append(RingBatchItem(
-            product=product["product"], gender=product["gender"],
-            base_image_id=product["image_id"], label=product["label"],
-            design_tradition=tradition, ring_name=str(meta.get("ring_name", "")),
-        ))
-
-    lock = threading.Lock()
-    done = 0
-
-    def publish(status: str = "running") -> None:
-        costs = [it.result.cost_usd for it in items
-                 if it.result and it.result.cost_usd is not None]
-        job.result = RingBatchResult(
-            status=status, total=len(items), completed=done,
-            items=[it.model_copy(deep=True) for it in items],
-            cost_usd=round(sum(costs), 6) if costs else None,
-        )
-
-    publish()  # seed total immediately
-
-    def render_one(idx: int) -> None:
-        nonlocal done
-        product, meta = products[idx], metas[idx]
-        try:
-            base = load_base_image(product["image_id"])
-            result = render_ring_views(settings, meta, seed=idx, model=model,
-                                       quality=quality, base_image=base)
-            with lock:
-                items[idx].result = result
-        except Exception as exc:  # noqa: BLE001 - record per product, keep going
-            log.exception("Ring batch job %s: product %s failed", job_id, product["label"])
-            with lock:
-                items[idx].error = str(exc)[:500]
-        with lock:
-            done += 1
-            publish()
-
-    try:
-        with ThreadPoolExecutor(max_workers=_BATCH_CONCURRENCY) as pool:
-            list(pool.map(render_one, range(len(products))))
-
-        rendered = sum(1 for it in items
-                       if it.result and it.result.status in ("rendered", "partial"))
-        with lock:
-            publish(status="completed")
-            if rendered == 0:
-                job.result.message = "No images were rendered — check that OPENAI_API_KEY is configured."
-        job.status = "completed"
-        log.info("Ring batch job %s completed (%d/%d rendered)", job_id, rendered, len(products))
-    except Exception as exc:  # noqa: BLE001 - record, don't crash the worker
-        log.exception("Ring batch job %s failed", job_id)
-        job.error = str(exc)[:1000]
-        job.status = "failed"
-    finally:
-        job.completed_at = datetime.now(timezone.utc)
-
-
 # ─── Pydantic request/response models ────────────────────────────────────────
 
 class PromptRequest(BaseModel):
@@ -1099,9 +809,6 @@ class ImageRequest(BaseModel):
     seed: Optional[int] = None
     overrides: dict[str, Any] = Field(default_factory=dict)
     quality: str = _DEFAULT_QUALITY  # low | medium | high
-    # Optional: id (from list_base_images) of a scraped base design to seed the
-    # hero from — the ring is then reinterpreted in the meta's design_tradition.
-    base_image_id: Optional[str] = None
 
 
 class RingJobRef(BaseModel):
@@ -1114,36 +821,4 @@ class RingJobStatus(BaseModel):
     job_id: str
     status: str  # "pending" | "running" | "completed" | "failed"
     result: Optional[RingViewsResult] = None
-    error: Optional[str] = None
-
-
-class RingBatchItem(BaseModel):
-    """One scraped base product's render inside a batch."""
-    product: str
-    gender: str = ""
-    base_image_id: str
-    label: str = ""
-    design_tradition: Optional[str] = None
-    ring_name: Optional[str] = None
-    result: Optional[RingViewsResult] = None
-    error: Optional[str] = None
-
-
-class RingBatchResult(BaseModel):
-    status: str  # "running" | "completed" | "empty"
-    total: int = 0
-    completed: int = 0
-    items: list[RingBatchItem] = Field(default_factory=list)
-    cost_usd: Optional[float] = None
-    message: Optional[str] = None
-
-
-class RingBatchRequest(BaseModel):
-    quality: str = _DEFAULT_QUALITY  # low | medium | high
-
-
-class RingBatchJobStatus(BaseModel):
-    job_id: str
-    status: str  # "pending" | "running" | "completed" | "failed"
-    result: Optional[RingBatchResult] = None
     error: Optional[str] = None
