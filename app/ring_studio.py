@@ -364,8 +364,7 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
      "a dramatic three-quarter perspective: the ring stands upright and is turned "
      "roughly 30 degrees, and the camera is raised ABOVE the ring looking gently "
      "DOWNWARD (about 30 degrees) so BOTH the front face of the setting AND one "
-     "shoulder of the band are clearly visible, the centre stone catching the light; "
-     "the band subtly engraved with \"{ring_name}\" and a small \"18K\" hallmark"),
+     "shoulder of the band are clearly visible, the centre stone catching the light"),
     ("top", "Top View", "anchor", None,
      "a symmetric, straight-on FRONT-FACE catalog view showing the COMPLETE ring. The ring "
      "STANDS UPRIGHT on its band and the camera is directly in FRONT, elevated only about 15 "
@@ -412,29 +411,32 @@ VIEW: {view_instruction}.
 STYLE: luxury jewelry catalog. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
 
 # Hero prompt used when UPLOADED photos of one ring are supplied as reference.
-# The reference photos (up to four angles of the same ring) are a loose starting
-# point only — proportion and stone placement — and the ring is re-styled into a
-# global {design_tradition}, deliberately NOT copying the uploaded ring's styling.
-BASE_HERO_TEMPLATE = """The reference image(s) show ONE ring from up to four different angles — the SAME ring each time. Use them together only as a loose starting silhouette; do NOT copy its styling.
+# Deliberately spec-FREE: no randomized design fields (metal, carat, shape,
+# setting, ring name…) are injected, because fabricated specs fight the reference
+# photos. The ring's material and construction come FROM the uploads; only the
+# prompt's design language ({design_tradition}) plus the reinterpretation rules
+# steer the restyle.
+BASE_HERO_TEMPLATE = """The reference image(s) show ONE ring from up to four different angles — the SAME ring each time. They are a stylistic reference ONLY.
 
-Design a NEW luxury engagement ring — the "{ring_name}" ({ring_subtitle}) — that reinterprets that ring in the {design_tradition} design tradition. Keep only the broad proportion and the centre-stone placement of the reference as a starting point, then re-style the metalwork, gallery, shoulders, setting and accents in an authentic {design_tradition} idiom. Draw on global jewelry design heritage — do NOT reproduce the styling of the reference.
+MANDATORY INSTRUCTION (SUPERSEDES ANY CONFLICTING INSTRUCTIONS): Do not place any text, engraving, hallmark, logo or watermark on the jewelry itself.
 
-THE RING (this exact NEW design will be reused for four more views, so make it distinctive and consistent):
-- Centre diamond: {diamond_shape} cut, {carat} ct, {color} colour / {clarity} clarity / {cut} cut.
-- Metal: {metal}. Band width: {band_width}. Setting: {setting}.
-- Accent stones: {total_diamonds} diamonds (~{accent_carat} ct total), hand-set micro-pavé.
+DESIGN LANGUAGE: {design_tradition}. Use the design tradition as inspiration. Create a NEW design by changing at least 30% of the visible design language — motif geometry, silhouette, stone arrangement, gallery, proportions and metal flow — while preserving the overall aesthetic direction. Avoid producing a near-copy.
+
+THE RING: take the metal, stones, setting, band and overall proportions FROM THE REFERENCE image(s). Do NOT invent a different specification and do NOT substitute a different metal colour, stone shape or setting type — restyle what is there rather than replacing it. This exact new design will be reused for the other views, so keep it distinctive and consistent.
 
 VIEW: {view_instruction}.
 
-STYLE: luxury jewelry catalog. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Render the metal as realistic {metal}; every diamond must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
+STYLE: luxury jewelry catalog. Clean seamless {background} studio background (bright #FFFFFF — no cream, beige or grey tint), gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Every stone must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
 
 # Prompt for the non-hero views. The hero image is supplied as a reference so the
 # model re-renders THE SAME ring rather than inventing a new one.
-EDIT_TEMPLATE = """The reference image shows ONE women's engagement ring — the "{ring_name}". Re-render THAT EXACT SAME ring — keep the identical {metal} metal, the identical {diamond_shape} centre diamond ({carat} ct), the identical {setting} and band, and the same proportions, colour and finish. Do NOT redesign the ring or change any detail.
+EDIT_TEMPLATE = """The reference image shows ONE ring. Re-render THAT EXACT SAME ring — keep its identical metal, stones, setting, band, proportions, colour and finish exactly as they appear in the reference. Do NOT redesign the ring or change any detail. Treat it as the same 3D CAD model, only viewed from a new camera position.
+
+MANDATORY INSTRUCTION (SUPERSEDES ANY CONFLICTING INSTRUCTIONS): Do not place any text, engraving, hallmark, logo or watermark on the jewelry itself.
 
 Now MOVE THE CAMERA to a completely different angle. NEW CAMERA VIEW: {view_instruction}. Physically reposition the camera as described — the composition and silhouette MUST clearly differ from the reference; do NOT copy the reference pose.
 
-Keep it photorealistic, luxury jewelry catalog quality, on a clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint) with the single ring centred and generous negative space. No text, no watermark, no hands, no other objects."""
+Keep it photorealistic, luxury jewelry catalog quality, on a clean seamless {background} studio background (bright #FFFFFF — no cream, beige or grey tint) with the single ring centred and generous negative space. No text, no watermark, no hands, no other objects."""
 
 
 def _rings_static_dir() -> Path:
@@ -450,19 +452,26 @@ def build_view_prompts(meta: dict[str, Any], has_base: bool = False) -> list[dic
     ``edit`` re-renders from). The hero is the ``anchor``; every other view edits
     the hero so the ring stays identical while the camera moves.
 
-    ``has_base`` = a scraped base image will seed the hero: the hero then uses
-    ``BASE_HERO_TEMPLATE`` (reinterpret the base in a global tradition) and its
-    ``src`` is set to ``"base"`` so the renderer feeds the base image in.
+    ``has_base`` = uploaded reference photos will seed the hero: the hero uses the
+    spec-free ``BASE_HERO_TEMPLATE`` and its ``src`` is ``"base"`` so the renderer
+    feeds the uploads in. In that flow NO view may be a text anchor — a text
+    anchor would build a ring out of the randomized spec fields and ignore the
+    uploads entirely — so every non-hero view is forced to edit from the hero.
     """
     out: list[dict[str, str]] = []
     for view, label, mode, src, instruction in VIEWS:
         view_instruction = instruction.format(**meta)
-        if mode == "anchor":
-            if has_base and view == "hero":
+        if has_base:
+            if view == "hero":
+                mode, src = "anchor", "base"
                 prompt = BASE_HERO_TEMPLATE.format(view_instruction=view_instruction, **meta)
-                src = "base"
             else:
-                prompt = VIEW_TEMPLATE.format(view_instruction=view_instruction, **meta)
+                # Chain off the hero so every view shows the SAME uploaded-derived
+                # ring (the hero is the only view that reads the uploads).
+                mode, src = "edit", src or "hero"
+                prompt = EDIT_TEMPLATE.format(view_instruction=view_instruction, **meta)
+        elif mode == "anchor":
+            prompt = VIEW_TEMPLATE.format(view_instruction=view_instruction, **meta)
         else:
             prompt = EDIT_TEMPLATE.format(view_instruction=view_instruction, **meta)
         out.append({"view": view, "label": label, "prompt": prompt, "mode": mode,
