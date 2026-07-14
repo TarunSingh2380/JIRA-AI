@@ -79,20 +79,6 @@ BANKS: dict[str, list[str]] = {
     # on worldwide design heritage instead of staying anchored to the (Indian)
     # base designs the scraper collects. Each entry names the tradition and its
     # defining visual language so the image model has something concrete to render.
-    "design_tradition": [
-        "Art Deco (bold geometry, stepped symmetry, calibré-cut accents, crisp lines)",
-        "Victorian (romantic, ornate filigree, scrollwork, old-mine cuts)",
-        "Edwardian / Belle Époque (lacy platinum, fine milgrain, garland and bow motifs)",
-        "French Bombé (rounded voluptuous volumes, dense pavé, sculptural gold)",
-        "Italian Renaissance-inspired (sculptural high-polish gold, engraved scrollwork)",
-        "Mid-Century Modernist (clean bold forms, sculptural negative space)",
-        "Scandinavian Minimalist (understated, architectural restraint, matte finishes)",
-        "Contemporary Minimalist (thin bands, floating solitaire, tension-set clarity)",
-        "Japanese-inspired (organic asymmetry, nature motifs, delicate hammered texture)",
-        "Retro Hollywood (bold cocktail glamour, oversized centre, sweeping curves)",
-        "Nature-Organic (twig, vine and petal forms, textured branch bands)",
-        "Old Hollywood Vintage (milgrain edges, hand-engraving, illusion halos)",
-    ],
 }
 
 # (total_diamonds, accent_carat) pairs — paired sensibly.
