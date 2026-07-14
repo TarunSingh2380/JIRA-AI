@@ -138,34 +138,30 @@ DESCRIPTIONS: list[str] = [
     "Understated and radiant, this ring frames a {shape} diamond in {metal} for effortless everyday glamour.",
 ]
 
-TEMPLATE = """Create a single high-resolution luxury jewelry catalog spec-sheet image in landscape 4:3 for a women's engagement ring. ONE ring design shown from multiple angles — every view depicts the EXACT SAME ring with consistent proportions, metal, diamond shape and setting.
+TEMPLATE = """Create a single high-resolution luxury jewelry catalog spec-sheet image in landscape 4:3 for a Ring. Generate ONE physical ring only. Every panel is a different camera angle or crop of this identical ring. Do not redesign, reinterpret or alter any feature between panels. Treat every panel as a render of the same 3D CAD model viewed from different camera positions.
 
-DESIGN LANGUAGE: {design_tradition}. Interpret the whole ring in this global design tradition — draw on worldwide jewelry heritage, not a single regional style.
+MANDATORY INSTRUCTION (SUPERSEDES ANY CONFLICTING INSTRUCTIONS): Do not place any text, engraving, hallmark, logo or watermark on the jewelry itself. Catalog typography is allowed only in the layout panels.
 
-STYLE: clean premium editorial. Clean seamless {background} studio background (bright #ffffff — no cream, beige or grey tint), diffused lighting, realistic diamond fire and reflections. Thin {accent_color} hairline panel borders. Elegant serif headings, clean sans-serif body. Photorealistic 3D render, tack-sharp, no clutter.
+DESIGN LANGUAGE: {design_tradition}. Use the design tradition as inspiration — draw on the pan-Indian jewelry heritage. The uploaded reference image is a stylistic reference only. Create a new design by changing at least 30% of the visible design language, including motif geometry, silhouette, stone arrangement, gallery, proportions and metal flow, while preserving the overall aesthetic direction.. Avoid producing a near-copy.
+
+STYLE: clean premium editorial. Clean seamless {background} studio background (bright #FFFFFF — no cream, beige or grey tint), diffused lighting, realistic diamond fire and reflections. Thin {accent_color} hairline panel borders. Elegant serif headings, clean sans-serif body. Photorealistic 3D render, tack-sharp, no clutter.
 
 LAYOUT (composite grid):
 - Header top-left: ring name "{ring_name}" in large elegant serif capitals; subtitle "{ring_subtitle}" in spaced small-caps beneath; small diamond glyph accent.
 - Description paragraph: "{description}"
 - Left spec column with faceted-diamond bullets:
-  CENTER DIAMOND — {diamond_shape}, {carat} ct (Approx.), {color} Color / {clarity} Clarity / {cut} Cut
+  CENTER STONE — {diamond_shape}, {carat} ct (Approx.), {color} Color / {clarity} Clarity / {cut} Cut
   METAL — {metal}
   BAND WIDTH — {band_width}
   SETTING — {setting}
   TOTAL DIAMONDS — {total_diamonds} (~{accent_carat} ct)
-- HERO shot (largest, upper-center): dramatic 3/4 perspective, ring upright, centre stone catching light; band engraved "{ring_name}" with a small "18K" hallmark.
-- Right side two stacked panels: angled perspective close-up (top) and upright front elevation (bottom) on white.
-- Bottom row of four labeled thumbnails in spaced caps:
-  TOP VIEW — from directly above, symmetrical band, centred stone.
+- Four labeled thumbnails in spaced caps:
+  TOP VIEW — dramatic 3/4 perspective, ring upright, centre stone catching light.
   SIDE VIEW — pure profile showing setting height, prongs, band taper.
   FRONT VIEW — upright straight-on elevation.
-  DETAIL VIEW ({detail_label}) — macro of the {detail_feature} with fine metalwork and micro-pavé.
-- Footer band in three hairline-separated sections:
-  INSPIRATION — "{inspiration}" beside a small square {mood_image} mood image.
-  RING SIZE — "{ring_size}" beside a tiny line-icon of the ring.
-  DESIGN HIGHLIGHTS — 4 bullets: {highlight_1}; {highlight_2}; {highlight_3}; {highlight_4}. Faint single-line {motif} botanical illustration in the far bottom-right corner.
+  DETAIL VIEW ({detail_label}) — macro of the {detail_feature} with fine metalwork and micro-pavé.Do not introduce any new geometry or decorative elements.
 
-Render metal as realistic {metal}. Diamonds must look like genuine cut gemstones. Balanced, airy, gallery-grade. No text errors, no watermark, no hands."""
+Render metal as realistic {metal}. Diamonds must look like genuine cut gemstones. Balanced, airy, gallery-grade. No watermark, no hands."""
 
 # The full ordered list of meta keys the template consumes.
 META_KEYS = [
