@@ -28,6 +28,7 @@ export default function ZohoTickets() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null); // { configured, contact, tickets, message }
+  const [openTicket, setOpenTicket] = useState(null); // row clicked → detail modal
 
   // Probe configuration once so we can warn before the operator wastes a lookup.
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function ZohoTickets() {
     setLoading(true);
     setError("");
     setResult(null);
+    setOpenTicket(null);
     try {
       const data = await apiFetch("/zoho/tickets", {
         method: "POST",
@@ -136,7 +138,20 @@ export default function ZohoTickets() {
                 </thead>
                 <tbody>
                   {tickets.map((t) => (
-                    <tr key={t.id}>
+                    <tr
+                      key={t.id}
+                      className="zoho-row"
+                      onClick={() => setOpenTicket(t)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setOpenTicket(t);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      title="View conversation"
+                    >
                       <td>{t.ticket_number ? `#${t.ticket_number}` : t.id}</td>
                       <td>{t.subject || "—"}</td>
                       <td>
@@ -157,6 +172,130 @@ export default function ZohoTickets() {
           )}
         </section>
       )}
+
+      {openTicket && (
+        <TicketDetailModal ticket={openTicket} onClose={() => setOpenTicket(null)} />
+      )}
+    </div>
+  );
+}
+
+// Detail overlay: the clicked ticket's fields plus its conversation threads,
+// fetched on open from GET /zoho/tickets/{id}.
+function TicketDetailModal({ ticket, onClose }) {
+  const [res, setRes] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    apiFetch(`/zoho/tickets/${encodeURIComponent(ticket.id)}`)
+      .then((d) => alive && setRes(d))
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [ticket.id]);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Fall back to the row's own fields until the detail call lands.
+  const detail = res?.ticket || ticket;
+  const threads = res?.threads || [];
+
+  return (
+    <div className="zoho-modal-backdrop" onClick={onClose}>
+      <div
+        className="zoho-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Ticket detail"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="zoho-modal-head">
+          <div>
+            <div className="zoho-modal-title">{detail.subject || "Ticket"}</div>
+            <div className="zoho-modal-sub">
+              {detail.ticket_number ? `#${detail.ticket_number}` : detail.id}
+              {detail.channel ? ` · ${detail.channel}` : ""}
+              {detail.department ? ` · ${detail.department}` : ""}
+            </div>
+          </div>
+          <button type="button" className="secondary" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </header>
+
+        <div className="zoho-modal-body">
+          <div className="zoho-meta">
+            <Meta label="Status" value={<span className={statusClass(detail.status)}>{detail.status || "—"}</span>} />
+            <Meta label="Priority" value={<span className={priorityClass(detail.priority)}>{detail.priority || "—"}</span>} />
+            <Meta label="Assignee" value={detail.assignee || "Unassigned"} />
+            <Meta label="Created" value={fmtDate(detail.created_time)} />
+            <Meta label="Last updated" value={fmtDate(detail.modified_time)} />
+            {detail.due_date ? <Meta label="Due" value={fmtDate(detail.due_date)} /> : null}
+          </div>
+
+          {detail.description ? (
+            <section className="zoho-desc">
+              <h4>Description</h4>
+              <p className="zoho-text">{detail.description}</p>
+            </section>
+          ) : null}
+
+          <h4 className="zoho-threads-head">
+            Conversation
+            {res ? <span className="muted"> · {threads.length} message{threads.length === 1 ? "" : "s"}</span> : null}
+            {res?.threads_truncated ? <span className="muted"> (most recent shown)</span> : null}
+          </h4>
+
+          {loading && <p className="muted">Loading conversation…</p>}
+          {error ? <div className="error-banner">{error}</div> : null}
+          {!loading && !error && threads.length === 0 && (
+            <p className="muted">{res?.message || "No conversation threads on this ticket."}</p>
+          )}
+
+          {threads.map((t) => (
+            <article key={t.id} className={`zoho-thread ${t.direction === "out" ? "out" : "in"}`}>
+              <div className="zoho-thread-head">
+                <span className="zoho-thread-author">{t.author || t.from_address || "Unknown sender"}</span>
+                <span className="muted">
+                  {t.direction === "out" ? "Agent reply" : "From customer"}
+                  {t.channel ? ` · ${t.channel}` : ""}
+                  {t.has_attachment ? " · 📎" : ""}
+                  {` · ${fmtDate(t.created_time)}`}
+                </span>
+              </div>
+              {t.to_address ? <div className="zoho-thread-to muted">To: {t.to_address}</div> : null}
+              <p className="zoho-text">{t.content || t.summary || "(no message body)"}</p>
+            </article>
+          ))}
+        </div>
+
+        {detail.web_url ? (
+          <footer className="zoho-modal-foot">
+            <a href={detail.web_url} target="_blank" rel="noreferrer">
+              Open in Zoho Desk ↗
+            </a>
+          </footer>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Meta({ label, value }) {
+  return (
+    <div className="zoho-meta-item">
+      <span className="zoho-meta-label">{label}</span>
+      <span className="zoho-meta-value">{value}</span>
     </div>
   );
 }

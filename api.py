@@ -55,7 +55,13 @@ from app.repository_discovery import active_repository_names, discover_graph_rep
 from app.rca import localize as rca_localize, rca_document, runner as rca_runner
 from app.rca.store import RCARunStore
 from app import ring_studio
-from app.zoho_client import ZohoClient, ZohoError, CustomerTicketsRequest, CustomerTicketsResponse
+from app.zoho_client import (
+    ZohoClient,
+    ZohoError,
+    CustomerTicketsRequest,
+    CustomerTicketsResponse,
+    TicketDetailResponse,
+)
 from app.repo_doc_generator import (
     list_doc_repositories,
     list_document_types,
@@ -1198,6 +1204,18 @@ def zoho_customer_tickets(
         raise HTTPException(status_code=400, detail="Provide a customer email or phone number.")
     try:
         return zoho_client.customer_tickets(email=email, phone=phone)
+    except ZohoError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.get("/zoho/tickets/{ticket_id}", response_model=TicketDetailResponse)
+def zoho_ticket_detail(
+    ticket_id: str,
+    _user: CurrentUser = Depends(require_tab("zoho")),
+) -> TicketDetailResponse:
+    """One ticket's detail and conversation threads (the row-click detail view)."""
+    try:
+        return zoho_client.ticket_detail(ticket_id)
     except ZohoError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
