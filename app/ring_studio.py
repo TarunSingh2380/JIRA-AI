@@ -348,18 +348,19 @@ VIEWS: list[tuple[str, str, str, Optional[str], str]] = [
      "DOWNWARD (about 30 degrees) so BOTH the front face of the setting AND one "
      "shoulder of the band are clearly visible, the centre stone catching the light"),
     ("top", "Top View", "edit", "hero",
-     "a true OVERHEAD TOP-DOWN view (bird's-eye / plan view). The ring rests with its band "
-     "flat and the head/setting pointing straight UP toward the sky, and the camera floats "
-     "DIRECTLY ABOVE the ring at 90 degrees looking straight DOWN onto it. You are looking at "
-     "the TOP FACE of the head: the centre stone's table faces straight UP into the lens, and "
-     "the whole setting reads as a flat, symmetric plan view — as if the ring were photographed "
-     "on a scanner from above. CRUCIAL: the head must NOT be facing the viewer horizontally and "
-     "the stone must NOT point sideways at the camera — the camera is in the sky looking DOWN, "
-     "so you see the top surface of the head, not its front. The band lies below the head, "
-     "foreshortened by the downward angle. This is a plan view from above — NOT the front "
-     "elevation, NOT a standing ring with the head facing you, NOT a three-quarter angle, NOT a "
-     "side profile with an open 'O' band, and NOT a low laydown shot. Frame the whole ring with "
-     "comfortable margin and negative space on all sides"),
+     "a symmetric ELEVATED TOP view of the ring STANDING UPRIGHT. Three things must all be true "
+     "at once: (1) the ring STANDS upright on its band, (2) the band is fully visible as a "
+     "COMPLETE ROUND circle — a closed 'O' you can see through, never collapsed into a flat "
+     "straight bar or a thin line, and (3) the head/setting sits at the TOP of that circle with "
+     "its face aimed UPWARD toward the sky. The camera is in front of the ring and RAISED about "
+     "45 degrees, looking DOWN onto it — high enough to see the TOP FACE of the head, but not so "
+     "high that the round band flattens away. So the frame shows the full round band below and "
+     "the top surface of the head above, both clearly readable, perfectly symmetric and centred. "
+     "CRUCIAL: the head points UP at the raised camera — it must NOT stare straight ahead "
+     "horizontally at the viewer like a front elevation. Equally, do NOT shoot from directly "
+     "overhead at 90 degrees: that squashes the band into a bar and loses the round. This is NOT "
+     "a three-quarter turned view, NOT a side profile, and NOT a low laydown shot with the ring "
+     "lying flat. Frame the whole ring with comfortable margin on all sides"),
     ("side", "Side Profile", "edit", "hero",
      "a STRICT SIDE ELEVATION. The ring stands upright on the surface and the camera "
      "sits level with it, viewing the band edge-on from the side so the round band "
