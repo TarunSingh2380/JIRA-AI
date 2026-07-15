@@ -408,7 +408,7 @@ MANDATORY INSTRUCTION (SUPERSEDES ANY CONFLICTING INSTRUCTIONS): Do not place an
 DESIGN LANGUAGE: Use the design tradition as inspiration — draw on the pan-Indian jewelry heritage. The uploaded reference image is a stylistic reference only. Create a new design by changing at least 30% of the visible design language, including motif geometry, silhouette, stone arrangement, gallery, proportions and metal flow, while preserving the overall aesthetic direction. Avoid producing a near-copy.
 
 THE RING: take the metal, stones, setting, band and overall proportions FROM THE REFERENCE image(s). Do NOT invent a different specification and do NOT substitute a different metal colour, stone shape or setting type — restyle what is there rather than replacing it. This exact new design will be reused for the other views, so keep it distinctive and consistent.
-
+{reference_details}
 VIEW: {view_instruction}.
 
 STYLE: luxury jewelry catalog. Clean seamless {background} studio background (bright #FFFFFF — no cream, beige or grey tint), gentle diffused lighting, realistic diamond fire, subtle reflections and caustics. Tack-sharp focus, the single ring centred in frame, generous negative space, no clutter. Every stone must look like a genuine cut gemstone. No text, no labels, no watermark, no hands, no other objects."""
@@ -431,13 +431,57 @@ Now MOVE THE CAMERA to a completely different angle. NEW CAMERA VIEW: {view_inst
 Keep it photorealistic, luxury jewelry catalog quality, on a clean seamless {background} studio background (bright #FFFFFF — no cream, beige or grey tint) with the single ring centred and generous negative space. No text, no watermark, no hands, no other objects."""
 
 
+# Generated PNGs live in a subdir of the static mount so the URL (/static/rings/
+# generated/<file>) keeps working, while docker-compose can bind-mount a host dir
+# over just this folder — that is what makes the Gallery survive a rebuild.
 def _rings_static_dir() -> Path:
-    d = Path(__file__).resolve().parent / "static" / "rings"
+    d = Path(__file__).resolve().parent / "static" / "rings" / "generated"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def build_view_prompts(meta: dict[str, Any], has_base: bool = False) -> list[dict[str, str]]:
+class RingDetails(BaseModel):
+    """The physical details of the user's REFERENCE ring, typed in alongside the
+    uploaded photos. Every field is optional — the prompt block and the weight
+    estimate simply omit whatever is missing."""
+    ring_size: Optional[str] = None
+    metal_weight: Optional[str] = None   # grams
+    gross_weight: Optional[str] = None   # grams
+
+    def filled(self) -> dict[str, str]:
+        return {k: str(v).strip() for k, v in self.model_dump().items()
+                if v is not None and str(v).strip()}
+
+
+def _reference_details_block(details: Optional[RingDetails]) -> str:
+    """The REFERENCE RING DETAILS paragraph, or '' when nothing was supplied.
+
+    These are user-typed facts about the real ring (not randomized design fields),
+    so they belong in the reference prompt as scale/mass context."""
+    filled = details.filled() if details else {}
+    if not filled:
+        return ""
+    bits = []
+    if "ring_size" in filled:
+        bits.append(f"ring size {filled['ring_size']}")
+    if "metal_weight" in filled:
+        bits.append(f"metal weight {filled['metal_weight']} g")
+    if "gross_weight" in filled:
+        bits.append(f"gross weight {filled['gross_weight']} g")
+    return (
+        "\nREFERENCE RING DETAILS (measured from the real ring in the photos): "
+        + ", ".join(bits)
+        + ". Keep the new design in the SAME physical class — the same overall scale, "
+          "band mass and metal volume. Do not turn a substantial ring into a dainty one "
+          "or vice versa.\n"
+    )
+
+
+def build_view_prompts(
+    meta: dict[str, Any],
+    has_base: bool = False,
+    details: Optional[RingDetails] = None,
+) -> list[dict[str, str]]:
     """Build the four single-view prompts for one ring design (same meta).
 
     Each view carries its render ``mode`` and its ``src`` (the view whose image an
@@ -449,14 +493,20 @@ def build_view_prompts(meta: dict[str, Any], has_base: bool = False) -> list[dic
     feeds the uploads in. In that flow NO view may be a text anchor — a text
     anchor would build a ring out of the randomized spec fields and ignore the
     uploads entirely — so every non-hero view is forced to edit from the hero.
+
+    ``details`` = the reference ring's real measurements, injected into the hero
+    prompt as scale context.
     """
+    reference_details = _reference_details_block(details)
     out: list[dict[str, str]] = []
     for view, label, mode, src, instruction in VIEWS:
         view_instruction = instruction.format(**meta)
         if has_base:
             if view == "hero":
                 mode, src = "anchor", "base"
-                prompt = BASE_HERO_TEMPLATE.format(view_instruction=view_instruction, **meta)
+                prompt = BASE_HERO_TEMPLATE.format(
+                    view_instruction=view_instruction,
+                    reference_details=reference_details, **meta)
             else:
                 # Chain off the hero so every view shows the SAME uploaded-derived
                 # ring (the hero is the only view that reads the uploads).
@@ -482,6 +532,21 @@ class RingImageResult(BaseModel):
     cost_usd: Optional[float] = None  # gpt-image-1 token cost for this view
 
 
+class ProductSummary(BaseModel):
+    """The catalog Product Summary for a GENERATED ring.
+
+    ``style_no`` is minted here (the design is new, so it has no real SKU). The
+    weights are an ESTIMATE for the new design — the image model returns pixels,
+    not a bill of materials — derived by the LLM from the reference ring's real
+    measurements. ``estimated`` says whether the LLM actually ran."""
+    style_no: str
+    ring_size: Optional[str] = None
+    metal_weight: Optional[str] = None   # grams
+    gross_weight: Optional[str] = None   # grams
+    estimated: bool = False
+    note: Optional[str] = None
+
+
 class RingViewsResult(BaseModel):
     status: str  # "rendered" | "partial" | "not_configured" | "error"
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -491,6 +556,85 @@ class RingViewsResult(BaseModel):
     views: list[RingImageResult] = Field(default_factory=list)
     cost_usd: Optional[float] = None  # summed across all rendered views
     message: Optional[str] = None
+    summary: Optional[ProductSummary] = None
+
+
+def new_style_no() -> str:
+    """Mint a Style No. for a generated design (UUID-derived, catalog-looking)."""
+    return f"RS-{uuid.uuid4().hex[:10].upper()}"
+
+
+_ESTIMATE_SYSTEM = (
+    "You are a jewellery production estimator. Given the measured details of a REFERENCE ring "
+    "and a brief for a NEW ring derived from it, estimate the new ring's specification.\n\n"
+    "The new ring re-styles the reference — at least 30% of the visible design language changes "
+    "(motif geometry, silhouette, stone arrangement, gallery, proportions, metal flow) — but it "
+    "stays in the SAME physical class: same overall scale, comparable band mass and metal volume. "
+    "So the weights should be CLOSE to the reference, typically within about 15%, not a different "
+    "class of ring.\n\n"
+    "Rules:\n"
+    "- ring_size: keep the reference's size unless it is missing.\n"
+    "- metal_weight: grams, one or two decimals, number only (no unit).\n"
+    "- gross_weight: grams, must be >= metal_weight (it includes the stones), number only.\n"
+    "- If a reference value is missing, infer a plausible one for this class of ring.\n"
+    "- note: one short sentence on your reasoning.\n\n"
+    'Reply with ONLY a JSON object: {"ring_size": "...", "metal_weight": "...", '
+    '"gross_weight": "...", "note": "..."}'
+)
+
+
+def estimate_product_summary(
+    settings: Settings, details: Optional[RingDetails] = None
+) -> ProductSummary:
+    """Build the generated ring's Product Summary.
+
+    The Style No. is always minted locally. The weights are estimated by the LLM
+    from the reference ring's measurements; if the LLM is unavailable or returns
+    junk we fall back to echoing the reference values (clearly marked
+    ``estimated=False``) rather than inventing numbers."""
+    summary = ProductSummary(style_no=new_style_no())
+    filled = details.filled() if details else {}
+
+    def fallback(note: str) -> ProductSummary:
+        summary.ring_size = filled.get("ring_size")
+        summary.metal_weight = filled.get("metal_weight")
+        summary.gross_weight = filled.get("gross_weight")
+        summary.estimated = False
+        summary.note = note
+        return summary
+
+    if not filled:
+        return fallback("No reference details were provided, so no weights could be estimated.")
+
+    try:
+        from app.json_utils import parse_model_json
+        from app.llm_client import build_llm_client
+
+        client = build_llm_client(settings)
+        user = (
+            "REFERENCE RING (measured):\n"
+            + "\n".join(f"- {k.replace('_', ' ')}: {v}" for k, v in filled.items())
+            + "\n\nEstimate the NEW ring's specification."
+        )
+        raw = client.complete(_ESTIMATE_SYSTEM, user, max_tokens=400)
+        data = parse_model_json(raw)
+
+        def pick(key: str) -> Optional[str]:
+            val = data.get(key)
+            if val is None or str(val).strip() == "":
+                return filled.get(key)
+            return str(val).strip()
+
+        summary.ring_size = pick("ring_size")
+        summary.metal_weight = pick("metal_weight")
+        summary.gross_weight = pick("gross_weight")
+        summary.estimated = True
+        note = data.get("note")
+        summary.note = str(note).strip() if note else None
+        return summary
+    except Exception as exc:  # noqa: BLE001 - never fail a render over the estimate
+        log.warning("Ring Studio weight estimate failed, echoing reference values: %s", exc)
+        return fallback(f"Estimate unavailable ({exc}); showing the reference values as given.")
 
 
 def _fetch_bytes(url: str) -> bytes:
@@ -591,6 +735,7 @@ def render_ring_views(
     quality: str = _DEFAULT_QUALITY,
     base_images: Optional[list[bytes]] = None,
     view_keys: Optional[set[str]] = None,
+    details: Optional[RingDetails] = None,
 ) -> RingViewsResult:
     """Render the four per-view images for one ring design, all the SAME ring.
 
@@ -616,7 +761,7 @@ def render_ring_views(
     """
     quality = quality if quality in _QUALITIES else _DEFAULT_QUALITY
     has_base = bool(base_images)
-    items = build_view_prompts(meta, has_base=has_base)
+    items = build_view_prompts(meta, has_base=has_base, details=details)
     if view_keys:
         items = [it for it in items if it["view"] in view_keys]
 
@@ -628,6 +773,7 @@ def render_ring_views(
         ]
         return RingViewsResult(
             status="not_configured", meta=meta, seed=seed, quality=quality, views=views,
+            summary=estimate_product_summary(settings, details),
             message=("OPENAI_API_KEY is not set — image rendering is disabled. Generate the "
                      "hero prompt first, then use its image as the reference for the other "
                      "four view prompts below."),
@@ -676,8 +822,12 @@ def render_ring_views(
         message = next((v.message for v in views if v.status == "error" and v.message), None)
     view_costs = [v.cost_usd for v in views if v.cost_usd is not None]
     total_cost = round(sum(view_costs), 6) if view_costs else None
+    # The Product Summary describes the NEW design: a freshly minted Style No. and
+    # weights estimated from the reference ring's measurements.
+    summary = estimate_product_summary(settings, details)
     return RingViewsResult(status=overall, meta=meta, seed=seed, model=model,
-                           quality=quality, views=views, cost_usd=total_cost, message=message)
+                           quality=quality, views=views, cost_usd=total_cost, message=message,
+                           summary=summary)
 
 
 # ─── Background render jobs ──────────────────────────────────────────────────
@@ -734,11 +884,13 @@ def run_render_job(
     model: str = _DEFAULT_MODEL,
     quality: str = _DEFAULT_QUALITY,
     base_images: Optional[list[bytes]] = None,
+    details: Optional[RingDetails] = None,
 ) -> None:
     """Execute a queued render, updating the job in place. Runs in a worker
     thread (via FastAPI BackgroundTasks); never raises — failures are recorded
     on the job so the poller can surface them. ``base_images`` seeds the hero from
-    the user's uploaded ring photos when supplied."""
+    the user's uploaded ring photos when supplied; ``details`` are the reference
+    ring's real measurements, used for prompt context and the weight estimate."""
     job = ring_job_store.get(job_id)
     if job is None:  # evicted before it ran (store is capped)
         log.warning("Ring render job %s vanished before start", job_id)
@@ -747,8 +899,15 @@ def run_render_job(
     log.info("Ring render job %s started (quality=%s)", job_id, quality)
     try:
         job.result = render_ring_views(settings, meta, seed=seed, model=model,
-                                       quality=quality, base_images=base_images)
+                                       quality=quality, base_images=base_images,
+                                       details=details)
         job.status = "completed"
+        # Persist to the gallery so the render survives the capped in-memory job
+        # store and container restarts. Never fail the job over a store error.
+        try:
+            save_generation(settings, job.result, details)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Ring gallery save failed for job %s: %s", job_id, exc)
         log.info("Ring render job %s completed (%s)", job_id, job.result.status)
     except Exception as exc:  # noqa: BLE001 - record, don't crash the worker
         log.exception("Ring render job %s failed", job_id)
@@ -779,6 +938,142 @@ def build_views_zip(result: RingViewsResult) -> Optional[tuple[str, bytes]]:
                 zf.write(path, arcname=f"{name}-{v.view}.png")
     buf.seek(0)
     return f"{name}-views.zip", buf.getvalue()
+
+
+# ─── Gallery persistence ─────────────────────────────────────────────────────
+# Every completed render is written to Postgres so the Gallery outlives the capped
+# in-memory job store and container restarts. The PNGs themselves live under
+# app/static/rings/generated, which docker-compose bind-mounts to a host dir — DB
+# rows and image files therefore survive a rebuild together. A missing/unreachable
+# DB degrades to "gallery unavailable"; it never breaks a render.
+
+class RingGalleryError(RuntimeError):
+    pass
+
+
+class GalleryEntry(BaseModel):
+    style_no: str
+    created_at: Optional[str] = None
+    ring_size: Optional[str] = None
+    metal_weight: Optional[str] = None
+    gross_weight: Optional[str] = None
+    estimated: bool = False
+    note: Optional[str] = None
+    reference: dict[str, Any] = Field(default_factory=dict)  # what the user typed in
+    images: list[dict[str, Any]] = Field(default_factory=list)  # [{view,label,image_url}]
+    cost_usd: Optional[float] = None
+
+
+class PostgresRingGallery:
+    """Postgres persistence for generated rings (mirrors PostgresConversationStore)."""
+
+    def __init__(self, settings: Settings) -> None:
+        if not settings.database_url:
+            raise RingGalleryError("DATABASE_URL is required for the Ring Studio gallery")
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as exc:
+            raise RingGalleryError("Install psycopg[binary] to use the Ring Studio gallery") from exc
+        self.settings = settings
+        self._psycopg = psycopg
+        self._dict_row = dict_row
+
+    def _connect(self):
+        return self._psycopg.connect(self.settings.database_url, row_factory=self._dict_row)
+
+    def init_schema(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ring_studio_generations (
+                    id BIGSERIAL PRIMARY KEY,
+                    style_no TEXT NOT NULL UNIQUE,
+                    ring_size TEXT,
+                    metal_weight TEXT,
+                    gross_weight TEXT,
+                    estimated BOOLEAN NOT NULL DEFAULT FALSE,
+                    note TEXT,
+                    reference JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    images JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    cost_usd DOUBLE PRECISION,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_ring_studio_generations_created_at
+                ON ring_studio_generations (created_at DESC)
+                """
+            )
+
+    def save(self, result: RingViewsResult, details: Optional[RingDetails]) -> None:
+        summary = result.summary
+        if summary is None:
+            return
+        images = [
+            {"view": v.view, "label": v.label, "image_url": v.image_url, "filename": v.filename}
+            for v in result.views if v.status == "rendered" and v.image_url
+        ]
+        if not images:
+            return  # nothing rendered — not worth a gallery row
+        self.init_schema()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO ring_studio_generations
+                    (style_no, ring_size, metal_weight, gross_weight, estimated, note,
+                     reference, images, cost_usd)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (style_no) DO NOTHING
+                """,
+                (
+                    summary.style_no, summary.ring_size, summary.metal_weight,
+                    summary.gross_weight, summary.estimated, summary.note,
+                    json.dumps(details.filled() if details else {}, ensure_ascii=False),
+                    json.dumps(images, ensure_ascii=False),
+                    result.cost_usd,
+                ),
+            )
+        log.info("Ring gallery saved %s (%d images)", summary.style_no, len(images))
+
+    def list(self, limit: int = 100) -> list[GalleryEntry]:
+        self.init_schema()
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT style_no, ring_size, metal_weight, gross_weight, estimated, note,
+                       reference, images, cost_usd, created_at
+                FROM ring_studio_generations
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (max(1, min(int(limit), 500)),),
+            ).fetchall()
+        return [
+            GalleryEntry(
+                style_no=r["style_no"], ring_size=r["ring_size"],
+                metal_weight=r["metal_weight"], gross_weight=r["gross_weight"],
+                estimated=bool(r["estimated"]), note=r["note"],
+                reference=r["reference"] or {}, images=r["images"] or [],
+                cost_usd=r["cost_usd"],
+                created_at=r["created_at"].isoformat() if r["created_at"] else None,
+            )
+            for r in rows
+        ]
+
+
+def save_generation(
+    settings: Settings, result: RingViewsResult, details: Optional[RingDetails]
+) -> None:
+    """Persist one completed render to the gallery (best-effort)."""
+    PostgresRingGallery(settings).save(result, details)
+
+
+def list_generations(settings: Settings, limit: int = 100) -> list[GalleryEntry]:
+    """Every generated ring, newest first."""
+    return PostgresRingGallery(settings).list(limit)
 
 
 # ─── Pydantic request/response models ────────────────────────────────────────

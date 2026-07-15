@@ -1130,6 +1130,9 @@ async def ring_studio_upload_render(
     files: list[UploadFile] = File(...),
     quality: str = Form(ring_studio._DEFAULT_QUALITY),
     meta_json: Optional[str] = Form(None),
+    ring_size: Optional[str] = Form(None),
+    metal_weight: Optional[str] = Form(None),
+    gross_weight: Optional[str] = Form(None),
     _user: CurrentUser = Depends(require_tab("rings")),
 ) -> ring_studio.RingJobRef:
     """Enqueue a render seeded from UPLOADED photos of one ring (up to 4 angles).
@@ -1170,12 +1173,34 @@ async def ring_studio_upload_render(
     else:
         _, meta = ring_studio.build_prompt()
 
+    details = ring_studio.RingDetails(
+        ring_size=ring_size, metal_weight=metal_weight, gross_weight=gross_weight,
+    )
+
     job = ring_studio.ring_job_store.create()
     background_tasks.add_task(
         ring_studio.run_render_job, job.job_id, settings, meta, None,
-        quality=quality, base_images=base_images,
+        quality=quality, base_images=base_images, details=details,
     )
     return ring_studio.RingJobRef(job_id=job.job_id, status=job.status)
+
+
+@app.get("/ring-studio/gallery")
+def ring_studio_gallery(
+    limit: int = 100,
+    _user: CurrentUser = Depends(require_tab("rings")),
+) -> dict[str, Any]:
+    """Every generated ring with its Product Summary and images, newest first.
+
+    Reads the persisted gallery, so it survives restarts and the capped in-memory
+    job store. Returns an empty list with a message when the DB is unavailable —
+    the Gallery is a nice-to-have and must never 500 the tab."""
+    try:
+        entries = ring_studio.list_generations(settings, limit=limit)
+        return {"count": len(entries), "entries": [e.model_dump() for e in entries]}
+    except Exception as exc:  # noqa: BLE001 - degrade, don't break the tab
+        log.warning("Ring gallery unavailable: %s", exc)
+        return {"count": 0, "entries": [], "message": f"Gallery unavailable: {exc}"}
 
 
 # ── Zoho Desk — customer ticket visibility (capability key "zoho") ───────────

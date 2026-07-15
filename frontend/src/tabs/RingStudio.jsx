@@ -54,6 +54,16 @@ export default function RingStudio() {
   const [quality, setQuality] = useState("medium"); // low | medium | high
   // Uploaded reference photos (up to 4 angles of ONE ring) that seed the render.
   const [uploads, setUploads] = useState([]); // [{ file, url }]
+  // The reference ring's real measurements — prompt context + weight estimate.
+  const [details, setDetails] = useState({
+    ring_size: "",
+    metal_weight: "",
+    gross_weight: "",
+  });
+  // Gallery of everything generated so far (persisted server-side).
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [gallery, setGallery] = useState(null);
+  const [galleryLoading, setGalleryLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -148,6 +158,9 @@ export default function RingStudio() {
       uploads.forEach((u) => form.append("files", u.file, u.file.name));
       form.append("quality", quality);
       if (result?.meta) form.append("meta_json", JSON.stringify(result.meta));
+      Object.entries(details).forEach(([k, v]) => {
+        if (v.trim()) form.append(k, v.trim());
+      });
 
       const { job_id } = await apiUpload("/ring-studio/upload-render", form);
       setRenderJobId(job_id);
@@ -202,12 +215,34 @@ export default function RingStudio() {
     }
   };
 
+  const openGallery = async () => {
+    setGalleryOpen(true);
+    setGalleryLoading(true);
+    try {
+      setGallery(await apiFetch("/ring-studio/gallery"));
+    } catch (e) {
+      setGallery({ entries: [], message: e.message });
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+
+  const setDetail = (key, value) => setDetails((d) => ({ ...d, [key]: value }));
+
   const pinnedCount = useMemo(() => Object.keys(overrides).length, [overrides]);
   const meta = result?.meta;
 
   return (
     <div className="ring-studio">
       <header className="ring-hero">
+        <button
+          className="ring-gallery-btn"
+          onClick={openGallery}
+          title="View all generated rings"
+          aria-label="View all generated rings"
+        >
+          🖼️
+        </button>
         <h2>💎 Ring Studio</h2>
         <p className="muted">
           Generate CELESTE-style luxury jewelry designs for diamond / gold /
@@ -392,6 +427,29 @@ export default function RingStudio() {
                     </label>
                   ) : null}
                 </div>
+
+                <h4 className="ring-details-head">Reference ring details</h4>
+                <p className="muted">
+                  From the product page of the ring you uploaded. Used as scale
+                  context in the prompt, and to estimate the new ring's weights.
+                </p>
+                <div className="ring-details-row">
+                  {[
+                    ["ring_size", "Ring Size", "e.g. 24 (20.3 mm)"],
+                    ["metal_weight", "Metal Weight (g)", "e.g. 5.29"],
+                    ["gross_weight", "Gross Weight (g)", "e.g. 5.36"],
+                  ].map(([key, label, placeholder]) => (
+                    <label key={key} className="ring-field">
+                      <span>{label}</span>
+                      <input
+                        value={details[key]}
+                        onChange={(e) => setDetail(key, e.target.value)}
+                        placeholder={placeholder}
+                        disabled={rendering}
+                      />
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div className="ring-render-controls">
@@ -418,11 +476,24 @@ export default function RingStudio() {
                   : "Upload at least one reference photo above to render."}
               </span>
 
-              {views ? <ViewsGallery result={views} onDownloadZip={downloadZip} /> : null}
+              {views ? (
+                <>
+                  <ProductSummaryPanel summary={views.summary} />
+                  <ViewsGallery result={views} onDownloadZip={downloadZip} />
+                </>
+              ) : null}
             </>
           )}
         </section>
       </div>
+
+      {galleryOpen ? (
+        <GalleryModal
+          data={gallery}
+          loading={galleryLoading}
+          onClose={() => setGalleryOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -443,6 +514,92 @@ async function pollRenderJob(jobId, { intervalMs = 2500, timeoutMs = 5 * 60 * 10
 
 const fmtUsd = (n) =>
   typeof n === "number" ? `$${n.toFixed(n < 0.1 ? 4 : 3)}` : null;
+
+const SUMMARY_ROWS = [
+  ["style_no", "Style No."],
+  ["ring_size", "Ring Size"],
+  ["metal_weight", "Metal Weight"],
+  ["gross_weight", "Gross Weight"],
+];
+
+const withUnit = (key, value) =>
+  value && (key === "metal_weight" || key === "gross_weight") ? `${value} g` : value;
+
+// Catalog Product Summary for the generated ring. Style No. is minted per render;
+// the weights are an LLM estimate from the reference ring's measurements.
+function ProductSummaryPanel({ summary }) {
+  if (!summary) return null;
+  return (
+    <div className="ring-summary">
+      <div className="ring-summary-head">
+        <h4>Product Summary</h4>
+        <span className="muted">
+          {summary.estimated ? "weights estimated" : "as provided"}
+        </span>
+      </div>
+      <table className="ring-spec">
+        <tbody>
+          {SUMMARY_ROWS.map(([key, label]) => (
+            <tr key={key}>
+              <th>{label}</th>
+              <td>{withUnit(key, summary[key]) || <span className="muted">—</span>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {summary.note ? <p className="muted ring-summary-note">{summary.note}</p> : null}
+    </div>
+  );
+}
+
+// Everything generated so far, newest first (persisted server-side).
+function GalleryModal({ data, loading, onClose }) {
+  const entries = data?.entries || [];
+  return (
+    <div className="ring-modal-backdrop" onClick={onClose}>
+      <div className="ring-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="ring-modal-head">
+          <h3>Gallery {entries.length ? `(${entries.length})` : ""}</h3>
+          <button className="link" onClick={onClose}>Close</button>
+        </div>
+        {loading ? (
+          <p className="muted">Loading…</p>
+        ) : data?.message ? (
+          <div className="ring-image-note muted">{data.message}</div>
+        ) : !entries.length ? (
+          <p className="muted">Nothing generated yet.</p>
+        ) : (
+          <ul className="ring-gallery-list">
+            {entries.map((e) => (
+              <li key={e.style_no} className="ring-gallery-entry">
+                <div className="ring-gallery-meta">
+                  <b>{e.style_no}</b>
+                  <span className="muted">
+                    {[
+                      e.ring_size,
+                      e.metal_weight ? `${e.metal_weight} g metal` : null,
+                      e.gross_weight ? `${e.gross_weight} g gross` : null,
+                      e.created_at ? new Date(e.created_at).toLocaleString() : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+                <div className="ring-gallery-thumbs">
+                  {(e.images || []).map((img) => (
+                    <a key={img.image_url} href={img.image_url} target="_blank" rel="noreferrer">
+                      <img src={img.image_url} alt={img.label || img.view} />
+                    </a>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ViewsGallery({ result, onDownloadZip }) {
   const notConfigured = result.status === "not_configured";

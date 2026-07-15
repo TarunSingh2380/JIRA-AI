@@ -55,6 +55,11 @@ services:
       - /home/ubuntu:/host-repos:rw
       - /home/ubuntu:/home/ubuntu:rw
       - ./repo_tree/workspace:/app/repo_tree/workspace:rw
+      # Generated Ring Studio images. Bind-mounted so they outlive `docker compose
+      # build` — without this the Gallery would list DB rows whose thumbnails 404
+      # after every redeploy. Only the generated/ subdir is mounted, so the rest of
+      # app/static (swagger assets, scraped bases) still ships in the image.
+      - ./ring_images:/app/app/static/rings/generated:rw
       # Reuse the ubuntu user's GitHub SSH key so `git pull` can authenticate.
       - /home/ubuntu/.ssh:/root/.ssh:ro
 
