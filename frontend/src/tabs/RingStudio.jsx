@@ -245,11 +245,11 @@ export default function RingStudio() {
         </button>
         <h2>💎 Ring Studio</h2>
         <p className="muted">
-          Generate CELESTE-style luxury jewelry designs for diamond / gold /
-          solitaire rings. Pin any field below (blank = randomize) and hit
-          Generate Prompt, then <b>upload up to 4 photos of your ring</b> and
-          render it re-designed across all 4 views. When you upload references,
-          the design fields are ignored — only the prompt and your photos drive it.
+          <b>Upload up to 4 photos of your ring</b>, add its details, and render it
+          re-designed across all 4 views — only the prompt and your photos drive
+          it. The Design Spec form is a separate, optional tool for previewing the
+          master prompt and exporting prompt batches; it does not affect a
+          reference render.
         </p>
       </header>
 
@@ -348,11 +348,9 @@ export default function RingStudio() {
 
         {/* ── Preview ─────────────────────────────────────────────── */}
         <section className="ring-preview card">
-          {!result ? (
-            <div className="ring-empty muted">
-              <p>Configure a design and hit <b>Generate Prompt</b> to preview it.</p>
-            </div>
-          ) : (
+          {/* The master prompt is an OPTIONAL preview — the reference flow below
+              ignores the design fields, so it is not a prerequisite for rendering. */}
+          {result ? (
             <>
               <div className="ring-titlebar">
                 <div>
@@ -384,6 +382,14 @@ export default function RingStudio() {
                 </button>
               </div>
               <pre className="ring-prompt">{result.prompt}</pre>
+            </>
+          ) : (
+            <p className="ring-empty muted">
+              Upload your ring photos below and hit <b>Render 4 Views</b>. (Hitting{" "}
+              <b>Generate Prompt</b> first is optional — it only previews the
+              master prompt; the design fields don't affect a reference render.)
+            </p>
+          )}
 
               <div className="ring-upload">
                 <div className="ring-upload-head">
@@ -472,7 +478,7 @@ export default function RingStudio() {
               </div>
               <span className="ring-render-hint muted">
                 {uploads.length
-                  ? "Hero re-renders your uploaded ring in the global tradition; Top · Side · Laydown then carry that same new ring forward."
+                  ? "Hero re-designs your uploaded ring from the prompt; Top · Side · Laydown then carry that same new ring forward."
                   : "Upload at least one reference photo above to render."}
               </span>
 
@@ -482,8 +488,6 @@ export default function RingStudio() {
                   <ViewsGallery result={views} onDownloadZip={downloadZip} />
                 </>
               ) : null}
-            </>
-          )}
         </section>
       </div>
 

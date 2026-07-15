@@ -434,8 +434,16 @@ Keep it photorealistic, luxury jewelry catalog quality, on a clean seamless {bac
 # Generated PNGs live in a subdir of the static mount so the URL (/static/rings/
 # generated/<file>) keeps working, while docker-compose can bind-mount a host dir
 # over just this folder — that is what makes the Gallery survive a rebuild.
+#
+# These two MUST stay in step: api.py mounts app/static at /static, so the URL is
+# the dir's path relative to app/static. Changing one without the other silently
+# serves 404s for every rendered image.
+_RINGS_SUBDIR = ("rings", "generated")
+_RINGS_URL_PREFIX = "/static/" + "/".join(_RINGS_SUBDIR)
+
+
 def _rings_static_dir() -> Path:
-    d = Path(__file__).resolve().parent / "static" / "rings" / "generated"
+    d = Path(__file__).resolve().parent.joinpath("static", *_RINGS_SUBDIR)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -662,7 +670,8 @@ def _save_png(data: bytes, name_hint: str, view: str) -> tuple[str, str]:
     path = _rings_static_dir() / filename
     path.write_bytes(data)
     log.info("Ring Studio rendered %s (%d bytes)", filename, path.stat().st_size)
-    return filename, f"/static/rings/{filename}"
+    # Must mirror _rings_static_dir() under the /static mount, or the SPA 404s.
+    return filename, f"{_RINGS_URL_PREFIX}/{filename}"
 
 
 def _render_anchor(
