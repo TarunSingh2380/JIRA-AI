@@ -145,6 +145,11 @@ class TestCaseDocRequest(BaseModel):
     issueKey: str
     summary: str = ""
     testcases: List[Dict[str, Any]] = []
+    phase: Literal["qa", "dev"] = Field(
+        default="qa",
+        description="Which flow the doc belongs to: 'qa' (Ready for QA, default) or "
+                    "'dev' (Code Review). Controls the filename, comment marker, and labels.",
+    )
 
 
 class TestCaseDocResponse(BaseModel):
@@ -216,6 +221,11 @@ class Workflow2Request(BaseModel):
     slack_channel_id: str
     slack_thread_ts: str
     user_message: str
+    phase: Literal["qa", "dev"] = Field(
+        default="qa",
+        description="Which test-case set the Q&A thread operates on: 'qa' (default) or "
+                    "'dev' (developer cases from the Code Review flow).",
+    )
 
 
 class Workflow2Response(BaseModel):
@@ -349,6 +359,11 @@ class TestCaseRequest(BaseModel):
     style: Literal["gherkin", "pytest", "junit", "plain"] = Field(
         default="plain",
         description="Output format requested from RepoTree.",
+    )
+    audience: Literal["qa", "dev"] = Field(
+        default="qa",
+        description="Persona for the cases: 'qa' (functional QA test cases, default) or "
+                    "'dev' (implementation-level cases for a developer at Code Review).",
     )
     top_k: int = Field(default=15, ge=1, le=50, description="Number of semantic hits to retrieve.")
 

@@ -23,6 +23,17 @@ from app.exceptions import LLMConfigurationError
 log = logging.getLogger(__name__)
 
 TC_COMMENT_MARKER = "AI-GOVERNOR-TESTCASES-V1"
+TC_COMMENT_MARKER_DEV = "AI-GOVERNOR-TESTCASES-DEV-V1"
+
+
+def _phase(value: Any) -> str:
+    """Normalise any incoming phase value to 'qa' (default) or 'dev'."""
+    return "dev" if str(value or "").lower() == "dev" else "qa"
+
+
+def _comment_marker(phase: str) -> str:
+    return TC_COMMENT_MARKER_DEV if _phase(phase) == "dev" else TC_COMMENT_MARKER
+
 
 ROUTE_TOOL = {
     "name": "respond_to_user",
@@ -69,16 +80,27 @@ SYSTEM_PROMPT = (
     "You are the AI Governor assistant inside a Slack thread attached to a Jira "
     "ticket. You receive the ticket details, the ticket's Jira comments "
     "(including AI-Governor doc-review and test-case comments plus any human "
-    "discussion), the QA test cases, and recent thread history. Use the Jira "
+    "discussion), the test cases, and recent thread history. Use the Jira "
     "comments as authoritative context when answering questions about the "
     "ticket, its PRD/Tech-doc review, or prior decisions. Always call the "
     "respond_to_user tool. Classify the user's "
     "message as ticket_question (about the ticket itself), testcase_question "
-    "(about the QA cases), or testcase_edit (modify the QA cases). For edits, "
+    "(about the test cases), or testcase_edit (modify the test cases). For edits, "
     "return the COMPLETE new test-case list. Keep replies concise and friendly "
     "for Slack. If a question is ambiguous, lean toward the more specific topic "
     "the user named; only ask for clarification when truly unclear."
 )
+
+_DEV_PROMPT_SUFFIX = (
+    " These are DEVELOPER test cases for a ticket at the Code Review stage: "
+    "implementation-level cases (unit-test scenarios, code paths, edge/boundary "
+    "and error handling, integration points) that a developer runs to verify "
+    "their own work before QA. Frame answers and edits for a developer audience."
+)
+
+
+def _phase_prompt_suffix(phase: str) -> str:
+    return _DEV_PROMPT_SUFFIX if _phase(phase) == "dev" else ""
 
 
 class TestCaseChatWorkflow:
@@ -95,6 +117,7 @@ class TestCaseChatWorkflow:
 
         self._psycopg = psycopg
         self._dict_row = dict_row
+        self._phase_schema_ready = False
 
     def handle(
         self,
@@ -102,8 +125,10 @@ class TestCaseChatWorkflow:
         slack_channel_id: str,
         slack_thread_ts: str,
         user_message: str,
+        phase: str = "qa",
     ) -> str:
         started_at = time.perf_counter()
+        phase = "dev" if str(phase).lower() == "dev" else "qa"
 
         def finish(reply: str, outcome: str, extra: dict[str, Any] | None = None) -> str:
             output = {
@@ -145,6 +170,11 @@ class TestCaseChatWorkflow:
             )
 
         ticket_id = str(ticket_row["jira_ticket_id"])
+        # The thread's own phase (recorded by the closing flow) is authoritative:
+        # WF2 sends no phase, so without this a dev thread would load QA cases.
+        resolved_phase = ticket_row.get("_phase")
+        if resolved_phase:
+            phase = _phase(resolved_phase)
         self._log_step(
             "1_resolve_ticket",
             "completed",
@@ -154,6 +184,7 @@ class TestCaseChatWorkflow:
                 "jira_ticket_id": ticket_id,
                 "ticket_status": ticket_row.get("status") or "",
                 "source": ticket_row.get("_source") or "unknown",
+                "phase": phase,
             },
         )
 
@@ -181,8 +212,8 @@ class TestCaseChatWorkflow:
             },
         )
 
-        self._log_step("3_load_test_cases", "started", input_data={"jira_ticket_id": ticket_id})
-        test_cases = self.load_test_cases(ticket_id)
+        self._log_step("3_load_test_cases", "started", input_data={"jira_ticket_id": ticket_id, "phase": phase})
+        test_cases = self.load_test_cases(ticket_id, phase)
         self._log_step(
             "3_load_test_cases",
             "completed",
@@ -221,7 +252,7 @@ class TestCaseChatWorkflow:
                     "user_message_chars": len(user_message),
                 },
             )
-            result = self.reason(user_message, ticket_context, test_cases, history)
+            result = self.reason(user_message, ticket_context, test_cases, history, phase)
         except Exception:
             log.exception("Test-case chat reasoning failed for %s", ticket_id)
             self._log_step(
@@ -285,7 +316,7 @@ class TestCaseChatWorkflow:
                 "started",
                 input_data={"jira_ticket_id": ticket_id, "test_cases_count": len(new_tcs)},
             )
-            jira_ok = self.update_jira_comment(ticket_id, new_tcs)
+            jira_ok = self.update_jira_comment(ticket_id, new_tcs, phase)
             self._log_step(
                 "7_update_jira_comment",
                 "completed",
@@ -296,7 +327,7 @@ class TestCaseChatWorkflow:
                 "started",
                 input_data={"jira_ticket_id": ticket_id, "test_cases_count": len(new_tcs)},
             )
-            db_ok = self._sync_database(ticket_id, new_tcs)
+            db_ok = self._sync_database(ticket_id, new_tcs, phase)
             self._log_step(
                 "8_sync_database",
                 "completed",
@@ -358,12 +389,32 @@ class TestCaseChatWorkflow:
     def resolve_ticket_from_thread(self, channel_id: str, thread_ts: str) -> dict[str, Any] | None:
         """Map a Slack thread to the best available ticket row.
 
-        The current n8n closing flow stores the test-case Slack thread directly
-        on tickets. Older rows may still live in channelid_table, and the
-        existing Jira-AI review flow uses jira_slack_conversations, so those are
-        retained as fallbacks.
+        The n8n closing flows (WF5 for QA, WF5b for the Code-Review/dev flow)
+        record each Slack thread with its phase in `testcase_threads`, so a
+        ticket can have BOTH a QA thread and a dev thread and each resolves to
+        the correct phase — that mapping is checked first and sets `_phase`.
+        The `tickets` table only holds one thread per ticket (whichever flow ran
+        last), so it and channelid_table / jira_slack_conversations are kept as
+        phase-agnostic fallbacks.
         """
         with self._connect() as conn:
+            if self._table_exists(conn, "testcase_threads"):
+                row = conn.execute(
+                    """
+                    SELECT jira_ticket_id, phase
+                    FROM testcase_threads
+                    WHERE slack_channel_id = %s AND slack_thread_ts = %s
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    (channel_id, thread_ts),
+                ).fetchone()
+                if row and row.get("jira_ticket_id"):
+                    ticket = self._ticket_row_for_issue_key(conn, str(row["jira_ticket_id"]))
+                    ticket["_source"] = "testcase_threads"
+                    ticket["_phase"] = _phase(row.get("phase"))
+                    return ticket
+
             if (
                 self._table_exists(conn, "tickets")
                 and self._column_type(conn, "tickets", "slack_channel_id")
@@ -431,7 +482,9 @@ class TestCaseChatWorkflow:
 
         return None
 
-    def load_test_cases(self, jira_ticket_id: str) -> list[dict[str, Any]]:
+    def load_test_cases(self, jira_ticket_id: str, phase: str = "qa") -> list[dict[str, Any]]:
+        phase = _phase(phase)
+        self._ensure_phase_schema()
         with self._connect() as conn:
             if not self._table_exists(conn, "test_cases"):
                 return []
@@ -439,10 +492,10 @@ class TestCaseChatWorkflow:
                 """
                 SELECT tc_index, title, steps, expected, status
                 FROM test_cases
-                WHERE jira_ticket_id = %s
+                WHERE jira_ticket_id = %s AND phase = %s
                 ORDER BY tc_index ASC
                 """,
-                (jira_ticket_id,),
+                (jira_ticket_id, phase),
             ).fetchall()
 
         test_cases: list[dict[str, Any]] = []
@@ -531,7 +584,11 @@ class TestCaseChatWorkflow:
             )
         return True
 
-    def upsert_test_cases(self, ticket_id: str, test_cases: list[dict[str, Any]]) -> None:
+    def upsert_test_cases(
+        self, ticket_id: str, test_cases: list[dict[str, Any]], phase: str = "qa"
+    ) -> None:
+        phase = _phase(phase)
+        self._ensure_phase_schema()
         with self._connect() as conn:
             with conn.transaction():
                 self._ensure_ticket_row(conn, ticket_id)
@@ -542,6 +599,7 @@ class TestCaseChatWorkflow:
                         INSERT INTO test_cases (
                             ticket_id,
                             jira_ticket_id,
+                            phase,
                             tc_index,
                             subtask_key,
                             title,
@@ -553,13 +611,14 @@ class TestCaseChatWorkflow:
                             (SELECT id FROM tickets WHERE jira_ticket_id = %s LIMIT 1),
                             %s,
                             %s,
+                            %s,
                             NULL,
                             %s,
                             {steps_expression},
                             %s,
                             'pending'
                         )
-                        ON CONFLICT (jira_ticket_id, tc_index)
+                        ON CONFLICT (jira_ticket_id, phase, tc_index)
                         DO UPDATE SET
                             title = EXCLUDED.title,
                             steps = EXCLUDED.steps,
@@ -569,6 +628,7 @@ class TestCaseChatWorkflow:
                         (
                             ticket_id,
                             ticket_id,
+                            phase,
                             index,
                             test_case.get("title") or f"Test Case {index}",
                             json.dumps(test_case.get("steps") or []),
@@ -576,11 +636,13 @@ class TestCaseChatWorkflow:
                         ),
                     )
                 conn.execute(
-                    "DELETE FROM test_cases WHERE jira_ticket_id = %s AND tc_index > %s",
-                    (ticket_id, len(test_cases)),
+                    "DELETE FROM test_cases WHERE jira_ticket_id = %s AND phase = %s AND tc_index > %s",
+                    (ticket_id, phase, len(test_cases)),
                 )
 
-    def update_jira_comment(self, ticket_id: str, test_cases: list[dict[str, Any]]) -> bool:
+    def update_jira_comment(
+        self, ticket_id: str, test_cases: list[dict[str, Any]], phase: str = "qa"
+    ) -> bool:
         if not self._jira_configured():
             self._log_step(
                 "7_update_jira_comment",
@@ -590,8 +652,8 @@ class TestCaseChatWorkflow:
             log.warning("Jira is not configured; skipping test-case comment update for %s", ticket_id)
             return False
 
-        body = render_comment_body(ticket_id, test_cases)
-        comment_id = self.find_existing_tc_comment(ticket_id)
+        body = render_comment_body(ticket_id, test_cases, phase)
+        comment_id = self.find_existing_tc_comment(ticket_id, phase)
         if comment_id:
             method = requests.put
             url = f"{self.settings.jira_base_url}/rest/api/2/issue/{ticket_id}/comment/{comment_id}"
@@ -653,11 +715,12 @@ class TestCaseChatWorkflow:
             log.exception("Jira test-case comment update failed for %s", ticket_id)
             return False
 
-    def find_existing_tc_comment(self, ticket_id: str) -> str | None:
+    def find_existing_tc_comment(self, ticket_id: str, phase: str = "qa") -> str | None:
+        marker = _comment_marker(phase)
         self._log_step(
             "7_fetch_jira_comments",
             "started",
-            input_data={"jira_ticket_id": ticket_id, "marker": TC_COMMENT_MARKER},
+            input_data={"jira_ticket_id": ticket_id, "marker": marker},
         )
         try:
             response = requests.get(
@@ -690,7 +753,7 @@ class TestCaseChatWorkflow:
         comments = response.json().get("comments", [])
         for comment in comments:
             body = comment.get("body") or ""
-            if TC_COMMENT_MARKER in self._comment_text(body):
+            if marker in self._comment_text(body):
                 self._log_step(
                     "7_fetch_jira_comments",
                     "completed",
@@ -845,6 +908,7 @@ class TestCaseChatWorkflow:
         ticket: dict[str, Any],
         test_cases: list[dict[str, Any]],
         history: list[dict[str, Any]],
+        phase: str = "qa",
     ) -> dict[str, Any]:
         if self.settings.llm_provider.lower().strip() == "mock":
             return {
@@ -915,7 +979,7 @@ class TestCaseChatWorkflow:
         message = client.messages.create(
             model=self.settings.testcase_chat_model,
             max_tokens=2000,
-            system=SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT + _phase_prompt_suffix(phase),
             tools=[ROUTE_TOOL],
             tool_choice={"type": "tool", "name": "respond_to_user"},
             messages=[{"role": "user", "content": user_block}],
@@ -948,9 +1012,11 @@ class TestCaseChatWorkflow:
             return text
         return f"{text[:limit]}..."
 
-    def _sync_database(self, ticket_id: str, test_cases: list[dict[str, Any]]) -> bool:
+    def _sync_database(
+        self, ticket_id: str, test_cases: list[dict[str, Any]], phase: str = "qa"
+    ) -> bool:
         try:
-            self.upsert_test_cases(ticket_id, test_cases)
+            self.upsert_test_cases(ticket_id, test_cases, phase)
             return True
         except Exception:
             log.exception("Postgres test-case sync failed for %s", ticket_id)
@@ -976,6 +1042,67 @@ class TestCaseChatWorkflow:
             (table_name, column_name),
         ).fetchone()
         return str(row["data_type"]) if row and row.get("data_type") else ""
+
+    def _ensure_phase_schema(self) -> None:
+        """Self-heal test_cases so QA and dev cases coexist per ticket.
+
+        Adds a `phase` column and swaps the unique key from
+        (jira_ticket_id, tc_index) to (jira_ticket_id, phase, tc_index) — the
+        target of the upsert's ON CONFLICT. Idempotent and guarded so the work
+        runs at most once per process; runs in its own connection so a DDL
+        failure never poisons the caller's write transaction. The canonical
+        migration is scripts/sql/2026-07-27_test_cases_phase.sql."""
+        if self._phase_schema_ready:
+            return
+        try:
+            with self._connect() as conn:
+                if not self._table_exists(conn, "test_cases"):
+                    self._phase_schema_ready = True
+                    return
+                conn.execute(
+                    "ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS phase "
+                    "VARCHAR(8) NOT NULL DEFAULT 'qa'"
+                )
+                target = conn.execute(
+                    "SELECT to_regclass('public.test_cases_jira_phase_tc_uidx') AS idx"
+                ).fetchone()
+                if not (target and target.get("idx")):
+                    # Drop any legacy unique CONSTRAINT on exactly (jira_ticket_id, tc_index):
+                    # it would reject a dev row that shares (ticket, index) with a QA row.
+                    for row in conn.execute(
+                        """
+                        SELECT conname FROM pg_constraint
+                        WHERE conrelid = 'public.test_cases'::regclass AND contype = 'u'
+                          AND (SELECT array_agg(attname ORDER BY attname)
+                               FROM pg_attribute
+                               WHERE attrelid = conrelid AND attnum = ANY(conkey))
+                              = ARRAY['jira_ticket_id', 'tc_index']::name[]
+                        """
+                    ).fetchall():
+                        conn.execute(f'ALTER TABLE test_cases DROP CONSTRAINT "{row["conname"]}"')
+                    # Drop any stray unique INDEX (not backing a constraint) on the same pair.
+                    for row in conn.execute(
+                        """
+                        SELECT i.relname FROM pg_index x
+                        JOIN pg_class i ON i.oid = x.indexrelid
+                        JOIN pg_class t ON t.oid = x.indrelid
+                        WHERE t.relname = 'test_cases' AND x.indisunique AND NOT x.indisprimary
+                          AND NOT EXISTS (
+                              SELECT 1 FROM pg_constraint c WHERE c.conindid = x.indexrelid)
+                          AND (SELECT array_agg(a.attname ORDER BY a.attname)
+                               FROM pg_attribute a
+                               WHERE a.attrelid = t.oid AND a.attnum = ANY(x.indkey))
+                              = ARRAY['jira_ticket_id', 'tc_index']::name[]
+                        """
+                    ).fetchall():
+                        conn.execute(f'DROP INDEX IF EXISTS "{row["relname"]}"')
+                    conn.execute(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS test_cases_jira_phase_tc_uidx "
+                        "ON test_cases (jira_ticket_id, phase, tc_index)"
+                    )
+            self._phase_schema_ready = True
+        except Exception:
+            log.exception("Could not ensure test_cases.phase schema; will retry on next write")
 
     def _ticket_select_columns(self, conn: Any) -> str:
         columns = [
@@ -1225,7 +1352,9 @@ class TestCaseChatWorkflow:
         return str(body)
 
 
-def render_comment_body(ticket_id: str, test_cases: list[dict[str, Any]]) -> str:
+def render_comment_body(
+    ticket_id: str, test_cases: list[dict[str, Any]], phase: str = "qa"
+) -> str:
     """Render Jira wiki markup compatible with the existing n8n comment shape."""
     blocks = []
     for index, test_case in enumerate(test_cases, start=1):
@@ -1241,9 +1370,10 @@ def render_comment_body(ticket_id: str, test_cases: list[dict[str, Any]]) -> str
         blocks.append(block)
 
     body = "\n\n----\n\n".join(blocks)
+    heading = "Developer Test Cases" if _phase(phase) == "dev" else "Test Cases"
     return (
-        f"h3. Auto-generated Test Cases ({len(test_cases)})\n"
+        f"h3. Auto-generated {heading} ({len(test_cases)})\n"
         f"_Generated by AI Governor RepoTree for {ticket_id}._\n"
-        f"{{anchor:{TC_COMMENT_MARKER}}}\n\n"
+        f"{{anchor:{_comment_marker(phase)}}}\n\n"
         f"{body}"
     )

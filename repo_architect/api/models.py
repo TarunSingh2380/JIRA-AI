@@ -127,6 +127,11 @@ class GenerateTestCasesRequest(BaseModel):
 
     ticket: TicketInput
     style: Literal["gherkin", "pytest", "junit", "plain"] = "plain"
+    audience: Literal["qa", "dev"] = Field(
+        "qa",
+        description="Persona for the generated cases: 'qa' (functional QA test cases) "
+                    "or 'dev' (implementation-level cases for a developer at Code Review).",
+    )
     repos: Optional[List[str]] = Field(
         None,
         description="Override auto-detection — provide explicit repo names. "

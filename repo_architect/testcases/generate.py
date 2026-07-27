@@ -195,17 +195,37 @@ _STYLE_INSTRUCTIONS = {
 }
 
 
+_QA_PERSONA = dedent("""
+    You are a senior QA engineer turning a JIRA ticket into test cases that
+    will actually catch regressions. You are given the ticket, Qdrant
+    semantic source-file hits, and Repomix-derived context for the repo(s)
+    most likely affected by it.
+""").strip()
+
+_DEV_PERSONA = dedent("""
+    You are a senior developer writing test cases to verify your OWN
+    implementation before it goes to code review (the ticket is at the
+    "Code Review" stage). You are given the ticket, Qdrant semantic
+    source-file hits, and Repomix-derived context for the repo(s) most
+    likely affected by it. Focus on implementation-level verification:
+    unit-test scenarios for the changed functions, the code paths a
+    reviewer would want exercised, boundary/edge cases, error and failure
+    handling, and the integration points visible in the changed code and
+    the provided repo context. Prefer cases a developer can run themselves
+    to catch defects before QA ever sees the ticket.
+""").strip()
+
+
 def _build_prompt(
     ticket: JiraTicket,
     arch_context: str,
     style: TestStyle,
+    audience: str = "qa",
 ) -> tuple[str, str]:
     issue_type_rules = _BUG_RULES if ticket.issue_type.lower() == "bug" else ""
+    persona = _DEV_PERSONA if audience == "dev" else _QA_PERSONA
     system = dedent(f"""
-        You are a senior QA engineer turning a JIRA ticket into test cases that
-        will actually catch regressions. You are given the ticket, Qdrant
-        semantic source-file hits, and Repomix-derived context for the repo(s)
-        most likely affected by it.
+        {persona}
 
         {_BASE_RULES}
 
@@ -358,6 +378,7 @@ def generate_test_cases(
     embedding_model: str = "codebase_bge_m3",
     top_k: int = 15,
     include_semantic_context: bool = True,
+    audience: str = "qa",
 ) -> GeneratedTestCases:
     """Generate test cases for a JIRA ticket.
 
@@ -412,7 +433,7 @@ def generate_test_cases(
             + (repomix_file_context or "(no packed file snippets available)"),
         ]
     )
-    system, user = _build_prompt(ticket, arch_context, style)
+    system, user = _build_prompt(ticket, arch_context, style, audience)
 
     result = llm.complete(
         system=system, user=user,

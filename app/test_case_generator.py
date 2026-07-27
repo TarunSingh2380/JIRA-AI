@@ -35,6 +35,7 @@ class TestCaseGenerator:
         embedding_model: str = "codebase_bge_m3",
         top_k: int = 15,
         style: str = "plain",
+        audience: str = "qa",
     ) -> Dict[str, Any]:
         ticket_key = (
             ticket_data.get("issueKey")
@@ -46,6 +47,7 @@ class TestCaseGenerator:
         payload = {
             "ticket": _ticket_payload(ticket_data),
             "style": style,
+            "audience": audience,
             "repos": repos,
             "embedding_model": embedding_model,
             "top_k": top_k,

@@ -538,12 +538,18 @@ def workflow_doc_review(request: DocReviewRequest) -> DocReviewResponse:
         raise HTTPException(status_code=500, detail=f"doc-review failed: {exc}") from exc
 
 
-# MoM 4 — build a test-case .docx and attach it to the ticket at Ready for QA.
+# MoM 4 — build a test-case .docx and attach it to the ticket. Fired at Ready for
+# QA (phase=qa, default) or at Code Review for the developer flow (phase=dev).
 @app.post("/testcases/document", response_model=TestCaseDocResponse)
 def testcases_document(request: TestCaseDocRequest) -> TestCaseDocResponse:
-    log.info("POST /testcases/document issue=%s tcs=%d", request.issueKey, len(request.testcases))
+    log.info(
+        "POST /testcases/document issue=%s tcs=%d phase=%s",
+        request.issueKey, len(request.testcases), request.phase,
+    )
     try:
-        return TestCaseDocResponse(**build_and_attach(request.issueKey, request.summary, request.testcases))
+        return TestCaseDocResponse(
+            **build_and_attach(request.issueKey, request.summary, request.testcases, phase=request.phase)
+        )
     except Exception as exc:
         log.exception("/testcases/document failed")
         raise HTTPException(status_code=500, detail=f"testcases/document failed: {exc}") from exc
@@ -1918,8 +1924,8 @@ def generate_test_cases(
         or "unknown"
     )
     log.info(
-        "POST /analyze-ticket/test-cases key=%s repo=%s model=%s style=%s",
-        ticket_key, request.repo, request.embedding_model, request.style,
+        "POST /analyze-ticket/test-cases key=%s repo=%s model=%s style=%s audience=%s",
+        ticket_key, request.repo, request.embedding_model, request.style, request.audience,
     )
     try:
         generator = TestCaseGenerator(settings=settings)
@@ -1929,6 +1935,7 @@ def generate_test_cases(
             embedding_model=request.embedding_model,
             top_k=request.top_k,
             style=request.style,
+            audience=request.audience,
         )
     except LLMConfigurationError as exc:
         log.error("LLM configuration error: %s", exc)
@@ -2143,6 +2150,7 @@ def workflow2(request: Workflow2Request) -> Workflow2Response:
             slack_channel_id=request.slack_channel_id,
             slack_thread_ts=request.slack_thread_ts,
             user_message=request.user_message,
+            phase=request.phase,
         )
         log.info(
             "/workflow2 completed channel=%s thread=%s reply_chars=%d duration_ms=%.2f",
