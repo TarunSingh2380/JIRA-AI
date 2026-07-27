@@ -319,6 +319,21 @@ def generate_testcases(req: GenerateTestCasesRequest) -> GenerateTestCasesRespon
     except ValueError as e:
         # Auto-detection failed or explicit repos didn't match — 400, not 500
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except FileNotFoundError:
+        # Let the app-level handler emit the friendly "run /scan/initial" message.
+        raise
+    except Exception as e:
+        # Surface the real upstream failure (e.g. an Anthropic 401/403/model-access
+        # error from the LLM call) instead of a bare 500, so callers/n8n can see it.
+        log.exception("/testcases/generate failed")
+        upstream_status = getattr(e, "status_code", None)
+        detail = getattr(e, "message", None) or str(e) or repr(e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"{type(e).__name__}"
+            + (f" (upstream {upstream_status})" if upstream_status else "")
+            + f": {detail}",
+        ) from e
 
     return GenerateTestCasesResponse(
         ticket_key=result.ticket_key,
