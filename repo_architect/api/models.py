@@ -151,6 +151,12 @@ class GenerateTestCasesRequest(BaseModel):
         False,
         description="When true, fetch Qdrant hits and include them with Repomix context.",
     )
+    pr_context: Optional[str] = Field(
+        None,
+        description="Pre-fetched PR diff blob (changed files + unified diffs) for the "
+                    "developer flow. When provided it is injected as authoritative "
+                    "'latest code under review' context, ahead of the indexed maps.",
+    )
 
 
 class GenerateTestCasesResponse(BaseModel):

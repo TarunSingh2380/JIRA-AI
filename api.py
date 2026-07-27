@@ -110,6 +110,10 @@ from app.schemas import (
     AlertBatchResponse,
     DocReviewRequest,
     DocReviewResponse,
+    DevPrGateRequest,
+    DevPrGateResponse,
+    DevPrContextRequest,
+    DevPrContextResponse,
     TestCaseDocRequest,
     TestCaseDocResponse,
     TransitionRecordRequest,
@@ -536,6 +540,46 @@ def workflow_doc_review(request: DocReviewRequest) -> DocReviewResponse:
     except Exception as exc:
         log.exception("/workflow/doc-review failed")
         raise HTTPException(status_code=500, detail=f"doc-review failed: {exc}") from exc
+
+
+# Dev test-case PR gate — step 1 of the developer (Code Review) flow. Ensures we
+# have the PR under review before generating; asks in Jira if the URL is missing.
+@app.post("/testcases/dev/pr-gate", response_model=DevPrGateResponse)
+def testcases_dev_pr_gate(request: DevPrGateRequest) -> DevPrGateResponse:
+    log.info("POST /testcases/dev/pr-gate issue=%s", request.issueKey)
+    try:
+        from app.dev_pr_gate import pr_gate
+        return DevPrGateResponse(**pr_gate(request.issueKey, settings))
+    except Exception as exc:
+        log.exception("/testcases/dev/pr-gate failed")
+        raise HTTPException(status_code=500, detail=f"pr-gate failed: {exc}") from exc
+
+
+# Dev test-case PR context — step 2. Pulls the PR's changed files + diffs so the
+# generated cases are grounded on the actual code under review.
+@app.post("/testcases/dev/pr-context", response_model=DevPrContextResponse)
+def testcases_dev_pr_context(request: DevPrContextRequest) -> DevPrContextResponse:
+    log.info("POST /testcases/dev/pr-context url=%s", request.prUrl)
+    try:
+        from app.dev_pr_gate import pr_context
+        ctx = pr_context(request.prUrl, settings)
+        return DevPrContextResponse(
+            repo=ctx["repo"],
+            owner=ctx["owner"],
+            number=ctx["number"],
+            prUrl=ctx["pr_url"],
+            title=ctx.get("title", ""),
+            headRef=ctx.get("head_ref", ""),
+            headSha=ctx.get("head_sha", ""),
+            baseRef=ctx.get("base_ref", ""),
+            changedFiles=ctx.get("changed_files", []),
+            contextText=ctx.get("context_text", ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("/testcases/dev/pr-context failed")
+        raise HTTPException(status_code=500, detail=f"pr-context failed: {exc}") from exc
 
 
 # MoM 4 — build a test-case .docx and attach it to the ticket. Fired at Ready for

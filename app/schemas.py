@@ -14,6 +14,44 @@ class AnalyzeTicketRequest(BaseModel):
     ticket_data: Dict[str, Any] = Field(..., description="Jira ticket metadata JSON.")
 
 
+# ── Dev test-case PR gate ────────────────────────────────────────────────────
+# Dev (Code Review) test cases must be generated against the PR under review,
+# not the indexed main branch. The gate reads/asks-for the PR URL in Jira;
+# pr-context pulls the PR diff to inject into /testcases/generate.
+class DevPrGateRequest(BaseModel):
+    issueKey: str = Field(..., description="Jira issue key, e.g. RFT-2184.")
+
+
+class DevPrGateResponse(BaseModel):
+    status: Literal["ready", "awaiting_pr"] = Field(
+        ..., description="'ready' when a PR URL is known; 'awaiting_pr' when we asked for it."
+    )
+    issueKey: str
+    prUrl: Optional[str] = None
+    owner: Optional[str] = None
+    repo: Optional[str] = None
+    number: Optional[int] = None
+    commentPosted: bool = False
+    reason: Optional[str] = None
+
+
+class DevPrContextRequest(BaseModel):
+    prUrl: str = Field(..., description="GitHub PR URL, e.g. https://github.com/Ram-Fincorp/node_crm/pull/482.")
+
+
+class DevPrContextResponse(BaseModel):
+    repo: str
+    owner: str
+    number: int
+    prUrl: str
+    title: str = ""
+    headRef: str = ""
+    headSha: str = ""
+    baseRef: str = ""
+    changedFiles: List[str] = Field(default_factory=list)
+    contextText: str = Field(..., description="PR diff blob to pass as pr_context into /testcases/generate.")
+
+
 class AnalyzeTicketResponse(BaseModel):
     status: str
     review: str

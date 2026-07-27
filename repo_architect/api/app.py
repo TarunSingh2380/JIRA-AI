@@ -314,6 +314,7 @@ def generate_testcases(req: GenerateTestCasesRequest) -> GenerateTestCasesRespon
             top_k=req.top_k,
             include_semantic_context=req.include_semantic_context,
             audience=req.audience,
+            pr_context=req.pr_context,
         )
     except ValueError as e:
         # Auto-detection failed or explicit repos didn't match — 400, not 500

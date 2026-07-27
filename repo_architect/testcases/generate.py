@@ -379,10 +379,14 @@ def generate_test_cases(
     top_k: int = 15,
     include_semantic_context: bool = True,
     audience: str = "qa",
+    pr_context: Optional[str] = None,
 ) -> GeneratedTestCases:
     """Generate test cases for a JIRA ticket.
 
     Auto-detects relevant repos unless `repos_override` is provided.
+    When `pr_context` is supplied (developer flow at Code Review), the PR diff is
+    injected as authoritative latest code — RepoTree's indexed maps track the main
+    branch and won't reflect the branch under review.
     Returns a GeneratedTestCases with the LLM's full output.
     """
     if repos_override:
@@ -425,7 +429,19 @@ def generate_test_cases(
         file_char_limit=cfg.repomix_file_context_chars,
         total_char_limit=cfg.repomix_context_max_chars,
     )
-    arch_context = "\n\n".join(
+    context_sections: List[str] = []
+    if pr_context:
+        # Highest priority: the actual code under review. RepoTree's indexed maps
+        # and Repomix packs track the main branch, so where they disagree with the
+        # PR diff, the PR is authoritative for developer test cases.
+        context_sections.append(
+            "## PR UNDER REVIEW — LATEST CODE (AUTHORITATIVE for this ticket)\n"
+            "The following is the diff of the Pull Request under review. Base the "
+            "test cases on THIS code. Where it conflicts with the architecture maps "
+            "or packed context below (which track the main branch), trust this.\n\n"
+            + pr_context
+        )
+    context_sections.extend(
         [
             "## RepoTree Architecture Maps\n" + arch_maps,
             semantic_context,
@@ -433,6 +449,7 @@ def generate_test_cases(
             + (repomix_file_context or "(no packed file snippets available)"),
         ]
     )
+    arch_context = "\n\n".join(context_sections)
     system, user = _build_prompt(ticket, arch_context, style, audience)
 
     result = llm.complete(

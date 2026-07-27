@@ -43,6 +43,22 @@ class JiraClient:
             },
         )
 
+    def get_comments(self, issue_key: str, order_by: str = "-created", max_results: int = 50) -> list[dict[str, Any]]:
+        """Return the issue's comments (newest first by default).
+
+        Each item is the raw Jira comment object; the plain-text body is
+        reconstructed by callers via :func:`app.github_client.comment_plain_text`.
+        """
+        if not self.is_configured():
+            log.warning("Jira not configured; returning no comments for %s (dry run)", issue_key)
+            return []
+        data = self._request(
+            "GET",
+            f"/rest/api/3/issue/{issue_key}/comment",
+            params={"orderBy": order_by, "maxResults": max_results},
+        )
+        return data.get("comments", []) if isinstance(data, dict) else []
+
     def transition_to_approved(self, issue_key: str) -> dict[str, Any]:
         if not self.settings.jira_approved_transition_name:
             log.warning("JIRA_APPROVED_TRANSITION_NAME not set; skipping transition for %s", issue_key)

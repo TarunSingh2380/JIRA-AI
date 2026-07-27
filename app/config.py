@@ -169,6 +169,18 @@ class Settings:
     ).rstrip("/")
     repo_tree_timeout_seconds: int = int(os.getenv("REPO_TREE_TIMEOUT_SECONDS", "300"))
     external_request_timeout_seconds: int = int(os.getenv("EXTERNAL_REQUEST_TIMEOUT_SECONDS", "15"))
+    # GitHub (dev test cases): at Code Review the PR branch holds the latest code,
+    # which RepoTree's nightly-synced main-branch checkouts don't have. The dev
+    # flow reads a PR URL from the ticket's Jira comments and pulls the PR's
+    # changed files + diffs via the GitHub API to ground generation on real code.
+    # Use a fine-grained read-only PAT (Contents + Pull requests: read).
+    github_token: str = os.getenv("GITHUB_TOKEN", "")
+    github_api_base: str = os.getenv("GITHUB_API_BASE", "https://api.github.com").rstrip("/")
+    github_org: str = os.getenv("GITHUB_ORG", "Ram-Fincorp")
+    # Caps so a large PR can't blow up the generation prompt.
+    github_pr_max_files: int = int(os.getenv("GITHUB_PR_MAX_FILES", "60"))
+    github_pr_per_file_patch_chars: int = int(os.getenv("GITHUB_PR_PER_FILE_PATCH_CHARS", "8000"))
+    github_pr_context_max_chars: int = int(os.getenv("GITHUB_PR_CONTEXT_MAX_CHARS", "120000"))
     n8n_graph_webhook_url: str = os.getenv("N8N_GRAPH_WEBHOOK_URL", "")
     n8n_api_key: str = os.getenv("N8N_API_KEY", "")
     # Base URL of the running n8n instance (no trailing /api). Used by the
