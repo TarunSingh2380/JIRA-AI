@@ -23,6 +23,7 @@ from app.qdrant_store import (
     GITHUB_COLLECTION,
     JIRA_COLLECTION,
     JIRA_HYBRID_COLLECTION,
+    TESTCASE_COLLECTION,
 )
 
 log = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ def _registry(settings: Settings) -> list[dict[str, str]]:
     cols: list[dict[str, str]] = [
         {"key": JIRA_COLLECTION, "label": "Jira tickets (dense)", "kind": "jira"},
         {"key": JIRA_HYBRID_COLLECTION, "label": "Jira tickets (hybrid)", "kind": "jira"},
+        {"key": TESTCASE_COLLECTION, "label": "Test cases (regression)", "kind": "testcases"},
         {"key": GITHUB_COLLECTION, "label": "GitHub commits", "kind": "commits"},
     ]
     for model_key, meta in CODEBASE_EMBEDDING_MODELS.items():

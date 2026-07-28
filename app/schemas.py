@@ -447,6 +447,36 @@ class SimilarTicketsResponse(BaseModel):
     tickets: list[SimilarTicketResult]
 
 
+# ─── Test-case regression flag ───────────────────────────────────────────────
+
+
+class TestCaseRegressionRequest(BaseModel):
+    summary: str = Field(..., description="Summary of the new ticket.")
+    description: str | None = Field(default=None, description="Full ticket description.")
+    project_key: str | None = Field(default=None, description="Restrict search to a project key.")
+
+
+class TestCaseRegressionMatch(BaseModel):
+    jira_ticket_id: str = Field(..., description="Ticket the matched test case belongs to.")
+    project_key: str = ""
+    phase: str = Field("qa", description="'qa' or 'dev' test-case set.")
+    tc_index: int | None = None
+    title: str = ""
+    steps: list[str] = []
+    expected: str | None = None
+    status: str = Field("", description="Test-case status (currently always 'pending').")
+    ticket_summary: str | None = None
+    ticket_status: str | None = None
+    similarity_score: float = 0.0
+
+
+class TestCaseRegressionResponse(BaseModel):
+    query_summary: str
+    total_found: int
+    search_method: str = Field(..., description="'semantic', 'keyword_fallback', or 'none'")
+    matches: list[TestCaseRegressionMatch]
+
+
 # ─── n8n workflow monitoring ─────────────────────────────────────────────────
 
 

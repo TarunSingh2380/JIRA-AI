@@ -640,6 +640,17 @@ class TestCaseChatWorkflow:
                     (ticket_id, phase, len(test_cases)),
                 )
 
+        # Best-effort: (re)embed this ticket's test cases so the regression flag
+        # in Workflow 1 can match new tickets against them. Never blocks the write.
+        self._embed_test_cases_best_effort(ticket_id, phase)
+
+    def _embed_test_cases_best_effort(self, ticket_id: str, phase: str) -> None:
+        try:
+            from app.testcase_embeddings import embed_ticket_testcases
+            embed_ticket_testcases(self.settings, ticket_id, phase)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.warning("test-case embedding skipped for %s: %s", ticket_id, exc)
+
     def update_jira_comment(
         self, ticket_id: str, test_cases: list[dict[str, Any]], phase: str = "qa"
     ) -> bool:

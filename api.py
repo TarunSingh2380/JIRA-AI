@@ -97,6 +97,9 @@ from app.schemas import (
     SimilarTicketRequest,
     SimilarTicketResult,
     SimilarTicketsResponse,
+    TestCaseRegressionMatch,
+    TestCaseRegressionRequest,
+    TestCaseRegressionResponse,
     TestCaseRequest,
     TestCaseResponse,
     Workflow1ReviewRequest,
@@ -123,6 +126,7 @@ from app.schemas import (
 )
 from app.channel_health import ChannelHealthChecker, ChannelHealthError
 from app.similar_ticket_finder import SimilarTicketFinder
+from app.testcase_regression_finder import TestCaseRegressionFinder
 from app.slack_client import SlackClient
 from app.slack_review_workflow import SlackReviewWorkflow
 from app.testcase_chat_workflow import TestCaseChatWorkflow
@@ -2068,6 +2072,64 @@ def find_similar_tickets(
         total_found=result["total_found"],
         search_method=result["search_method"],
         tickets=tickets,
+    )
+
+
+@app.post("/analyze-ticket/regression", response_model=TestCaseRegressionResponse)
+def find_testcase_regressions(
+    request: TestCaseRegressionRequest,
+) -> TestCaseRegressionResponse:
+    """Flag a new incoming ticket as a possible regression against an existing
+    test case.
+
+    A ticket that is semantically close to a previously generated test case is
+    likely re-opening a scenario we already have a baseline (expected-to-pass)
+    test for. Only the single best match above ``REGRESSION_MATCH_THRESHOLD``
+    (default 62%) is returned; otherwise the list is empty.
+
+    Called server-to-server by n8n Workflow 1 (same as /workflow1), so it is not
+    behind user auth.
+    """
+    log.info(
+        "POST /analyze-ticket/regression summary=%r project=%s",
+        request.summary[:60], request.project_key,
+    )
+    try:
+        finder = TestCaseRegressionFinder(settings=settings)
+        result = finder.find_regressions(
+            request.summary,
+            request.description,
+            project_key=request.project_key,
+        )
+    except Exception as exc:
+        log.exception("Test-case regression search failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    matches = [
+        TestCaseRegressionMatch(
+            jira_ticket_id=m.get("jira_ticket_id", ""),
+            project_key=m.get("project_key", ""),
+            phase=m.get("phase", "qa"),
+            tc_index=m.get("tc_index"),
+            title=m.get("title", ""),
+            steps=m.get("steps") or [],
+            expected=m.get("expected"),
+            status=m.get("status", ""),
+            ticket_summary=m.get("ticket_summary"),
+            ticket_status=m.get("ticket_status"),
+            similarity_score=m.get("similarity_score", 0.0),
+        )
+        for m in result["matches"]
+    ]
+    log.info(
+        "Test-case regression: method=%s found=%d",
+        result["search_method"], len(matches),
+    )
+    return TestCaseRegressionResponse(
+        query_summary=result["query_summary"],
+        total_found=result["total_found"],
+        search_method=result["search_method"],
+        matches=matches,
     )
 
 

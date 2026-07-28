@@ -15,17 +15,29 @@ from dotenv import load_dotenv
 load_dotenv(encoding="utf-8-sig")
 
 
-def _similar_ticket_match_threshold() -> float:
-    raw = os.getenv("SIMILAR_TICKET_MATCH_THRESHOLD", "0.68").strip()
+def _threshold_from_env(env_name: str, default: float) -> float:
+    """Parse a 0–1 (or 0–100 with/without %) similarity threshold from env."""
+    raw = os.getenv(env_name, str(default)).strip()
     if raw.endswith("%"):
         raw = raw[:-1].strip()
     try:
         value = float(raw)
     except ValueError:
-        return 0.68
+        return default
     if value > 1:
         value = value / 100
     return min(max(value, 0.0), 1.0)
+
+
+def _similar_ticket_match_threshold() -> float:
+    return _threshold_from_env("SIMILAR_TICKET_MATCH_THRESHOLD", 0.68)
+
+
+def _regression_match_threshold() -> float:
+    # Cross-domain match (ticket text vs test-case text) tends to score a little
+    # lower than ticket-vs-ticket, so this defaults slightly below the similar
+    # ticket threshold. Override with REGRESSION_MATCH_THRESHOLD.
+    return _threshold_from_env("REGRESSION_MATCH_THRESHOLD", 0.62)
 
 
 @dataclass(frozen=True)
@@ -231,6 +243,9 @@ class Settings:
     # Jira ticket cache TTL in hours (0 = always re-fetch)
     jira_cache_ttl_hours: int = int(os.getenv("JIRA_CACHE_TTL_HOURS", "1"))
     similar_ticket_match_threshold: float = _similar_ticket_match_threshold()
+    # Test-case regression flag: min cosine for a new ticket to be considered a
+    # match against an existing generated test case (see app/testcase_regression_finder.py).
+    regression_match_threshold: float = _regression_match_threshold()
 
     # Authentication / RBAC
     jwt_secret: str = os.getenv("JWT_SECRET", "")

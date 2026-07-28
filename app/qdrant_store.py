@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 GITHUB_COLLECTION = "github_commits"
 JIRA_COLLECTION = "jira_tickets"
 JIRA_HYBRID_COLLECTION = "jira_tickets_hybrid"  # dense + sparse, used for RRF hybrid search
+TESTCASE_COLLECTION = "test_cases"  # vectors for generated test cases (regression flag)
 _DEFAULT_VECTOR_SIZE = 1024  # qwen3:0.6b and BGE-M3 both output 1024-dim vectors
 
 
@@ -106,6 +107,110 @@ def upsert_jira_embeddings(
 
     except Exception as exc:
         log.warning("Qdrant Jira upsert failed: %s", exc)
+        return 0
+
+
+# ─── Test cases ──────────────────────────────────────────────────────────────
+
+def upsert_testcase_embeddings(
+    qdrant_url: str,
+    test_cases: list[dict[str, Any]],
+    embeddings: list[Optional[list[float]]],
+    api_key: Optional[str] = None,
+) -> int:
+    """Store generated test-case embeddings in Qdrant. Returns points written.
+
+    Each dict must carry: jira_ticket_id, phase, tc_index, title, status.
+    The point id is derived from (jira_ticket_id, phase, tc_index) so re-embedding
+    a ticket's cases overwrites the old vectors instead of duplicating them.
+    """
+    try:
+        from qdrant_client.models import PointStruct
+    except ImportError:
+        log.warning("qdrant-client not installed; skipping test-case embedding storage")
+        return 0
+
+    try:
+        client = _get_client(qdrant_url, api_key)
+        _ensure_collection(client, TESTCASE_COLLECTION, _infer_vector_size(embeddings))
+
+        points: list[PointStruct] = []
+        for tc, emb in zip(test_cases, embeddings):
+            if emb is None:
+                continue
+            jira_key = str(tc.get("jira_ticket_id") or "")
+            phase = str(tc.get("phase") or "qa")
+            tc_index = tc.get("tc_index")
+            seed = f"{jira_key}:{phase}:{tc_index}"
+            points.append(
+                PointStruct(
+                    id=_stable_id(seed),
+                    vector=emb,
+                    payload={
+                        "jira_ticket_id": jira_key,
+                        "phase": phase,
+                        "tc_index": tc_index,
+                        "title": (tc.get("title") or "")[:300],
+                        "status": tc.get("status") or "",
+                        "project_key": jira_key.rsplit("-", 1)[0] if "-" in jira_key else jira_key,
+                    },
+                )
+            )
+
+        stored = 0
+        batch_size = 500
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
+            client.upsert(collection_name=TESTCASE_COLLECTION, points=batch)
+            stored += len(batch)
+
+        if stored:
+            log.info("Stored %d test-case embeddings in Qdrant", stored)
+        return stored
+
+    except Exception as exc:
+        log.warning("Qdrant test-case upsert failed: %s", exc)
+        return 0
+
+
+def delete_testcase_embeddings(
+    qdrant_url: str,
+    jira_ticket_id: str,
+    phase: str,
+    keep_tc_indexes: list[int],
+    api_key: Optional[str] = None,
+) -> int:
+    """Delete stale test-case points for a ticket/phase whose tc_index is no
+    longer present (the ticket's case count shrank). Returns points deleted.
+
+    ``keep_tc_indexes`` must list the indexes that still exist; it is required so
+    this can never wipe a ticket's live vectors (called right after upsert)."""
+    if not jira_ticket_id or not keep_tc_indexes:
+        return 0
+    try:
+        from qdrant_client.models import (
+            Filter, FieldCondition, MatchValue, MatchExcept, FilterSelector,
+        )
+    except ImportError:
+        return 0
+
+    try:
+        client = _get_client(qdrant_url, api_key)
+        existing = {c.name for c in client.get_collections().collections}
+        if TESTCASE_COLLECTION not in existing:
+            return 0
+        must = [
+            FieldCondition(key="jira_ticket_id", match=MatchValue(value=jira_ticket_id)),
+            FieldCondition(key="phase", match=MatchValue(value=phase)),
+            FieldCondition(key="tc_index", match=MatchExcept(**{"except": keep_tc_indexes})),
+        ]
+        client.delete(
+            collection_name=TESTCASE_COLLECTION,
+            points_selector=FilterSelector(filter=Filter(must=must)),
+        )
+        return 1
+    except Exception as exc:
+        log.warning("Qdrant test-case delete failed: %s", exc)
         return 0
 
 
