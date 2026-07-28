@@ -983,7 +983,6 @@ class TestCaseChatWorkflow:
             tools=[ROUTE_TOOL],
             tool_choice={"type": "tool", "name": "respond_to_user"},
             messages=[{"role": "user", "content": user_block}],
-            temperature=0.1,
         )
         for block in message.content:
             if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "respond_to_user":
