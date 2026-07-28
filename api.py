@@ -126,6 +126,7 @@ from app.schemas import (
 )
 from app.channel_health import ChannelHealthChecker, ChannelHealthError
 from app.similar_ticket_finder import SimilarTicketFinder
+from app.testcase_embeddings import run_testcase_embedding_job
 from app.testcase_regression_finder import TestCaseRegressionFinder
 from app.slack_client import SlackClient
 from app.slack_review_workflow import SlackReviewWorkflow
@@ -745,6 +746,29 @@ def embeddings_status(
     """Live health, point counts, last-updated time, and in-progress flag for
     every embedding collection (Jira, codebase, RCA code chunks)."""
     return get_embeddings_status(settings, job_store)
+
+
+@app.post("/graph-admin/testcase-embeddings/build")
+def build_testcase_embeddings_endpoint(
+    background_tasks: BackgroundTasks,
+    _user: CurrentUser = Depends(require_tab("repos", "testcases")),
+) -> dict[str, Any]:
+    """Embed all generated test cases into the `test_cases` Qdrant collection so
+    Workflow 1's regression flag can match new tickets against them.
+
+    Runs in the background; poll GET /graph-admin/jobs/{job_id} (or watch the
+    Embeddings panel) for progress. New test cases embed automatically on write,
+    so this is mainly a one-time backfill / manual rebuild.
+    """
+    # Guard against stacking duplicate builds.
+    for existing in job_store.list_recent(limit=10):
+        if existing.action == "testcase_embeddings" and existing.status in ("pending", "running"):
+            return {"job_id": existing.job_id, "status": existing.status, "already_running": True}
+
+    job = job_store.create(action="testcase_embeddings")
+    log.info("Enqueuing test-case embedding job %s", job.job_id)
+    background_tasks.add_task(run_testcase_embedding_job, job, settings)
+    return {"job_id": job.job_id, "status": job.status, "already_running": False}
 
 
 @app.get("/graph-admin/jobs", response_model=list[GraphJobResponse])

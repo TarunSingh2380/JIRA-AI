@@ -18,6 +18,8 @@ export default function EmbeddingsStatus({ refreshKey = 0 }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(true);
+  const [building, setBuilding] = useState(false);
+  const [buildMsg, setBuildMsg] = useState("");
   const timerRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -31,6 +33,26 @@ export default function EmbeddingsStatus({ refreshKey = 0 }) {
       return null;
     }
   }, []);
+
+  const buildTestcases = useCallback(async () => {
+    setBuilding(true);
+    setBuildMsg("");
+    try {
+      const res = await apiFetch("/graph-admin/testcase-embeddings/build", {
+        method: "POST",
+      });
+      setBuildMsg(
+        res.already_running
+          ? "A build is already running…"
+          : "Build started — embedding test cases…",
+      );
+      await load(); // flips the panel into fast-poll while the job runs
+    } catch (err) {
+      setBuildMsg(`Failed: ${err.message}`);
+    } finally {
+      setBuilding(false);
+    }
+  }, [load]);
 
   useEffect(() => {
     let active = true;
@@ -87,10 +109,22 @@ export default function EmbeddingsStatus({ refreshKey = 0 }) {
           ))}
 
           {data && (
-            <button type="button" className="embed-refresh" onClick={load}>
-              Refresh now
-            </button>
+            <div className="embed-actions">
+              <button type="button" className="embed-refresh" onClick={load}>
+                Refresh now
+              </button>
+              <button
+                type="button"
+                className="embed-build"
+                onClick={buildTestcases}
+                disabled={building || data.updating}
+                title="Embed all generated test cases so Workflow 1 can flag regressions"
+              >
+                {building ? "Starting…" : "Build test-case embeddings"}
+              </button>
+            </div>
           )}
+          {buildMsg && <div className="embed-buildmsg">{buildMsg}</div>}
         </div>
       )}
     </div>

@@ -180,6 +180,14 @@ def _progress_by_collection(
 
         if action == "rca_code_index_build":
             out.update(_rca_progress_block(rca_keys, totals, progress, meta))
+        if action == "testcase_embeddings" or totals.get("testcase_embedding_documents"):
+            _assign(
+                [TESTCASE_COLLECTION],
+                progress.get("testcase_embedding_documents_done"),
+                totals.get("testcase_embedding_documents"),
+                None,
+                "test cases",
+            )
         if action == "jira_tickets_only" or totals.get("jira_embedding_documents"):
             _assign(
                 [JIRA_COLLECTION, JIRA_HYBRID_COLLECTION],

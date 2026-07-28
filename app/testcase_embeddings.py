@@ -159,6 +159,53 @@ def build_testcase_embeddings(
     return {"rows": len(rows), "embedded": embedded, "stored": stored, "method": "semantic"}
 
 
+def run_testcase_embedding_job(job: Any, settings: Settings) -> None:
+    """Background runner for the admin "Build test-case embeddings" button.
+
+    Drives GraphJob status + progress counters so the live Embeddings panel can
+    show a progress bar. Never raises — records failure on the job instead.
+    """
+    from datetime import datetime, timezone
+
+    def _log(level: str, message: str) -> None:
+        getattr(log, level, log.info)("Testcase-embed job %s: %s", getattr(job, "job_id", "?"), message)
+        try:
+            job.logs.append(
+                {"step": "testcase_embeddings", "level": level, "message": message,
+                 "at": datetime.now(timezone.utc).isoformat()}
+            )
+        except Exception:  # pragma: no cover
+            pass
+
+    try:
+        job.status = "running"
+        _log("info", "Embedding all generated test cases…")
+
+        def _cb(done: int, total: int) -> None:
+            job.totals["testcase_embedding_documents"] = total
+            job.progress["testcase_embedding_documents_done"] = done
+
+        result = build_testcase_embeddings(settings, progress_callback=_cb)
+        job.meta["result"] = result
+
+        if result["method"] in {"none", "unavailable"}:
+            job.mark_failed(
+                f"Embeddings were not stored (method={result['method']}). "
+                "Check that Ollama and Qdrant are reachable and DATABASE_URL is set."
+            )
+            return
+        if result["rows"] == 0:
+            _log("info", "No test cases found to embed.")
+        _log(
+            "info",
+            f"Embedded {result['embedded']} of {result['rows']} test cases "
+            f"(stored {result['stored']}).",
+        )
+        job.mark_done()
+    except Exception as exc:  # pragma: no cover - defensive
+        job.mark_failed(str(exc))
+
+
 def embed_ticket_testcases(
     settings: Settings, jira_ticket_id: str, phase: Optional[str] = None
 ) -> None:
